@@ -1,0 +1,10 @@
+{
+  "name": "AquaLingua - アクアリンガ",
+  "short_name": "AquaLingua",
+  "description": "単語を育てて、魚を育てる。水族館×英単語学習アプリ",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#071A33",
+  "theme_color": "#071A33",
+  "icons": []
+}

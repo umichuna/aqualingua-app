@@ -1,65 +1,254 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+// メインアプリ（SPAビュースイッチャー）
+// スタート画面（2秒で自動遷移） → ホーム画面
+// 下部ナビ4タブ: ホーム / 水槽 / しごと / ショップ
+// ホームから: 記録・単語帳・図鑑・設定 にもアクセスできる
+
+import { useState } from "react";
+import AquariumView from "@/components/AquariumView";
+import EncyclopediaView from "@/components/EncyclopediaView";
+import { GameProvider, useGame } from "@/components/GameProvider";
+import { Onboarding, RewardModal, SettingsModal } from "@/components/Modals";
+import RecordView from "@/components/RecordView";
+import ShopView from "@/components/ShopView";
+import StartScreen from "@/components/StartScreen";
+import StudyView from "@/components/StudyView";
+import WordManager from "@/components/WordManager";
+import { getFishMaster } from "@/data/fishMaster";
+import { buildSampleWords } from "@/data/sampleWords";
+import { todayString } from "@/lib/gameLogic";
+import { type BgmScene, playBgmForScene, sfx } from "@/lib/sound";
+
+// 下部ナビに表示する4タブ
+const NAV_TABS = [
+  { id: "home", label: "ホーム", icon: "🏠" },
+  { id: "aquarium", label: "水槽", icon: "🐠" },
+  { id: "study", label: "しごと", icon: "💼" },
+  { id: "shop", label: "ショップ", icon: "🛒" },
+] as const;
+
+// ナビ外のビュー（ホームから開く）
+type TabId = (typeof NAV_TABS)[number]["id"] | "record" | "words" | "zukan";
+
+// ホーム画面のボタン一覧
+const HOME_BUTTONS: { id: TabId | "settings" | "tutorial"; label: string; icon: string; desc: string }[] = [
+  { id: "aquarium", label: "水槽", icon: "🐠", desc: "おさかなのお世話" },
+  { id: "study", label: "しごと", icon: "💼", desc: "ゴールドを稼ぐ" },
+  { id: "record", label: "記録", icon: "📊", desc: "しごと記録と通帳" },
+  { id: "words", label: "単語帳", icon: "📚", desc: "単語の管理・追加" },
+  { id: "zukan", label: "図鑑", icon: "📕", desc: "発見したおさかな" },
+  { id: "shop", label: "ショップ", icon: "🛒", desc: "ガチャ・アイテム" },
+  { id: "tutorial", label: "あそびかた", icon: "📖", desc: "チュートリアルを見る" },
+  { id: "settings", label: "設定", icon: "⚙️", desc: "セーブ・音・初期化" },
+];
+
+function HomeView({
+  onNavigate,
+  onOpenSettings,
+  onOpenTutorial,
+}: {
+  onNavigate: (tab: TabId) => void;
+  onOpenSettings: () => void;
+  onOpenTutorial: () => void;
+}) {
+  const { user, fishList, words } = useGame();
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="p-4 space-y-4">
+      <div className="rounded-2xl p-4 bg-mid">
+        <div className="text-xs text-dim">ようこそ！</div>
+        <div className="flex items-center justify-between mt-1">
+          <div className="font-bold text-foam">
+            職業Lv.{user.jobLevel}{" "}
+            {user.achievedTitles.length > 0 && (
+              <span className="text-xs text-sand">
+                「{user.achievedTitles[user.achievedTitles.length - 1]}」
+              </span>
+            )}
+          </div>
+          <div className="text-sm font-bold text-sand">🪙 {user.gold.toLocaleString()}G</div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+        <div className="text-[10px] text-dim mt-1">
+          🐠 {fishList.length}匹 / 📚 {words.length}語
         </div>
-      </main>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2.5">
+        {HOME_BUTTONS.map((b) => (
+          <button
+            key={b.id}
+            onClick={() => {
+              sfx.tap();
+              if (b.id === "settings") onOpenSettings();
+              else if (b.id === "tutorial") onOpenTutorial();
+              else onNavigate(b.id);
+            }}
+            className="flex flex-col items-start gap-1 p-4 rounded-2xl bg-mid text-left active:scale-95 transition-transform"
+          >
+            <span className="text-2xl">{b.icon}</span>
+            <span className="font-bold text-sm text-foam">{b.label}</span>
+            <span className="text-[10px] text-dim">{b.desc}</span>
+          </button>
+        ))}
+      </div>
     </div>
+  );
+}
+
+function AppShell() {
+  const game = useGame();
+  const { ready, user, notices } = game;
+  const [screen, setScreen] = useState<"start" | "app">("start");
+  const [tab, setTab] = useState<TabId>("home");
+  const [showReward, setShowReward] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showTutorial, setShowTutorial] = useState(false); // ホームの「あそびかた」用（閲覧のみ）
+
+  const rewardClaimed = user.lastRewardDate === todayString();
+
+  // タブIDをBGMシーンにマッピング
+  const tabToScene = (t: TabId): BgmScene => {
+    if (t === "home") return "home";
+    if (t === "aquarium") return "study"; // 水槽は study BGM（海底からの手紙）
+    if (t === "study") return null; // しごとタブは無音
+    if (t === "shop") return "shop";
+    return null; // record/words/zukan は無音
+  };
+
+  // タブ移動 + BGM切り替えをまとめて行うヘルパー
+  const navigateTo = (newTab: TabId) => {
+    setTab(newTab);
+    void playBgmForScene(tabToScene(newTab));
+  };
+
+  const startGame = () => {
+    setScreen("app");
+    void playBgmForScene("home");
+    if (!user.onboardingDone) {
+      setShowOnboarding(true);
+    } else if (!rewardClaimed) {
+      setShowReward(true);
+    }
+  };
+
+  const finishOnboarding = () => {
+    // 初期データ投入: サンプル単語 + 最初の魚（カクレクマノミ）
+    game.saveWords(buildSampleWords());
+    const starter = getFishMaster("カクレクマノミ");
+    if (starter) game.addFishToTank(starter, "クマちゃん");
+    game.updateUser({ onboardingDone: true });
+    setShowOnboarding(false);
+    game.pushNotice("🐠", "クマちゃんとサンプル単語10語をプレゼント！");
+    setShowReward(true);
+  };
+
+  if (!ready) {
+    return (
+      <div className="w-full h-dvh flex items-center justify-center bg-deep text-dim text-sm font-pixel">
+        🫧 よみこみ中…
+      </div>
+    );
+  }
+
+  if (screen === "start") return <StartScreen onStart={startGame} />;
+
+  return (
+    <div className="w-full h-dvh flex flex-col mx-auto bg-deep" style={{ maxWidth: "480px" }}>
+      {/* ヘッダー */}
+      <header className="flex items-center justify-between px-4 py-3 bg-sea border-b border-white/10">
+        <div className="flex items-center gap-2">
+          <span className="text-xl">🌊</span>
+          <span className="font-bold tracking-wider text-foam">AquaLingua</span>
+        </div>
+        <div className="flex items-center gap-2 text-sm font-bold">
+          <span className="text-dim">Lv.{user.jobLevel}</span>
+          <span className="px-2.5 py-1 rounded-full bg-black/40 text-sand">
+            🪙 {user.gold.toLocaleString()}G
+          </span>
+          <button
+            onClick={() => setShowReward(true)}
+            className="relative text-lg active:scale-90 transition-transform"
+            title="デイリーリワード"
+          >
+            🎁
+            {!rewardClaimed && (
+              <span className="absolute -top-0.5 -right-1 w-2 h-2 rounded-full bg-coral" />
+            )}
+          </button>
+          <button
+            onClick={() => setShowSettings(true)}
+            className="text-lg active:scale-90 transition-transform"
+            title="設定"
+          >
+            ⚙️
+          </button>
+        </div>
+      </header>
+
+      {/* メイン */}
+      <main className="flex-1 overflow-y-auto">
+        {tab === "home" && (
+          <HomeView
+            onNavigate={navigateTo}
+            onOpenSettings={() => setShowSettings(true)}
+            onOpenTutorial={() => setShowTutorial(true)}
+          />
+        )}
+        {tab === "aquarium" && <AquariumView />}
+        {tab === "study" && <StudyView />}
+        {tab === "record" && <RecordView />}
+        {tab === "words" && <WordManager />}
+        {tab === "zukan" && <EncyclopediaView />}
+        {tab === "shop" && <ShopView />}
+      </main>
+
+      {/* ボトムナビ（4タブ。記録・単語帳・図鑑はホームから開く） */}
+      <nav className="flex bg-sea border-t border-white/10">
+        {NAV_TABS.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => {
+              sfx.tap();
+              navigateTo(t.id);
+            }}
+            className={`flex-1 py-2.5 flex flex-col items-center gap-0.5 transition-colors ${
+              tab === t.id ? "text-glow" : "text-dim"
+            }`}
+          >
+            <span className="text-lg">{t.icon}</span>
+            <span className="text-[10px] font-bold">{t.label}</span>
+          </button>
+        ))}
+      </nav>
+
+      {/* 通知トースト（成長・病気・逃走・称号など） */}
+      <div className="fixed top-16 left-1/2 -translate-x-1/2 z-40 space-y-1.5 w-[90%] max-w-sm pointer-events-none">
+        {notices.map((n) => (
+          <div
+            key={n.id}
+            className="px-3 py-2 rounded-xl text-sm font-bold bg-black/80 text-foam shadow-lg text-center"
+          >
+            {n.icon} {n.text}
+          </div>
+        ))}
+      </div>
+
+      {/* モーダル */}
+      {showOnboarding && <Onboarding onDone={finishOnboarding} />}
+      {showTutorial && (
+        <Onboarding viewOnly onDone={() => setShowTutorial(false)} />
+      )}
+      {showReward && <RewardModal onClose={() => setShowReward(false)} />}
+      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
+    </div>
+  );
+}
+
+export default function Page() {
+  return (
+    <GameProvider>
+      <AppShell />
+    </GameProvider>
   );
 }

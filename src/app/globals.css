@@ -1,26 +1,63 @@
 @import "tailwindcss";
 
+/* AquaLingua デザイントークン（UIプロトタイプ v0.2 の C オブジェクトを移植） */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --aqua-deep: #071a33; /* 深海 */
+  --aqua-sea: #0e2a4f; /* 海中 */
+  --aqua-mid: #16406f; /* 中層 */
+  --aqua-glow: #37c8c3; /* アクア（アクセント） */
+  --aqua-sand: #f2d88f; /* 砂・ゴールド */
+  --aqua-coral: #f2705b; /* コーラル（警告/差し色） */
+  --aqua-foam: #eaf6f6; /* 泡・テキスト */
+  --aqua-dim: #8fb0c9; /* サブテキスト */
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-deep: var(--aqua-deep);
+  --color-sea: var(--aqua-sea);
+  --color-mid: var(--aqua-mid);
+  --color-glow: var(--aqua-glow);
+  --color-sand: var(--aqua-sand);
+  --color-coral: var(--aqua-coral);
+  --color-foam: var(--aqua-foam);
+  --color-dim: var(--aqua-dim);
+  --font-pixel: var(--font-dot-gothic), "Courier New", monospace;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--aqua-deep);
+  color: var(--aqua-foam);
+  font-family: var(--font-dot-gothic), system-ui, sans-serif;
+}
+
+/* ピクセルアートをぼかさず表示する */
+.pixelated {
+  image-rendering: pixelated;
+}
+
+/* 泡がゆっくり上昇するアニメーション */
+@keyframes bubble-rise {
+  0% {
+    transform: translateY(0);
+    opacity: 0.3;
+  }
+  90% {
+    opacity: 0.25;
+  }
+  100% {
+    transform: translateY(-70vh);
+    opacity: 0;
+  }
+}
+
+/* 魚が逃走するときの上昇アニメーション */
+@keyframes run-away {
+  0% {
+    transform: rotate(180deg) translateY(0);
+    opacity: 1;
+  }
+  100% {
+    transform: rotate(180deg) translateY(120vh);
+    opacity: 0;
+  }
 }
