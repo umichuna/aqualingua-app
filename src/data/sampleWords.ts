@@ -13,7 +13,7 @@ const SAMPLES: Omit<Word, "id" | "lastUpdated">[] = [
       { sentence: "Let's grab a coffee.", translation: "コーヒーでも飲みに行こう。" },
       { sentence: "She grabbed her bag and ran.", translation: "彼女はバッグをつかんで走り去った。" },
     ],
-    level: "Beginner",
+    level: "1",
     genre: "日常会話",
   },
   {
@@ -26,7 +26,7 @@ const SAMPLES: Omit<Word, "id" | "lastUpdated">[] = [
       { sentence: "My aquarium is full of clownfish.", translation: "私の水槽はカクレクマノミでいっぱいです。" },
       { sentence: "We visited the aquarium last weekend.", translation: "先週末、水族館に行きました。" },
     ],
-    level: "Beginner",
+    level: "1",
     genre: "趣味・カルチャー",
   },
   {
@@ -39,7 +39,7 @@ const SAMPLES: Omit<Word, "id" | "lastUpdated">[] = [
       { sentence: "We need a more efficient process.", translation: "もっと効率的なプロセスが必要です。" },
       { sentence: "She is an efficient worker.", translation: "彼女は仕事の効率がいい。" },
     ],
-    level: "Intermediate",
+    level: "3",
     genre: "ビジネス",
   },
   {
@@ -52,7 +52,7 @@ const SAMPLES: Omit<Word, "id" | "lastUpdated">[] = [
       { sentence: "The sales forecast looks promising.", translation: "売上予測は有望に見えます。" },
       { sentence: "What's the weather forecast for tomorrow?", translation: "明日の天気予報は？" },
     ],
-    level: "Intermediate",
+    level: "3",
     genre: "ニュース",
   },
   {
@@ -65,7 +65,7 @@ const SAMPLES: Omit<Word, "id" | "lastUpdated">[] = [
       { sentence: "I'll send you the itinerary tonight.", translation: "今夜、旅程を送りますね。" },
       { sentence: "Please confirm the itinerary before booking.", translation: "予約前に旅程を確認してください。" },
     ],
-    level: "Advanced",
+    level: "5",
     genre: "旅行",
   },
   {
@@ -79,7 +79,7 @@ const SAMPLES: Omit<Word, "id" | "lastUpdated">[] = [
       { sentence: "She accomplished great things in her career.", translation: "彼女はキャリアで素晴らしい功績を残した。" },
       { sentence: "We need to accomplish this task by Friday.", translation: "金曜日までにこのタスクを完了する必要があります。" },
     ],
-    level: "Intermediate",
+    level: "3",
     genre: "ビジネス",
   },
   {
@@ -92,7 +92,7 @@ const SAMPLES: Omit<Word, "id" | "lastUpdated">[] = [
       { sentence: "I had to turn down the offer.", translation: "その申し出を断らなければならなかった。" },
       { sentence: "Please turn down the music.", translation: "音楽の音量を下げてください。" },
     ],
-    level: "Beginner",
+    level: "1",
     genre: "日常会話",
   },
   {
@@ -105,7 +105,7 @@ const SAMPLES: Omit<Word, "id" | "lastUpdated">[] = [
       { sentence: "I bought a souvenir for my family.", translation: "家族におみやげを買った。" },
       { sentence: "This shop sells unique souvenirs.", translation: "このお店ではユニークな記念品を販売しています。" },
     ],
-    level: "Beginner",
+    level: "1",
     genre: "旅行",
   },
   {
@@ -118,7 +118,7 @@ const SAMPLES: Omit<Word, "id" | "lastUpdated">[] = [
       { sentence: "The story made headlines around the world.", translation: "そのニュースは世界中で大きく報じられた。" },
       { sentence: "I always read the headlines in the morning.", translation: "私は毎朝見出しを読みます。" },
     ],
-    level: "Intermediate",
+    level: "3",
     genre: "ニュース",
   },
   {
@@ -131,7 +131,7 @@ const SAMPLES: Omit<Word, "id" | "lastUpdated">[] = [
       { sentence: "This movie is a true masterpiece.", translation: "この映画はまさに傑作だ。" },
       { sentence: "The painting is considered a masterpiece.", translation: "その絵画は傑作とみなされています。" },
     ],
-    level: "Advanced",
+    level: "5",
     genre: "趣味・カルチャー",
   },
 ];

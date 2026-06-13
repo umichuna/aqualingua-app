@@ -275,28 +275,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
-        {/* デバッグ: 放置ペナルティ・ガチャ検証用 */}
-        <div className="text-[10px] font-bold tracking-widest mt-3 mb-1 text-dim">開発用</div>
-        <div className="rounded-xl px-3 py-2.5 flex items-center justify-between bg-mid mb-2">
-          <div className="text-sm text-dim">放置テスト（1日サボった扱いにする）</div>
-          <button
-            onClick={() => game.debugSkipDays(1)}
-            className="text-xs px-2.5 py-1 rounded-lg font-bold bg-white/10 text-dim"
-          >
-            実行
-          </button>
-        </div>
-        <div className="rounded-xl px-3 py-2.5 flex items-center justify-between bg-mid">
-          <div className="text-sm text-dim">ゴールド追加（ガチャの動作確認用）</div>
-          <button
-            onClick={() => game.debugAddGold(1000)}
-            className="text-xs px-2.5 py-1 rounded-lg font-bold bg-white/10 text-dim"
-          >
-            +1000G
-          </button>
-        </div>
-
-        <div className="text-center text-[10px] mt-3 text-dim">AquaLingua v1.0 MVP</div>
+<div className="text-center text-[10px] mt-3 text-dim">AquaLingua v1.0 MVP</div>
 
         {confirmReset && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/80" onClick={() => setConfirmReset(false)}>

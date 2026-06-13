@@ -132,8 +132,6 @@ interface GameContextValue {
 
   // その他
   resetAllData: () => Promise<void>;
-  debugSkipDays: (days: number) => void;
-  debugAddGold: (amount: number) => void;
 }
 
 const GameContext = createContext<GameContextValue | null>(null);
@@ -655,33 +653,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     setGoldLedger([]);
   }, []);
 
-  // デバッグ用: 最終アクティブ時刻をN日前にずらして放置ペナルティを発火させる
-  // 病気の魚は病気開始時刻もN日ぶん過去にずらす（逃走テストができるように）
-  const debugSkipDays = useCallback(
-    (days: number) => {
-      const u = userRef.current;
-      const past = u.lastActiveTime - days * 86400000;
-      const shifted = fishRef.current.map((f) =>
-        f.isSick && f.sickStartTime
-          ? { ...f, sickStartTime: f.sickStartTime - days * 86400000 }
-          : f
-      );
-      applyOfflineEffects({ ...u, lastActiveTime: past }, shifted, Date.now());
-    },
-    [applyOfflineEffects]
-  );
-
-  // デバッグ用: ゴールドを直接追加（ガチャ動作確認用）
-  const debugAddGold = useCallback(
-    (amount: number) => {
-      const u = userRef.current;
-      persistUser({ ...u, gold: u.gold + amount });
-      recordLedger(amount, "開発用ボーナス", u.gold + amount);
-    },
-    [persistUser, recordLedger]
-  );
-
-  return (
+return (
     <GameContext.Provider
       value={{
         ready,
@@ -716,8 +688,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
         removeWord,
         recordAnswer,
         resetAllData,
-        debugSkipDays,
-        debugAddGold,
       }}
     >
       {children}

@@ -14,13 +14,13 @@ import type { Word, WordExample, WordGenre, WordLevel, WordType } from "@/lib/ty
 import { useGame } from "./GameProvider";
 
 const GENRES: WordGenre[] = ["日常会話", "ビジネス", "旅行", "ニュース", "趣味・カルチャー"];
-const LEVELS: WordLevel[] = ["Beginner", "Intermediate", "Advanced"];
+const LEVELS: WordLevel[] = ["1", "2", "3", "4", "5"];
 const WORD_TYPES: WordType[] = ["単語", "述語", "会話文"];
 const LEVEL_LABEL: Record<WordLevel, string> = {
-  Beginner: "初級", Intermediate: "中級", Advanced: "上級",
+  "1": "1", "2": "2", "3": "3", "4": "4", "5": "5",
 };
 const LEVEL_ORDER: Record<WordLevel, number> = {
-  Beginner: 0, Intermediate: 1, Advanced: 2,
+  "1": 0, "2": 1, "3": 2, "4": 3, "5": 4,
 };
 
 type SortKey = "alpha" | "date" | "level" | "weak";
@@ -192,7 +192,7 @@ export default function WordManager() {
     exampleSentence: "",
     exampleTranslation: "",
     examples: [],
-    level: "Beginner",
+    level: "1",
     genre: "日常会話",
     lastUpdated: Date.now(),
   });

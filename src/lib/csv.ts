@@ -20,12 +20,10 @@ export interface CsvImportResult {
 function mapLevel(raw: string): WordLevel | null {
   const n = parseInt(raw, 10);
   if (!Number.isNaN(n)) {
-    if (n <= 2) return "Beginner";
-    if (n === 3) return "Intermediate";
-    if (n <= 5) return "Advanced";
+    if (n >= 1 && n <= 5) return n.toString() as WordLevel;
     return null;
   }
-  if (["Beginner", "Intermediate", "Advanced"].includes(raw)) {
+  if (["1", "2", "3", "4", "5"].includes(raw)) {
     return raw as WordLevel;
   }
   return null;

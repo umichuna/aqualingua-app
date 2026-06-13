@@ -2,7 +2,7 @@
 // 仕様書 aqualingua_spec.md §2 のスキーマに準拠。
 // lastUpdated は v2 のクラウド同期（LWW）で使うため全レコードに必ず持たせる。
 
-export type WordLevel = "Beginner" | "Intermediate" | "Advanced";
+export type WordLevel = "1" | "2" | "3" | "4" | "5";
 
 export type WordGenre =
   | "日常会話"

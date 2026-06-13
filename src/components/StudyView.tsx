@@ -20,13 +20,15 @@ const GENRES: WordGenre[] = [
   "ニュース",
   "趣味・カルチャー",
 ];
-const LEVELS: WordLevel[] = ["Beginner", "Intermediate", "Advanced"];
+const LEVELS: WordLevel[] = ["1", "2", "3", "4", "5"];
 const WORD_TYPES: WordType[] = ["単語", "述語", "会話文"];
 
 const LEVEL_LABEL: Record<WordLevel, string> = {
-  Beginner: "初級",
-  Intermediate: "中級",
-  Advanced: "上級",
+  "1": "1",
+  "2": "2",
+  "3": "3",
+  "4": "4",
+  "5": "5",
 };
 
 type Direction = "en2ja" | "ja2en";
