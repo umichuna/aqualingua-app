@@ -11,6 +11,16 @@ const dotGothic = DotGothic16({
 export const metadata: Metadata = {
   title: "AquaLingua - アクアリンガ",
   description: "単語を育てて、魚を育てる。水族館×英単語学習アプリ",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "AquaLingua",
+    startupImage: "/icons/icon-512.png",
+  },
+  icons: {
+    apple: "/icons/icon-192.png",
+  },
 };
 
 export const viewport: Viewport = {
