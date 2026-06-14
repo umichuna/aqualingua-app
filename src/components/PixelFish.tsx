@@ -36,6 +36,27 @@ export default function PixelFish({
     display: "block",
   };
 
+  // imageId がない魚は絵文字フォールバック
+  if (!imageId) {
+    return (
+      <span
+        style={{
+          display: "inline-block",
+          width: size,
+          height: size,
+          fontSize: size * 0.75,
+          lineHeight: `${size}px`,
+          textAlign: "center",
+          filter: cssFilter,
+          transform: `scaleX(${facing})`,
+        }}
+        aria-label={type}
+      >
+        🐟
+      </span>
+    );
+  }
+
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img

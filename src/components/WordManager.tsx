@@ -128,6 +128,7 @@ export default function WordManager() {
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
   const [selWords, setSelWords] = useState<Set<string>>(new Set());
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const toggleSet = <T,>(set: Set<T>, val: T): Set<T> => {
@@ -319,10 +320,7 @@ export default function WordManager() {
         <div className="flex items-center gap-2">
           {selWords.size > 0 && (
             <button
-              onClick={() => {
-                selWords.forEach((id) => game.removeWord(id));
-                setSelWords(new Set());
-              }}
+              onClick={() => setBulkDeleteConfirm(true)}
               className="text-[10px] px-2 py-1 rounded font-bold bg-coral text-white"
             >
               {selWords.size}件削除
@@ -533,6 +531,42 @@ export default function WordManager() {
                 className="flex-1 py-2 text-sm font-bold bg-coral text-deep"
               >
                 削除する
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 一括削除確認ダイアログ */}
+      {bulkDeleteConfirm && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/70"
+          onClick={() => setBulkDeleteConfirm(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-xs p-5 text-center bg-sea font-pixel"
+            style={{ border: "4px solid var(--aqua-coral)", boxShadow: "0 0 0 4px var(--aqua-deep)" }}
+          >
+            <div className="text-2xl mb-1">🗑️</div>
+            <div className="font-bold text-foam mb-1">{selWords.size}件削除しますか？</div>
+            <div className="text-xs text-dim mb-4">学習履歴もまとめて消えるよ</div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setBulkDeleteConfirm(false)}
+                className="flex-1 py-2 text-sm font-bold bg-white/10 text-dim"
+              >
+                いいえ
+              </button>
+              <button
+                onClick={() => {
+                  selWords.forEach((id) => game.removeWord(id));
+                  setSelWords(new Set());
+                  setBulkDeleteConfirm(false);
+                }}
+                className="flex-1 py-2 text-sm font-bold bg-coral text-deep"
+              >
+                はい、削除する
               </button>
             </div>
           </div>
