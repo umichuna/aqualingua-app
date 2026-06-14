@@ -7,7 +7,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { RARITY_INFO } from "@/data/fishMaster";
-import { canShip, shipValue } from "@/lib/gameLogic";
+import { canShip, MAX_AFFECTION, shipValue } from "@/lib/gameLogic";
 import { sfx } from "@/lib/sound";
 import type { Fish } from "@/lib/types";
 import { useGame, type BaitKind } from "./GameProvider";
@@ -329,7 +329,7 @@ export default function AquariumView() {
                   canShip(sel) ? "bg-sand text-deep" : "bg-white/10 text-dim"
                 }`}
               >
-                {canShip(sel) ? `出荷 ${shipValue(sel)}G` : "出荷ロック中"}
+                {canShip(sel) ? `出荷 ${shipValue(sel)}G` : `出荷ロック（好感度${MAX_AFFECTION[sel.rarity]}で解除）`}
               </button>
             </div>
           </div>
@@ -338,13 +338,13 @@ export default function AquariumView() {
             <div className="flex justify-between text-xs mb-1 text-dim">
               <span>好感度{sel.isSick && <span className="text-coral ml-2">🤒 病気（3日以内に治療しないと逃げてしまう）</span>}</span>
               <span>
-                {sel.affection} / 100
+                {sel.affection} / {MAX_AFFECTION[sel.rarity]}
               </span>
             </div>
             <div className="h-2 rounded-full overflow-hidden bg-black/40">
               <div
-                className={`h-full rounded-full transition-all duration-500 ${sel.affection >= 100 ? "bg-sand" : "bg-glow"}`}
-                style={{ width: `${sel.affection}%` }}
+                className={`h-full rounded-full transition-all duration-500 ${sel.affection >= MAX_AFFECTION[sel.rarity] ? "bg-sand" : "bg-glow"}`}
+                style={{ width: `${Math.min(100, (sel.affection / MAX_AFFECTION[sel.rarity]) * 100)}%` }}
               />
             </div>
           </div>

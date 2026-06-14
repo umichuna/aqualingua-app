@@ -2,7 +2,7 @@
 
 import { RARITY_INFO } from "@/data/fishMaster";
 import { TITLE_MILESTONES } from "@/data/titles";
-import type { Fish, StudyMode } from "./types";
+import type { Fish, Rarity, StudyMode } from "./types";
 
 // ---------- しごと報酬（1問あたりの金額） ----------
 export const MODE_BASE_GOLD: Record<StudyMode, number> = {
@@ -31,8 +31,24 @@ export function shipValue(fish: Fish): number {
   return Math.floor(base * (1 + fish.level / 10) * 2.0);
 }
 
+// ---------- 好感度バランス（レア度別上限・上昇倍率） ----------
+export const MAX_AFFECTION: Record<Rarity, number> = {
+  激安: 100,
+  普通: 110,
+  高級: 125,
+  ロマン: 150,
+};
+
+// レア度が高いほど好感度が上がりにくい（倍率）
+export const AFFECTION_GAIN_RATE: Record<Rarity, number> = {
+  激安: 1.0,
+  普通: 0.8,
+  高級: 0.6,
+  ロマン: 0.4,
+};
+
 export function canShip(fish: Fish): boolean {
-  return fish.affection >= 100;
+  return fish.affection >= MAX_AFFECTION[fish.rarity];
 }
 
 // ---------- 魚の成長 ----------
@@ -68,21 +84,26 @@ export const AFFECTION_DROP_PER_DAY = 3;
 export function calculateOfflineEffects(
   fishList: Fish[],
   lastActiveTime: number,
-  now: number
+  now: number,
+  buffs: { decay_reduction?: number; disease_resistance?: number } = {}
 ): Fish[] {
   const elapsedSeconds = (now - lastActiveTime) / 1000;
   const elapsedDays = Math.floor(elapsedSeconds / 86400);
 
   if (elapsedDays < 1) return fishList;
 
-  const totalAffectionDrop = elapsedDays * AFFECTION_DROP_PER_DAY;
+  const decayMult = 1 - (buffs.decay_reduction ?? 0);
+  const diseaseResist = buffs.disease_resistance ?? 0;
+  const totalAffectionDrop = Math.floor(elapsedDays * AFFECTION_DROP_PER_DAY * decayMult);
   return fishList.map((orig) => {
     const fish: Fish = { ...orig };
     fish.affection = Math.max(0, fish.affection - totalAffectionDrop);
-    // 好感度が0になったら必ず病気になる
+    // 好感度が0になったら病気になる（病気耐性バフがあれば確率で防ぐ）
     if (fish.affection <= 0 && !fish.isSick) {
-      fish.isSick = true;
-      fish.sickStartTime = fish.sickStartTime || now;
+      if (Math.random() > diseaseResist) {
+        fish.isSick = true;
+        fish.sickStartTime = fish.sickStartTime || now;
+      }
     }
 
     // 野生復帰チェック（72時間 = 3日 上限）

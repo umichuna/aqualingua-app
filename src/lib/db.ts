@@ -109,6 +109,7 @@ export function createInitialUserStatus(): UserStatus {
     totalStudyCount: 0,
     lastRewardDate: "",
     onboardingDone: false,
+    customGenres: [],
   };
 }
 

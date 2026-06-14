@@ -70,15 +70,21 @@ export default function StartScreen({ onStart }: { onStart: () => void }) {
       </div>
 
       {/* 泳ぐピクセル魚の行進 */}
-      <div className="flex items-end gap-5 mb-10">
-        <div className="animate-bounce" style={{ animationDuration: "2.4s" }}>
-          <PixelFish type="カクレクマノミ" size={52} />
+      <div className="flex items-end gap-4 mb-10">
+        <div className="animate-bounce" style={{ animationDuration: "2.6s" }}>
+          <PixelFish type="ナブカ" size={44} />
+        </div>
+        <div className="animate-bounce" style={{ animationDuration: "2.1s" }}>
+          <PixelFish type="ハリセンボン" size={52} />
         </div>
         <div className="animate-bounce" style={{ animationDuration: "1.9s" }}>
           <PixelFish type="ナンヨウハギ" size={64} />
         </div>
         <div className="animate-bounce" style={{ animationDuration: "2.8s" }}>
-          <PixelFish type="デバスズメダイ" size={40} />
+          <PixelFish type="タツノオトシゴ" size={40} />
+        </div>
+        <div className="animate-bounce" style={{ animationDuration: "2.3s" }}>
+          <PixelFish type="ツノダシ" size={48} />
         </div>
       </div>
 

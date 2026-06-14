@@ -10,10 +10,10 @@
 import { useMemo, useRef, useState } from "react";
 import { parseVocabularyCsv, type CsvImportResult } from "@/lib/csv";
 import { speak } from "@/lib/speech";
-import type { Word, WordExample, WordGenre, WordLevel, WordType } from "@/lib/types";
+import { DEFAULT_GENRES, type Word, type WordExample, type WordGenre, type WordLevel, type WordType } from "@/lib/types";
 import { useGame } from "./GameProvider";
 
-const GENRES: WordGenre[] = ["日常会話", "ビジネス", "旅行", "ニュース", "趣味・カルチャー"];
+const BASE_GENRES: WordGenre[] = [...DEFAULT_GENRES];
 const LEVELS: WordLevel[] = ["1", "2", "3", "4", "5"];
 const WORD_TYPES: WordType[] = ["単語", "述語", "会話文"];
 const LEVEL_LABEL: Record<WordLevel, string> = {
@@ -108,6 +108,10 @@ function Tag({ label, color = "dim" }: { label: string; color?: string }) {
 export default function WordManager() {
   const game = useGame();
   const { words, wordStats } = game;
+  const GENRES: WordGenre[] = useMemo(
+    () => [...BASE_GENRES, ...(game.user.customGenres ?? [])],
+    [game.user.customGenres]
+  );
 
   const [selGenres, setSelGenres] = useState<Set<WordGenre>>(new Set());
   const [selLevels, setSelLevels] = useState<Set<WordLevel>>(new Set());
@@ -123,6 +127,7 @@ export default function WordManager() {
   const [csvPreview, setCsvPreview] = useState<CsvImportResult | null>(null);
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
+  const [selWords, setSelWords] = useState<Set<string>>(new Set());
   const fileRef = useRef<HTMLInputElement>(null);
 
   const toggleSet = <T,>(set: Set<T>, val: T): Set<T> => {
@@ -161,26 +166,26 @@ export default function WordManager() {
 
   const onCsvFile = async (file: File) => {
     const text = await file.text();
-    const existing = new Set(words.map((w) => w.spelling.toLowerCase()));
-    setCsvPreview(parseVocabularyCsv(text, existing));
+    setCsvPreview(parseVocabularyCsv(text, game.user.customGenres ?? []));
   };
 
   const confirmImport = async () => {
     if (!csvPreview) return;
     setImporting(true);
+    const allWords = csvPreview.words;
     const chunks: Word[][] = [];
-    for (let i = 0; i < csvPreview.words.length; i += 50)
-      chunks.push(csvPreview.words.slice(i, i + 50));
+    for (let i = 0; i < allWords.length; i += 50)
+      chunks.push(allWords.slice(i, i + 50));
     let done = 0;
     for (const chunk of chunks) {
       game.saveWords(chunk);
       done += chunk.length;
-      setImportProgress(Math.round((done / csvPreview.words.length) * 100));
+      setImportProgress(Math.round((done / allWords.length) * 100));
       await new Promise((r) => setTimeout(r, 50));
     }
     setImporting(false);
     setImportProgress(0);
-    game.pushNotice("📄", `${csvPreview.words.length}件の単語を取り込んだ！`);
+    game.pushNotice("📄", `${allWords.length}件の単語を取り込んだ！`);
     setCsvPreview(null);
   };
 
@@ -304,11 +309,40 @@ export default function WordManager() {
         ))}
       </div>
 
-      {/* 件数 */}
-      <div className="text-[10px] text-dim">
-        {displayed.length === words.length
-          ? `${words.length}語`
-          : `${displayed.length} / ${words.length}語`}
+      {/* 件数 + 一括操作バー */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-[10px] text-dim">
+          {displayed.length === words.length
+            ? `${words.length}語`
+            : `${displayed.length} / ${words.length}語`}
+        </div>
+        <div className="flex items-center gap-2">
+          {selWords.size > 0 && (
+            <button
+              onClick={() => {
+                selWords.forEach((id) => game.removeWord(id));
+                setSelWords(new Set());
+              }}
+              className="text-[10px] px-2 py-1 rounded font-bold bg-coral text-white"
+            >
+              {selWords.size}件削除
+            </button>
+          )}
+          {displayed.length > 0 && (
+            <button
+              onClick={() => {
+                if (selWords.size === displayed.length) {
+                  setSelWords(new Set());
+                } else {
+                  setSelWords(new Set(displayed.map((w) => w.id)));
+                }
+              }}
+              className="text-[10px] px-2 py-1 rounded font-bold bg-white/10 text-dim"
+            >
+              {selWords.size === displayed.length ? "全解除" : "全選択"}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* 単語リスト */}
@@ -320,29 +354,46 @@ export default function WordManager() {
               : "条件に一致する単語がありません"}
           </div>
         )}
-        {displayed.map((w) => {
+        {displayed.map((w, idx) => {
           const miss = wordStats[w.id]?.incorrectCount ?? 0;
+          const checked = selWords.has(w.id);
           return (
             <div
               key={w.id}
-              onClick={() => setSelectedWord(w)}
-              className="rounded-xl p-3 cursor-pointer bg-mid active:bg-white/10 transition-colors"
+              className={`rounded-xl p-3 cursor-pointer transition-colors ${checked ? "bg-sand/20 border border-sand/40" : "bg-mid active:bg-white/10"}`}
             >
-              <div className="flex items-center justify-between gap-2">
-                <div className="min-w-0 flex-1">
-                  <span className="font-bold text-foam">{w.spelling}</span>
-                  <span className="text-xs ml-2 text-dim truncate">
-                    {w.meanings.length > 0 ? w.meanings[0] : "（意味未登録）"}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  {miss > 0 && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded font-bold bg-coral/20 text-coral">
-                      ✕{miss}
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    const next = new Set(selWords);
+                    if (checked) next.delete(w.id); else next.add(w.id);
+                    setSelWords(next);
+                  }}
+                  className="shrink-0 w-4 h-4 accent-sand"
+                />
+                <span className="text-[10px] text-dim shrink-0 w-6 text-right">{idx + 1}</span>
+                <div
+                  className="min-w-0 flex-1 flex items-center justify-between gap-2"
+                  onClick={() => setSelectedWord(w)}
+                >
+                  <div className="min-w-0">
+                    <span className="font-bold text-foam">{w.spelling}</span>
+                    <span className="text-xs ml-2 text-dim truncate">
+                      {w.meanings.length > 0 ? w.meanings[0] : "（意味未登録）"}
                     </span>
-                  )}
-                  <Tag label={`Lv.${LEVEL_ORDER[w.level] + 1}`} color="sand" />
-                  <Tag label={w.genre} />
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {miss > 0 && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded font-bold bg-coral/20 text-coral">
+                        ✕{miss}
+                      </span>
+                    )}
+                    <Tag label={`Lv.${w.level}`} color="sand" />
+                    <Tag label={w.genre} />
+                  </div>
                 </div>
               </div>
             </div>
@@ -373,22 +424,37 @@ export default function WordManager() {
                 <span className="text-dim">取り込み可能</span>
                 <span className="font-bold text-glow">{csvPreview.words.length}件</span>
               </div>
-              {csvPreview.duplicatesExisting.length > 0 && (
-                <div className="px-3 py-2 bg-black/30 text-xs">
-                  <div className="flex justify-between">
-                    <span className="text-dim">登録済みのためスキップ</span>
-                    <span className="font-bold text-sand">{csvPreview.duplicatesExisting.length}件</span>
+              {csvPreview.unknownGenres.length > 0 && (
+                <div className="px-3 py-2 bg-black/30 text-xs border border-sand/40">
+                  <div className="flex justify-between mb-1">
+                    <span className="font-bold text-sand">⚠ 未登録のジャンル</span>
+                    <span className="font-bold text-sand">{csvPreview.pendingWords.length}件</span>
                   </div>
-                  <div className="text-dim mt-1 break-all">
-                    {csvPreview.duplicatesExisting.slice(0, 8).join(", ")}
-                    {csvPreview.duplicatesExisting.length > 8 && " …"}
+                  <div className="text-foam mb-2">
+                    {csvPreview.unknownGenres.map((g) => `「${g}」`).join(" ")} は登録されていません。追加しますか？
                   </div>
-                </div>
-              )}
-              {csvPreview.duplicatesInFile.length > 0 && (
-                <div className="flex justify-between px-3 py-2 bg-black/30 text-xs">
-                  <span className="text-dim">CSV内の重複をスキップ</span>
-                  <span className="font-bold text-sand">{csvPreview.duplicatesInFile.length}件</span>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        csvPreview.unknownGenres.forEach((g) => game.addCustomGenre(g));
+                        setCsvPreview({
+                          ...csvPreview,
+                          words: [...csvPreview.words, ...csvPreview.pendingWords],
+                          pendingWords: [],
+                          unknownGenres: [],
+                        });
+                      }}
+                      className="flex-1 py-1 text-xs font-bold bg-sand text-deep"
+                    >
+                      ジャンルを追加
+                    </button>
+                    <button
+                      onClick={() => setCsvPreview({ ...csvPreview, pendingWords: [], unknownGenres: [] })}
+                      className="flex-1 py-1 text-xs font-bold bg-white/10 text-dim"
+                    >
+                      スキップ
+                    </button>
+                  </div>
                 </div>
               )}
               {csvPreview.errors.length > 0 && (
@@ -435,7 +501,7 @@ export default function WordManager() {
         <WordForm
           word={editing}
           isNew={isNew}
-          existingSpellings={words.filter((w) => w.id !== editing.id).map((w) => w.spelling.toLowerCase())}
+          genres={GENRES}
           onSave={(w) => {
             game.saveWord(w);
             setEditing(null);
@@ -606,11 +672,11 @@ function WordDetailModal({
 // ─── 追加・編集フォーム ───────────────────────────────────────────────────
 
 function WordForm({
-  word, isNew, existingSpellings, onSave, onClose,
+  word, isNew, genres, onSave, onClose,
 }: {
   word: Word;
   isNew: boolean;
-  existingSpellings: string[];
+  genres: WordGenre[];
   onSave: (w: Word) => void;
   onClose: () => void;
 }) {
@@ -724,9 +790,6 @@ function WordForm({
   const submit = () => {
     const sp = spelling.trim();
     if (!sp) { setError("単語（スペル）を入力してね"); return; }
-    if (existingSpellings.includes(sp.toLowerCase())) {
-      setError("その単語はもう登録されているよ"); return;
-    }
     const cleanMeanings = meanings.map((m) => m.trim()).filter(Boolean);
     const cleanExamples = examples
       .map((ex) => ({ sentence: ex.sentence.trim(), translation: ex.translation.trim() }))
@@ -819,7 +882,7 @@ function WordForm({
               value={genre}
               onChange={(e) => setGenre(e.target.value as WordGenre)}
             >
-              {GENRES.map((g) => <option key={g} value={g}>{g}</option>)}
+              {genres.map((g) => <option key={g} value={g}>{g}</option>)}
             </select>
           </div>
         </div>

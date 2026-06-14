@@ -6,20 +6,14 @@
 // - 出題中: 英単語の自動読み上げ・🔊ボタン・ヒントボタン（自己採点）
 // - 正解するまで間違えた問題を繰り返すオプション
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MODE_BASE_GOLD, sessionGold } from "@/lib/gameLogic";
 import { playBgmForScene, sfx } from "@/lib/sound";
 import { cancelSpeech, releaseWakeLock, requestWakeLock, speak } from "@/lib/speech";
-import type { StudyMode, Word, WordGenre, WordLevel, WordType } from "@/lib/types";
+import { DEFAULT_GENRES, type StudyMode, type Word, type WordGenre, type WordLevel, type WordType } from "@/lib/types";
 import { useGame } from "./GameProvider";
 
-const GENRES: WordGenre[] = [
-  "日常会話",
-  "ビジネス",
-  "旅行",
-  "ニュース",
-  "趣味・カルチャー",
-];
+const BASE_GENRES: WordGenre[] = [...DEFAULT_GENRES];
 const LEVELS: WordLevel[] = ["1", "2", "3", "4", "5"];
 const WORD_TYPES: WordType[] = ["単語", "述語", "会話文"];
 
@@ -123,6 +117,10 @@ function Toggle({
 export default function StudyView() {
   const game = useGame();
   const { words, wordStats, user } = game;
+  const GENRES: WordGenre[] = useMemo(
+    () => [...BASE_GENRES, ...(user.customGenres ?? [])],
+    [user.customGenres]
+  );
   const [mode, setMode] = useState<StudyMode | "free" | null>(null);
   const [config, setConfig] = useState<QuizConfig>({
     genres: new Set(),

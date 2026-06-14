@@ -4,12 +4,15 @@
 
 export type WordLevel = "1" | "2" | "3" | "4" | "5";
 
-export type WordGenre =
-  | "日常会話"
-  | "ビジネス"
-  | "旅行"
-  | "ニュース"
-  | "趣味・カルチャー";
+export type WordGenre = string;
+
+export const DEFAULT_GENRES = [
+  "日常会話",
+  "ビジネス",
+  "旅行",
+  "ニュース",
+  "趣味・カルチャー",
+] as const;
 
 export type WordType = "単語" | "述語" | "会話文";
 
@@ -40,6 +43,20 @@ export interface WordStats {
 
 export type Rarity = "激安" | "普通" | "高級" | "ロマン";
 export type GrowthStage = "幼魚" | "成魚";
+
+// 相棒バフの種類
+export type CompanionBuffType =
+  | "disease_resistance"  // 病気になりにくい（好感度0でも発症確率を下げる）
+  | "affection_boost"     // 餌やり時の好感度上昇量UP
+  | "decay_reduction"     // 放置による好感度低下を軽減
+  | "heal_speed"          // 病気回復期間を短縮（3日→value日）
+  | "tank_expansion";     // 水槽収容数+1
+
+export interface CompanionBuff {
+  type: CompanionBuffType;
+  value: number; // disease_resistance: 0.3=30%耐性, affection_boost: +2, decay_reduction: 0.5=50%軽減, heal_speed: 日数, tank_expansion: 1
+  description: string; // UI表示用
+}
 export type FishStatus = "swimming" | "eating" | "running_away";
 
 export interface Fish {
@@ -82,6 +99,7 @@ export interface UserStatus {
   totalStudyCount: number; // 学習完了の累計（ジョブLvの昇格に使用）
   lastRewardDate: string; // デイリーリワード受取日 "YYYY-MM-DD"
   onboardingDone: boolean;
+  customGenres: string[]; // ユーザーが追加したカスタムジャンル
 }
 
 export type StudyMode = "self" | "choice" | "listen";

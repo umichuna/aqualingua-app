@@ -1,6 +1,5 @@
 // CSV取り込み（vocabulary_template 形式）
 // 列: 単語,種別,ジャンル,レベル,意味1,意味2,意味3,例文1,例文2,例文3
-// 計画書のマッピング: レベル1-2=Beginner / 3=Intermediate / 4-5=Advanced、「日常」→「日常会話」
 
 import Papa from "papaparse";
 import type { Word, WordGenre, WordLevel, WordType } from "./types";
@@ -12,8 +11,8 @@ export interface CsvRowError {
 
 export interface CsvImportResult {
   words: Word[]; // 取り込み可能な単語
-  duplicatesInFile: string[]; // CSV内の重複スペル
-  duplicatesExisting: string[]; // 既存の単語帳と重複するスペル
+  pendingWords: Word[]; // 未知ジャンルを含む単語（ユーザー確認後に追加）
+  unknownGenres: string[]; // CSV内に登録されていないジャンル名（重複なし）
   errors: CsvRowError[];
 }
 
@@ -42,7 +41,7 @@ const GENRE_ALIASES: Record<string, WordGenre> = {
 
 export function parseVocabularyCsv(
   csvText: string,
-  existingSpellings: Set<string>
+  knownGenres: string[] = []
 ): CsvImportResult {
   const parsed = Papa.parse<Record<string, string>>(csvText.trim(), {
     header: true,
@@ -51,11 +50,11 @@ export function parseVocabularyCsv(
 
   const result: CsvImportResult = {
     words: [],
-    duplicatesInFile: [],
-    duplicatesExisting: [],
+    pendingWords: [],
+    unknownGenres: [],
     errors: [],
   };
-  const seen = new Set<string>();
+  const unknownGenreSet = new Set<string>();
 
   parsed.data.forEach((row, i) => {
     const rowNo = i + 1;
@@ -64,25 +63,12 @@ export function parseVocabularyCsv(
       result.errors.push({ row: rowNo, reason: "「単語」列が空" });
       return;
     }
-    const key = spelling.toLowerCase();
-    if (seen.has(key)) {
-      result.duplicatesInFile.push(spelling);
-      return;
-    }
-    seen.add(key);
-    if (existingSpellings.has(key)) {
-      result.duplicatesExisting.push(spelling);
-      return;
-    }
 
-    const genre = GENRE_ALIASES[(row["ジャンル"] ?? "").trim()];
-    if (!genre) {
-      result.errors.push({
-        row: rowNo,
-        reason: `ジャンル「${row["ジャンル"] ?? ""}」が不明`,
-      });
-      return;
-    }
+    const rawGenre = (row["ジャンル"] ?? "").trim();
+    const mappedGenre = GENRE_ALIASES[rawGenre];
+    const isKnownCustom = knownGenres.includes(rawGenre);
+    const genre: WordGenre | undefined = mappedGenre ?? (isKnownCustom ? rawGenre : undefined);
+
     const level = mapLevel((row["レベル"] ?? "").trim());
     if (!level) {
       result.errors.push({
@@ -101,18 +87,28 @@ export function parseVocabularyCsv(
       .map((e) => (e ?? "").trim())
       .filter(Boolean);
 
-    result.words.push({
+    const word: Word = {
       id: crypto.randomUUID(),
       spelling,
       wordType,
       meanings,
       exampleSentence: examples[0] ?? "",
-      exampleTranslation: "", // テンプレートに訳列はない。v2のAI翻訳で補完予定
+      exampleTranslation: "",
+      examples: examples.map((s) => ({ sentence: s, translation: "" })),
       level,
-      genre,
+      genre: genre ?? rawGenre,
       lastUpdated: Date.now(),
-    });
+    };
+
+    if (!genre) {
+      // 未知ジャンル → 保留リストへ
+      unknownGenreSet.add(rawGenre);
+      result.pendingWords.push(word);
+    } else {
+      result.words.push(word);
+    }
   });
 
+  result.unknownGenres = Array.from(unknownGenreSet);
   return result;
 }

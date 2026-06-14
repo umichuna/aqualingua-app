@@ -12,7 +12,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { rollGachaWithWeights, type FishMaster } from "@/data/fishMaster";
+import { getFishMaster, rollGachaWithWeights, type FishMaster } from "@/data/fishMaster";
 import { type GachaTier, GACHA_TIERS } from "@/lib/gameLogic";
 import {
   clearAllData,
@@ -43,11 +43,13 @@ import {
 } from "@/lib/db";
 import {
   ADULT_LEVEL,
+  AFFECTION_GAIN_RATE,
   BAIT_EFFECT,
   calculateOfflineEffects,
   canShip,
   DAILY_REWARD,
   jobLevelFor,
+  MAX_AFFECTION,
   MAX_FISH_LEVEL,
   sessionGold,
   SHOP_PRICES,
@@ -129,6 +131,7 @@ interface GameContextValue {
   saveWords: (words: Word[]) => void;
   removeWord: (id: string) => void;
   recordAnswer: (wordId: string, correct: boolean) => void;
+  addCustomGenre: (genre: string) => void;
 
   // その他
   resetAllData: () => Promise<void>;
@@ -140,6 +143,34 @@ export function useGame(): GameContextValue {
   const ctx = useContext(GameContext);
   if (!ctx) throw new Error("useGame must be used within GameProvider");
   return ctx;
+}
+
+// 相棒リストからアクティブなバフ値を集約する
+function getCompanionBuffs(companions: Fish[]) {
+  let disease_resistance = 0;
+  let affection_boost = 0;
+  let decay_reduction = 0;
+  let tank_expansion = 0;
+  for (const companion of companions) {
+    const master = getFishMaster(companion.type);
+    if (!master?.companionBuff) continue;
+    const { type, value } = master.companionBuff;
+    switch (type) {
+      case "disease_resistance":
+        disease_resistance = Math.max(disease_resistance, value);
+        break;
+      case "affection_boost":
+        affection_boost += value;
+        break;
+      case "decay_reduction":
+        decay_reduction = Math.max(decay_reduction, value);
+        break;
+      case "tank_expansion":
+        tank_expansion += value;
+        break;
+    }
+  }
+  return { disease_resistance, affection_boost, decay_reduction, tank_expansion };
 }
 
 let noticeSeq = 1;
@@ -158,10 +189,12 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const [notices, setNotices] = useState<GameNotice[]>([]);
   const userRef = useRef(user);
   const fishRef = useRef(fishList);
+  const companionRef = useRef(companionList);
   useEffect(() => {
     userRef.current = user;
     fishRef.current = fishList;
-  }, [user, fishList]);
+    companionRef.current = companionList;
+  }, [user, fishList, companionList]);
 
   const pushNotice = useCallback((icon: string, text: string) => {
     const id = noticeSeq++;
@@ -237,7 +270,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
       const updated = calculateOfflineEffects(
         currentFish,
         currentUser.lastActiveTime,
-        now
+        now,
+        getCompanionBuffs(companionRef.current)
       );
       const runaways = updated.filter((f) => f.status === "running_away");
       const stayed = updated.filter((f) => f.status !== "running_away");
@@ -394,14 +428,16 @@ export function GameProvider({ children }: { children: ReactNode }) {
         ...u,
         items: { ...u.items, [itemKey]: u.items[itemKey] - 1 },
       });
-      const gain = kind === "basic" ? BAIT_EFFECT.basic : BAIT_EFFECT.premium;
+      const baseGain = kind === "basic" ? BAIT_EFFECT.basic : BAIT_EFFECT.premium;
+      const { affection_boost } = getCompanionBuffs(companionRef.current);
       const next = fishRef.current.map((f) => {
         const level = Math.min(MAX_FISH_LEVEL, f.level + 1);
         const grew = f.growthStage === "幼魚" && level >= ADULT_LEVEL;
         if (grew) pushNotice("✨", `${f.name} が成魚に成長した！`);
+        const gain = Math.max(1, Math.floor(baseGain * AFFECTION_GAIN_RATE[f.rarity])) + affection_boost;
         return {
           ...f,
-          affection: Math.min(100, f.affection + gain),
+          affection: Math.min(MAX_AFFECTION[f.rarity], f.affection + gain),
           level,
           growthStage: grew ? ("成魚" as const) : f.growthStage,
         };
@@ -495,7 +531,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
     (fishId: string): boolean => {
       const fish = companionList.find((f) => f.fishId === fishId);
       if (!fish) return false;
-      if (fishRef.current.length >= userRef.current.tankCapacity) return false;
+      const { tank_expansion } = getCompanionBuffs(companionRef.current);
+      if (fishRef.current.length >= userRef.current.tankCapacity + tank_expansion) return false;
       // 相棒ストアから削除 → 水槽へ
       setCompanionList((list) => list.filter((f) => f.fishId !== fishId));
       void dbDeleteCompanion(fishId);
@@ -640,6 +677,13 @@ export function GameProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  // ---------- カスタムジャンル追加 ----------
+  const addCustomGenre = useCallback((genre: string) => {
+    const u = userRef.current;
+    if ((u.customGenres ?? []).includes(genre)) return;
+    persistUser({ ...u, customGenres: [...(u.customGenres ?? []), genre] });
+  }, [persistUser]);
+
   // ---------- その他 ----------
   const resetAllData = useCallback(async () => {
     await clearAllData();
@@ -687,6 +731,7 @@ return (
         saveWords,
         removeWord,
         recordAnswer,
+        addCustomGenre,
         resetAllData,
       }}
     >
