@@ -44,24 +44,6 @@ export interface FishMaster {
 export const FISH_MASTER: FishMaster[] = [
   // ---- 激安 ----
   {
-    type: "デバスズメダイ",
-    rarity: "激安",
-    palette: { body: "#7FD9D0", stripe: "#BFF0EB", fin: "#4FB3A9", eye: "#1B1B1B" },
-    description: "群れで泳ぐのが大好きな、さわやかな水色の小魚。",
-  },
-  {
-    type: "ロイヤルデムワーゼル",
-    rarity: "激安",
-    palette: { body: "#4A6FE3", stripe: "#F2D88F", fin: "#3D5BC4", eye: "#1B1B1B" },
-    description: "青い体に黄色いしっぽがおしゃれなスズメダイ。",
-  },
-  {
-    type: "キンギョハナダイ",
-    rarity: "激安",
-    palette: { body: "#F2913D", stripe: "#F7B975", fin: "#E3702A", eye: "#1B1B1B" },
-    description: "オレンジ色がまぶしい、サンゴ礁の人気者。",
-  },
-  {
     type: "ナマコ",
     rarity: "激安",
     palette: { body: "#8B4513", stripe: "#A0522D", fin: "#6B3410", eye: "#1B1B1B" },
@@ -90,24 +72,6 @@ export const FISH_MASTER: FishMaster[] = [
     imageId: "fish_018",
   },
   // ---- 普通 ----
-  {
-    type: "カクレクマノミ",
-    rarity: "普通",
-    palette: { body: "#F2862C", stripe: "#FFFFFF", fin: "#D96704", eye: "#1B1B1B" },
-    description: "イソギンチャクに隠れて暮らす、みんなのアイドル。",
-  },
-  {
-    type: "ハタタテハゼ",
-    rarity: "普通",
-    palette: { body: "#F5EFE0", stripe: "#F2705B", fin: "#E8D9B0", eye: "#1B1B1B" },
-    description: "背びれをピンと立てて泳ぐ姿がかわいいハゼ。",
-  },
-  {
-    type: "チョウチョウウオ",
-    rarity: "普通",
-    palette: { body: "#F2D028", stripe: "#1B1B1B", fin: "#E0B81F", eye: "#1B1B1B" },
-    description: "ちょうちょのようにひらひら泳ぐ黄色い魚。",
-  },
   {
     type: "ウツボ",
     rarity: "普通",
@@ -260,18 +224,6 @@ export const FISH_MASTER: FishMaster[] = [
     companionBuff: { type: "decay_reduction", value: 0.3, description: "放置による好感度低下-30%" },
   },
   {
-    type: "フレームエンゼル",
-    rarity: "高級",
-    palette: { body: "#E3402A", stripe: "#7A1B10", fin: "#F26B3A", eye: "#1B1B1B" },
-    description: "炎のように真っ赤な体が美しい高級魚。",
-  },
-  {
-    type: "マンダリンフィッシュ",
-    rarity: "高級",
-    palette: { body: "#2A9D8F", stripe: "#F2913D", fin: "#264653", eye: "#1B1B1B" },
-    description: "サイケデリックな模様を持つ、海の宝石。",
-  },
-  {
     type: "ハナミノカサゴ",
     rarity: "高級",
     palette: { body: "#C83020", stripe: "#F0F0F0", fin: "#E05030", eye: "#1B1B1B" },
@@ -380,18 +332,6 @@ export const FISH_MASTER: FishMaster[] = [
     description: "葉っぱのような体で海草に隠れる、世界一美しい魚の一つ。",
     imageId: "fish_047",
     companionBuff: { type: "affection_boost", value: 5, description: "餌やりの好感度+5" },
-  },
-  {
-    type: "ナポレオンフィッシュ",
-    rarity: "ロマン",
-    palette: { body: "#4FB3A9", stripe: "#2A7D74", fin: "#37C8C3", eye: "#1B1B1B" },
-    description: "額のコブが立派な、サンゴ礁の王様。",
-  },
-  {
-    type: "リュウグウノツカイ",
-    rarity: "ロマン",
-    palette: { body: "#D9E3F0", stripe: "#F2705B", fin: "#F2705B", eye: "#1B1B1B" },
-    description: "深海からの使者。出会えたら奇跡といわれる伝説の魚。",
   },
   {
     type: "マンタ",

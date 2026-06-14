@@ -133,13 +133,13 @@ function AppShell() {
   };
 
   const finishOnboarding = () => {
-    // 初期データ投入: サンプル単語 + 最初の魚（カクレクマノミ）
+    // 初期データ投入: サンプル単語 + 最初の魚（ツノダシ）
     game.saveWords(buildSampleWords());
-    const starter = getFishMaster("カクレクマノミ");
-    if (starter) game.addFishToTank(starter, "クマちゃん");
+    const starter = getFishMaster("ツノダシ");
+    if (starter) game.addFishToTank(starter, "ツノちゃん");
     game.updateUser({ onboardingDone: true });
     setShowOnboarding(false);
-    game.pushNotice("🐠", "クマちゃんとサンプル単語10語をプレゼント！");
+    game.pushNotice("🐠", "ツノちゃんとサンプル単語10語をプレゼント！");
     setShowReward(true);
   };
 

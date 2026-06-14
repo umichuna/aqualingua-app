@@ -361,7 +361,7 @@ export function Onboarding({
         </div>
         {last && (
           <div className="flex justify-center mb-3">
-            <PixelFish type="カクレクマノミ" size={48} />
+            <PixelFish type="ツノダシ" size={48} />
           </div>
         )}
         <button
