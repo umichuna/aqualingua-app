@@ -128,6 +128,8 @@ export default function AquariumView() {
     setRenameTarget(null);
   };
 
+  const [showSubPanel, setShowSubPanel] = useState(false);
+
   const sel = fishList.find((f) => f.fishId === selected) ?? null;
   const boxFish = user.boxFish ?? [];
   const boxCapacity = user.boxCapacity ?? BOX_CAPACITY_INITIAL;
@@ -243,6 +245,19 @@ export default function AquariumView() {
         <div className="absolute top-2 right-2 text-xs px-2 py-1 rounded-full bg-black/40 text-dim">
           🐠 {fishList.length} / {user.tankCapacity}
         </div>
+
+        {/* 相棒・ボックス表示トグルボタン */}
+        <button
+          onClick={(e) => { e.stopPropagation(); setShowSubPanel((v) => !v); }}
+          className="absolute bottom-2 left-2 flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-full bg-black/60 text-foam font-bold"
+        >
+          {showSubPanel ? "✕" : (
+            <>
+              {companionList.length > 0 && <span>🤝 {companionList.length}</span>}
+              <span>📦 {boxFish.length}/{boxCapacity}</span>
+            </>
+          )}
+        </button>
       </div>
 
       {/* 魚詳細パネル */}
@@ -309,59 +324,62 @@ export default function AquariumView() {
         </div>
       )}
 
-      {/* 相棒リスト */}
-      {companionList.length > 0 && (
-        <div className="bg-mid px-3 py-2">
-          <div className="text-xs font-bold text-glow mb-1.5">🤝 相棒おさかな（{companionList.length}匹）</div>
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {companionList.map((c) => (
-              <div key={c.fishId} className="flex flex-col items-center gap-1 shrink-0">
-                <PixelFish type={c.type} size={36} />
-                <div className="text-[10px] text-foam text-center whitespace-nowrap">{c.name}</div>
-                <button
-                  onClick={() => {
-                    if (!game.recallCompanion(c.fishId)) {
-                      game.pushNotice("💦", "水槽がいっぱい！ボックスを使うか相棒にしよう");
-                    }
-                  }}
-                  className="text-[10px] px-2 py-0.5 rounded-full bg-sand text-deep font-bold whitespace-nowrap"
-                >
-                  呼び戻す
-                </button>
+      {/* 相棒・ボックスパネル（トグルで表示） */}
+      {showSubPanel && (
+        <div className="bg-mid border-t border-white/10">
+          {/* 相棒リスト */}
+          {companionList.length > 0 && (
+            <div className="px-3 py-2">
+              <div className="text-xs font-bold text-glow mb-1.5">🤝 相棒おさかな（{companionList.length}匹）</div>
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {companionList.map((c) => (
+                  <div key={c.fishId} className="flex flex-col items-center gap-1 shrink-0">
+                    <PixelFish type={c.type} size={36} />
+                    <div className="text-[10px] text-foam text-center whitespace-nowrap">{c.name}</div>
+                    <button
+                      onClick={() => {
+                        if (!game.recallCompanion(c.fishId)) {
+                          game.pushNotice("💦", "水槽がいっぱい！ボックスを使うか相棒にしよう");
+                        }
+                      }}
+                      className="text-[10px] px-2 py-0.5 rounded-full bg-sand text-deep font-bold whitespace-nowrap"
+                    >
+                      呼び戻す
+                    </button>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* 一時保存ボックス */}
-      {(boxFish.length > 0 || fishList.length >= user.tankCapacity) && (
-        <div className="bg-mid px-3 py-2 border-t border-white/10">
-          <div className="text-xs font-bold text-glow mb-1.5">
-            📦 ボックス（{boxFish.length}/{boxCapacity}）
-          </div>
-          {boxFish.length === 0 ? (
-            <div className="text-xs text-dim">水槽が満杯の時に一時保管できるよ</div>
-          ) : (
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              {boxFish.map((f) => (
-                <div key={f.fishId} className="flex flex-col items-center gap-1 shrink-0">
-                  <PixelFish type={f.type} size={36} />
-                  <div className="text-[10px] text-foam text-center whitespace-nowrap">{f.name}</div>
-                  <button
-                    onClick={() => {
-                      if (!game.moveBoxFishToTank(f.fishId)) {
-                        game.pushNotice("💦", "水槽がいっぱい！まず水槽に空きを作ろう");
-                      }
-                    }}
-                    className="text-[10px] px-2 py-0.5 rounded-full bg-glow text-deep font-bold whitespace-nowrap"
-                  >
-                    水槽へ
-                  </button>
-                </div>
-              ))}
             </div>
           )}
+
+          {/* 一時保存ボックス */}
+          <div className="px-3 py-2 border-t border-white/10">
+            <div className="text-xs font-bold text-glow mb-1.5">
+              📦 ボックス（{boxFish.length}/{boxCapacity}）
+            </div>
+            {boxFish.length === 0 ? (
+              <div className="text-xs text-dim">水槽が満杯の時に一時保管できるよ</div>
+            ) : (
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {boxFish.map((f) => (
+                  <div key={f.fishId} className="flex flex-col items-center gap-1 shrink-0">
+                    <PixelFish type={f.type} size={36} />
+                    <div className="text-[10px] text-foam text-center whitespace-nowrap">{f.name}</div>
+                    <button
+                      onClick={() => {
+                        if (!game.moveBoxFishToTank(f.fishId)) {
+                          game.pushNotice("💦", "水槽がいっぱい！まず水槽に空きを作ろう");
+                        }
+                      }}
+                      className="text-[10px] px-2 py-0.5 rounded-full bg-glow text-deep font-bold whitespace-nowrap"
+                    >
+                      水槽へ
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
