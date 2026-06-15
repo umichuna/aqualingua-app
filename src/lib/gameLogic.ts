@@ -1,6 +1,5 @@
 // ゲームルール・経済バランス（仕様書 aqualingua_spec.md §3〜§5 準拠）
 
-import { RARITY_INFO } from "@/data/fishMaster";
 import { TITLE_MILESTONES } from "@/data/titles";
 import type { Fish, Rarity, StudyMode } from "./types";
 
@@ -24,13 +23,6 @@ export function dailyGoldReward(mode: StudyMode, jobLevel: number): number {
   return sessionGold(mode, 1, jobLevel);
 }
 
-// ---------- 出荷額（仕様書§4.2） ----------
-// 好感度100のときのみ売却可能（倍率2.0はその前提で常に適用）
-export function shipValue(fish: Fish): number {
-  const base = RARITY_INFO[fish.rarity].base;
-  return Math.floor(base * (1 + fish.level / 10) * 2.0);
-}
-
 // ---------- 好感度バランス（レア度別上限・上昇倍率） ----------
 export const MAX_AFFECTION: Record<Rarity, number> = {
   激安: 100,
@@ -46,10 +38,6 @@ export const AFFECTION_GAIN_RATE: Record<Rarity, number> = {
   高級: 0.6,
   ロマン: 0.4,
 };
-
-export function canShip(fish: Fish): boolean {
-  return fish.affection >= MAX_AFFECTION[fish.rarity];
-}
 
 // ---------- 魚の成長 ----------
 export const MAX_FISH_LEVEL = 30;
@@ -117,10 +105,7 @@ export function calculateOfflineEffects(
   });
 }
 
-// ---------- デイリーリワード ----------
-export const DAILY_REWARD = { gold: 30, baitBasic: 3 } as const;
-
-// ローカル日付 "YYYY-MM-DD"（デイリーリワードの受取判定に使用）
+// ローカル日付 "YYYY-MM-DD"
 export function todayString(d: Date = new Date()): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -170,13 +155,23 @@ export const SHOP_PRICES = {
   baitPremium5: 180, // 高級フレーク×5
   medicine: 300, // おくすり
   tankExpansion: 1200, // 水槽拡張キット（初回価格。実価格は tankExpansionPrice() で計算）
+  boxExpansion: 800, // ボックス拡張キット（初回価格。実価格は boxExpansionPrice() で計算）
 } as const;
 
-export const MAX_TANK_CAPACITY = 10;
+export const MAX_TANK_CAPACITY = 15;
 
 // 水槽拡張キットは買うたびに2倍に値上がりする
-// 容量4（初期）→1200G、容量6→2400G、容量8→4800G
+// 容量4（初期）→1200G、容量6→2400G…
 export function tankExpansionPrice(tankCapacity: number): number {
   const purchases = Math.max(0, Math.floor((tankCapacity - 4) / 2));
   return SHOP_PRICES.tankExpansion * 2 ** purchases;
+}
+
+// ---------- ボックス ----------
+export const BOX_CAPACITY_INITIAL = 5;
+
+// ボックス拡張キットも2倍ずつ値上がり（初期5匹→800G）
+export function boxExpansionPrice(boxCapacity: number): number {
+  const purchases = Math.max(0, Math.floor((boxCapacity - BOX_CAPACITY_INITIAL) / 5));
+  return 800 * 2 ** purchases;
 }

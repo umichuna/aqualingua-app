@@ -236,16 +236,18 @@ export default function StudyView() {
   };
 
   const finishQuiz = useCallback(
-    (m: StudyMode, finalScore: number) => {
-      const res = game.completeStudy(m, originalCount, finalScore);
+    (m: StudyMode, finalScore: number, countOverride?: number) => {
+      const count = countOverride ?? originalCount;
+      const res = game.completeStudy(m, count, finalScore);
       setEarnedGold(res.gold);
+      setOriginalCount(count);
       const extras: string[] = [];
       if (res.leveledUp) extras.push(`🎖️ 職業レベルが Lv.${user.jobLevel + 1} に上がった！`);
       for (const t of res.newTitles) extras.push(`👑 称号「${t}」を獲得！`);
       setResultExtra(extras);
       setScore(finalScore);
       setPhase("done");
-      sfx.complete(); // 歓声と拍手
+      sfx.complete(); // チャリーン（仕事完了音）
       if (res.leveledUp || res.newTitles.length > 0) sfx.levelUp();
       void playBgmForScene("home");
     },
@@ -393,28 +395,36 @@ export default function StudyView() {
           </div>
         </div>
 
-        {/* 出題数（数字入力） */}
-        <div>
-          <div className="text-xs font-bold text-glow mb-1.5">
-            出題数（最大 {maxCount} 問・0で全部）
+        {/* 出題数（数字入力）※聞き流しはエンドレスなので非表示 */}
+        {mode !== "listen" && (
+          <div>
+            <div className="text-xs font-bold text-glow mb-1.5">
+              出題数（最大 {maxCount} 問・0で全部）
+            </div>
+            <input
+              type="number"
+              min={0}
+              max={maxCount}
+              value={config.count}
+              onChange={(e) => {
+                const n = Math.max(0, Math.floor(Number(e.target.value) || 0));
+                setConfig((c) => ({ ...c, count: n }));
+              }}
+              className="w-full px-3 py-2.5 rounded-xl bg-mid text-foam outline-none text-center font-bold"
+            />
+            {config.count > maxCount && maxCount > 0 && (
+              <p className="text-[10px] text-coral mt-1">
+                ※ 絞り込みの結果 {maxCount} 問しかないため、{maxCount} 問になります
+              </p>
+            )}
           </div>
-          <input
-            type="number"
-            min={0}
-            max={maxCount}
-            value={config.count}
-            onChange={(e) => {
-              const n = Math.max(0, Math.floor(Number(e.target.value) || 0));
-              setConfig((c) => ({ ...c, count: n }));
-            }}
-            className="w-full px-3 py-2.5 rounded-xl bg-mid text-foam outline-none text-center font-bold"
-          />
-          {config.count > maxCount && maxCount > 0 && (
-            <p className="text-[10px] text-coral mt-1">
-              ※ 絞り込みの結果 {maxCount} 問しかないため、{maxCount} 問になります
-            </p>
-          )}
-        </div>
+        )}
+
+        {mode === "listen" && (
+          <p className="text-xs text-dim">
+            🎧 聞き流しは「終了」を押すまでエンドレスで再生します。終了した時点で聞いた問題数ぶんのゴールドがもらえます。
+          </p>
+        )}
 
         <Toggle
           on={config.weakFirst}
@@ -423,14 +433,17 @@ export default function StudyView() {
           desc="間違えた回数が多い単語から出題する"
         />
 
-        <Toggle
-          on={config.repeatUntilCorrect}
-          onToggle={() =>
-            setConfig((c) => ({ ...c, repeatUntilCorrect: !c.repeatUntilCorrect }))
-          }
-          title="正解するまで繰り返す"
-          desc="間違えた問題を最後にもう一度出題する（全問正解で終了）"
-        />
+        {/* 「正解するまで繰り返す」は聞き流しでは不要なので非表示 */}
+        {mode !== "listen" && (
+          <Toggle
+            on={config.repeatUntilCorrect}
+            onToggle={() =>
+              setConfig((c) => ({ ...c, repeatUntilCorrect: !c.repeatUntilCorrect }))
+            }
+            title="正解するまで繰り返す"
+            desc="間違えた問題を最後にもう一度出題する（全問正解で終了）"
+          />
+        )}
 
         <button
           onClick={() => startQuiz(mode)}
@@ -441,7 +454,9 @@ export default function StudyView() {
         >
           {maxCount === 0
             ? "出題できる単語がありません"
-            : `はじめる（${effectiveCount}問・+${estimatedGold}G）`}
+            : mode === "listen"
+              ? "聞き流しをはじめる"
+              : `はじめる（${effectiveCount}問・+${estimatedGold}G）`}
         </button>
       </div>
     );
@@ -552,7 +567,7 @@ export default function StudyView() {
   return (
     <ListenPlay
       words={quizWords}
-      onFinish={() => finishQuiz("listen", quizWords.length)}
+      onFinish={(playedCount) => finishQuiz("listen", playedCount, playedCount)}
       onQuit={backToMenu}
     />
   );
@@ -563,12 +578,15 @@ function FreeWork({ onQuit }: { onQuit: () => void }) {
   const game = useGame();
   const [label, setLabel] = useState("");
   const [amount, setAmount] = useState("");
+  const [memo, setMemo] = useState(""); // 自由メモ（任意）
   const [done, setDone] = useState<{ label: string; amount: number } | null>(null);
 
   const submit = () => {
     const n = Math.floor(Number(amount));
     if (!label.trim() || !Number.isFinite(n) || n <= 0) return;
-    game.completeFreeWork(label.trim(), n);
+    const { sessionId } = game.completeFreeWork(label.trim(), n);
+    // メモが入力されていれば記録に保存する
+    if (memo.trim()) game.patchStudySession(sessionId, { memo: memo.trim() });
     sfx.complete();
     setDone({ label: label.trim(), amount: n });
   };
@@ -620,6 +638,17 @@ function FreeWork({ onQuit }: { onQuit: () => void }) {
           onChange={(e) => setAmount(e.target.value)}
           placeholder="例: 50"
           className="w-full px-3 py-2.5 rounded-xl bg-mid text-foam outline-none text-center font-bold"
+        />
+      </div>
+      <div>
+        <div className="text-xs font-bold text-glow mb-1.5">📝 メモ（任意）</div>
+        <textarea
+          value={memo}
+          onChange={(e) => setMemo(e.target.value)}
+          maxLength={200}
+          rows={3}
+          placeholder="自由に書けます（例: ランニング5km・調子よかった）"
+          className="w-full px-3 py-2.5 rounded-xl bg-mid text-foam outline-none text-sm resize-none"
         />
       </div>
       <button
@@ -861,20 +890,22 @@ function SelfPlay({
   );
 }
 
-// ---------- 聞き流し ----------
+// ---------- 聞き流し（エンドレス再生） ----------
 function ListenPlay({
   words,
   onFinish,
   onQuit,
 }: {
   words: Word[];
-  onFinish: () => void;
+  onFinish: (playedCount: number) => void;
   onQuit: () => void;
 }) {
   const [index, setIndex] = useState(0);
+  const [playedCount, setPlayedCount] = useState(0); // これまで聞いた問題数（ゴールド算出用）
   const [playing, setPlaying] = useState(true);
   const [rate, setRate] = useState(1.0);
   const indexRef = useRef(0);
+  const playedRef = useRef(0);
   const playingRef = useRef(true);
   const rateRef = useRef(1.0);
   useEffect(() => {
@@ -891,11 +922,12 @@ function ListenPlay({
     };
   }, []);
 
-  // 自動再生ループ: 英語 → 日本語 → 英語 → 日本語（例文なし、要求 #1）
+  // 自動再生ループ: 英語 → 日本語 → 英語 → 日本語（例文なし）
+  // 終了ボタンを押すまでエンドレスでくり返す（最後まで行ったら先頭に戻る）
   useEffect(() => {
     let stopped = false;
     (async () => {
-      while (!stopped && indexRef.current < words.length) {
+      while (!stopped) {
         if (!playingRef.current) {
           await new Promise((r) => setTimeout(r, 300));
           continue;
@@ -918,11 +950,12 @@ function ListenPlay({
         }
         if (stopped) break;
         await new Promise((r) => setTimeout(r, 700));
-        indexRef.current += 1;
+        // 1問ぶん聞き終わった
+        playedRef.current += 1;
+        setPlayedCount(playedRef.current);
+        // 次の単語へ（最後まで行ったら先頭に戻ってエンドレス）
+        indexRef.current = (indexRef.current + 1) % words.length;
         setIndex(indexRef.current);
-      }
-      if (!stopped && indexRef.current >= words.length) {
-        onFinish();
       }
     })();
     return () => {
@@ -936,15 +969,15 @@ function ListenPlay({
     <div className="p-4 flex flex-col gap-4 h-full">
       <div className="flex justify-between text-xs text-dim">
         <button onClick={onQuit} className="underline">← やめる</button>
-        <span>
-          {Math.min(index + 1, words.length)} / {words.length}
-        </span>
+        <span>聞いた数: {playedCount}問</span>
       </div>
       <div className="rounded-2xl p-6 text-center bg-mid flex-1 flex flex-col items-center justify-center gap-2">
         <div className="text-xs text-glow">🎧 聞き流し中（画面はスリープしません）</div>
         <div className="text-3xl font-bold tracking-wide text-foam">{w?.spelling}</div>
         <div className="text-base font-bold text-glow">{w?.meanings.join("、")}</div>
-        <div className="text-[10px] text-dim mt-1">英語 → 日本語 を2回くり返します</div>
+        <div className="text-[10px] text-dim mt-1">
+          英語 → 日本語 を2回くり返します（{(index % words.length) + 1} / {words.length}語目）
+        </div>
       </div>
       <div className="flex items-center gap-2">
         <button
@@ -968,6 +1001,15 @@ function ListenPlay({
           ))}
         </div>
       </div>
+      <button
+        onClick={() => {
+          cancelSpeech();
+          onFinish(playedRef.current);
+        }}
+        className="w-full py-3 rounded-xl font-bold bg-sand text-deep active:scale-95 transition-transform"
+      >
+        ⏹ 終了する（{playedCount}問ぶんゴールド獲得）
+      </button>
     </div>
   );
 }

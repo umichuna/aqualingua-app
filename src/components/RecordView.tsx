@@ -62,8 +62,24 @@ function StatsPanel({
 }: {
   sessions: ReturnType<typeof useGame>["studySessions"];
 }) {
+  const game = useGame();
   const today = todayString();
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
+  const [showManual, setShowManual] = useState(false);
+  const [mDate, setMDate] = useState(today);
+  const [mLabel, setMLabel] = useState("");
+  const [mCount, setMCount] = useState("");
+
+  const submitManual = () => {
+    const n = Math.floor(Number(mCount));
+    if (!mDate || !mLabel.trim() || !Number.isFinite(n) || n <= 0) return;
+    game.addManualSession(mDate, mLabel.trim(), n);
+    setShowManual(false);
+    setMLabel("");
+    setMCount("");
+    setMDate(today);
+    setExpandedDate(mDate);
+  };
 
   // 今日の集計
   const todayStats = useMemo(() => {
@@ -200,7 +216,18 @@ function StatsPanel({
 
       {/* 日付グループ履歴（クリックで内訳展開） */}
       <div className="space-y-1.5">
-        <div className="text-xs font-bold text-glow">📝 さいきんの記録</div>
+        <div className="flex items-center justify-between">
+          <div className="text-xs font-bold text-glow">📝 さいきんの記録</div>
+          <button
+            onClick={() => {
+              setMDate(today);
+              setShowManual(true);
+            }}
+            className="text-xs px-2.5 py-1 rounded-lg font-bold bg-sand text-deep"
+          >
+            ＋ 手入力で追加
+          </button>
+        </div>
         {dailyGroups.length === 0 && (
           <p className="text-xs text-dim">まだ記録がありません。しごとをしてみよう！</p>
         )}
@@ -233,13 +260,21 @@ function StatsPanel({
                     >
                       <div className="flex-1 min-w-0">
                         <div className="text-foam truncate">
-                          {MODE_LABEL[s.mode] ?? s.mode} — {s.label}
+                          {s.isManual ? "✋ 手入力" : (MODE_LABEL[s.mode] ?? s.mode)} — {s.label}
+                          {s.isManual && (
+                            <span className="ml-1.5 text-[9px] px-1.5 py-0.5 rounded-full bg-white/10 text-dim align-middle">
+                              手入力
+                            </span>
+                          )}
                         </div>
                         <div className="text-[10px] text-dim">
                           {s.count > 0
-                            ? `${s.count}問${s.mode !== "listen" && s.mode !== "free" ? `（${s.correctCount}正解）` : ""}`
+                            ? `${s.count}問${!s.isManual && s.mode !== "listen" && s.mode !== "free" ? `（${s.correctCount}正解）` : ""}`
                             : s.label}
                         </div>
+                        {s.memo && (
+                          <div className="text-[10px] text-dim/80 mt-0.5 italic">📝 {s.memo}</div>
+                        )}
                       </div>
                       <span className="font-bold text-sand shrink-0">+{s.goldEarned}G</span>
                     </div>
@@ -250,6 +285,69 @@ function StatsPanel({
           );
         })}
       </div>
+
+      {/* 手入力モーダル（過去の学習記録・ゴールド対象外） */}
+      {showManual && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/70"
+          onClick={() => setShowManual(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-xs p-5 bg-sea font-pixel"
+            style={{ border: "4px solid var(--aqua-glow)", boxShadow: "0 0 0 4px var(--aqua-deep)" }}
+          >
+            <div className="font-bold text-foam mb-3 text-center">✋ 過去の記録を手入力</div>
+            <div className="text-[10px] text-dim mb-3 text-center">
+              ※ 手入力の記録はゴールドの対象外です
+            </div>
+            <label className="block text-xs font-bold text-glow mb-1">日付</label>
+            <input
+              type="date"
+              value={mDate}
+              max={today}
+              onChange={(e) => setMDate(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg bg-black/40 text-foam outline-none mb-3"
+            />
+            <label className="block text-xs font-bold text-glow mb-1">項目名</label>
+            <input
+              value={mLabel}
+              onChange={(e) => setMLabel(e.target.value)}
+              maxLength={30}
+              placeholder="例: 英単語アプリで復習"
+              className="w-full px-3 py-2 rounded-lg bg-black/40 text-foam outline-none mb-3"
+            />
+            <label className="block text-xs font-bold text-glow mb-1">学習した数</label>
+            <input
+              type="number"
+              min={1}
+              value={mCount}
+              onChange={(e) => setMCount(e.target.value)}
+              placeholder="例: 20"
+              className="w-full px-3 py-2 rounded-lg bg-black/40 text-foam outline-none mb-4 text-center font-bold"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowManual(false)}
+                className="flex-1 py-2 text-sm font-bold bg-white/10 text-dim"
+              >
+                キャンセル
+              </button>
+              <button
+                onClick={submitManual}
+                disabled={!mDate || !mLabel.trim() || Number(mCount) <= 0}
+                className={`flex-1 py-2 text-sm font-bold ${
+                  mDate && mLabel.trim() && Number(mCount) > 0
+                    ? "bg-glow text-deep"
+                    : "bg-white/10 text-dim"
+                }`}
+              >
+                追加する
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

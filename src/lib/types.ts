@@ -97,9 +97,11 @@ export interface UserStatus {
   items: UserItems;
   tankCapacity: number; // 飼育上限（拡張キットで+2）
   totalStudyCount: number; // 学習完了の累計（ジョブLvの昇格に使用）
-  lastRewardDate: string; // デイリーリワード受取日 "YYYY-MM-DD"
+  lastRewardDate: string; // デイリーリワード受取日 "YYYY-MM-DD"（ログインボーナス削除後も後方互換で残す）
   onboardingDone: boolean;
   customGenres: string[]; // ユーザーが追加したカスタムジャンル
+  boxFish?: Fish[]; // 一時保存ボックス内の魚
+  boxCapacity?: number; // ボックス上限（デフォルト5）
 }
 
 export type StudyMode = "self" | "choice" | "listen";
@@ -114,6 +116,8 @@ export interface StudySession {
   count: number; // 出題数（フリーは0）
   correctCount: number; // 正解数（自己採点=わかった数。フリーは0）
   goldEarned: number;
+  memo?: string; // 任意メモ
+  isManual?: boolean; // 手入力記録（true の場合ゴールド対象外）
   lastUpdated: number;
 }
 

@@ -32,6 +32,7 @@ export interface FishMaster {
   description: string; // 図鑑の説明文
   imageId?: string; // public/fish/{imageId}.png が存在する場合はそちらを表示
   companionBuff?: CompanionBuff; // 相棒にしたときの効果
+  layer?: "bottom" | "middle" | "top"; // 水槽内の表示層（bottom=底生）
 }
 
 // ★ 魚の追加方法 ★
@@ -49,6 +50,7 @@ export const FISH_MASTER: FishMaster[] = [
     palette: { body: "#8B4513", stripe: "#A0522D", fin: "#6B3410", eye: "#1B1B1B" },
     description: "海の底をのんびり歩く、掃除屋さん。",
     imageId: "fish_032",
+    layer: "bottom",
   },
   {
     type: "ハゼ",
@@ -56,6 +58,7 @@ export const FISH_MASTER: FishMaster[] = [
     palette: { body: "#C8A878", stripe: "#E0C89A", fin: "#A88E60", eye: "#1B1B1B" },
     description: "砂地に穴を掘って暮らす、小さなアイドル。",
     imageId: "fish_039",
+    layer: "bottom",
   },
   {
     type: "イワシ",
@@ -92,6 +95,7 @@ export const FISH_MASTER: FishMaster[] = [
     palette: { body: "#C8A060", stripe: "#A07840", fin: "#E0B880", eye: "#1B1B1B" },
     description: "砂に隠れる名人。目が両方同じ側についている不思議な魚。",
     imageId: "fish_016",
+    layer: "bottom",
   },
   {
     type: "コウイカ",
@@ -128,6 +132,7 @@ export const FISH_MASTER: FishMaster[] = [
     palette: { body: "#C04030", stripe: "#A02820", fin: "#D06040", eye: "#1B1B1B" },
     description: "岩に擬態して獲物を待つ、底生の赤い魚。",
     imageId: "fish_014",
+    layer: "bottom",
   },
   {
     type: "タツノオトシゴ2",
@@ -169,8 +174,9 @@ export const FISH_MASTER: FishMaster[] = [
     type: "ウミウシ",
     rarity: "普通",
     palette: { body: "#E040A0", stripe: "#F080C0", fin: "#C02080", eye: "#1B1B1B" },
-    description: "色とりどりの体で海底を歩く、貝殻のないカタツムリの仲間。",
+    description: "色とりどりの身体で海底を歩く、海の宝石。",
     imageId: "fish_006",
+    layer: "bottom",
   },
   {
     type: "ウミヘビ",
@@ -185,6 +191,7 @@ export const FISH_MASTER: FishMaster[] = [
     palette: { body: "#E8D080", stripe: "#C8B060", fin: "#A89040", eye: "#1B1B1B" },
     description: "砂の中から半身を出して水流に向かう、愛嬌たっぷりの小魚。",
     imageId: "fish_029",
+    layer: "bottom",
   },
   {
     type: "ニシキベラ",
@@ -253,6 +260,7 @@ export const FISH_MASTER: FishMaster[] = [
     description: "2億年前から姿が変わらない、生きた化石。",
     imageId: "fish_015",
     companionBuff: { type: "disease_resistance", value: 0.5, description: "病気耐性+50%（古代の生命力）" },
+    layer: "bottom",
   },
   {
     type: "ハナヒゲウツボ",

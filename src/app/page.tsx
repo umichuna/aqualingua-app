@@ -9,7 +9,7 @@ import { useState } from "react";
 import AquariumView from "@/components/AquariumView";
 import EncyclopediaView from "@/components/EncyclopediaView";
 import { GameProvider, useGame } from "@/components/GameProvider";
-import { Onboarding, RewardModal, SettingsModal } from "@/components/Modals";
+import { Onboarding, SettingsModal } from "@/components/Modals";
 import RecordView from "@/components/RecordView";
 import ShopView from "@/components/ShopView";
 import StartScreen from "@/components/StartScreen";
@@ -17,7 +17,6 @@ import StudyView from "@/components/StudyView";
 import WordManager from "@/components/WordManager";
 import { getFishMaster } from "@/data/fishMaster";
 import { buildSampleWords } from "@/data/sampleWords";
-import { todayString } from "@/lib/gameLogic";
 import { type BgmScene, playBgmForScene, sfx } from "@/lib/sound";
 
 // 下部ナビに表示する4タブ
@@ -100,12 +99,9 @@ function AppShell() {
   const { ready, user, notices } = game;
   const [screen, setScreen] = useState<"start" | "app">("start");
   const [tab, setTab] = useState<TabId>("home");
-  const [showReward, setShowReward] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
-  const [showTutorial, setShowTutorial] = useState(false); // ホームの「あそびかた」用（閲覧のみ）
-
-  const rewardClaimed = user.lastRewardDate === todayString();
+  const [showTutorial, setShowTutorial] = useState(false);
 
   // タブIDをBGMシーンにマッピング
   const tabToScene = (t: TabId): BgmScene => {
@@ -127,20 +123,16 @@ function AppShell() {
     void playBgmForScene("home");
     if (!user.onboardingDone) {
       setShowOnboarding(true);
-    } else if (!rewardClaimed) {
-      setShowReward(true);
     }
   };
 
   const finishOnboarding = () => {
-    // 初期データ投入: サンプル単語 + 最初の魚（ツノダシ）
     game.saveWords(buildSampleWords());
     const starter = getFishMaster("ツノダシ");
     if (starter) game.addFishToTank(starter, "ツノちゃん");
     game.updateUser({ onboardingDone: true });
     setShowOnboarding(false);
     game.pushNotice("🐠", "ツノちゃんとサンプル単語10語をプレゼント！");
-    setShowReward(true);
   };
 
   if (!ready) {
@@ -162,20 +154,9 @@ function AppShell() {
           <span className="font-bold tracking-wider text-foam">AquaLingua</span>
         </div>
         <div className="flex items-center gap-2 text-sm font-bold">
-          <span className="text-dim">Lv.{user.jobLevel}</span>
           <span className="px-2.5 py-1 rounded-full bg-black/40 text-sand">
             🪙 {user.gold.toLocaleString()}G
           </span>
-          <button
-            onClick={() => setShowReward(true)}
-            className="relative text-lg active:scale-90 transition-transform"
-            title="デイリーリワード"
-          >
-            🎁
-            {!rewardClaimed && (
-              <span className="absolute -top-0.5 -right-1 w-2 h-2 rounded-full bg-coral" />
-            )}
-          </button>
           <button
             onClick={() => setShowSettings(true)}
             className="text-lg active:scale-90 transition-transform"
@@ -239,7 +220,6 @@ function AppShell() {
       {showTutorial && (
         <Onboarding viewOnly onDone={() => setShowTutorial(false)} />
       )}
-      {showReward && <RewardModal onClose={() => setShowReward(false)} />}
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
     </div>
   );

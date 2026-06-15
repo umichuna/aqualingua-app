@@ -269,10 +269,10 @@ export const sfx = {
     tone(988, 0.2, 0.1);
     tone(1319, 0.3, 0.35);
   },
-  // しごと完了（歓声と拍手）
+  // しごと完了（チャリーン）
   complete(): void {
     if (!isSfxEnabled()) return;
-    playFile(SFX_FILES.complete, 0.5);
+    playFile(SFX_FILES.register, 0.5);
   },
   // 餌を食べた（ぱくっ）
   feed(): void {

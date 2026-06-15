@@ -1,13 +1,12 @@
 "use client";
 
-// 水槽ビュー（Phase 2）
+// 水槽ビュー
 // - ランダムウォーク・餌やり・状態遷移（仕様書§3）
-// - UI補完: 餌の種類選択(#15)・病気表示＋おくすり(#10)・逃走演出(#11)
-//   出荷確認(#12)・名前変更(#13)・成長は GameProvider 側で通知(#14)
+// - 底生魚（layer:"bottom"）は下層に固定表示
 
 import { useEffect, useRef, useState } from "react";
-import { RARITY_INFO } from "@/data/fishMaster";
-import { canShip, MAX_AFFECTION, shipValue } from "@/lib/gameLogic";
+import { getFishMaster, RARITY_INFO } from "@/data/fishMaster";
+import { BOX_CAPACITY_INITIAL, MAX_AFFECTION } from "@/lib/gameLogic";
 import { sfx } from "@/lib/sound";
 import type { Fish } from "@/lib/types";
 import { useGame, type BaitKind } from "./GameProvider";
@@ -35,28 +34,36 @@ export default function AquariumView() {
   const [eatingIds, setEatingIds] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<string | null>(null);
   const [baitKind, setBaitKind] = useState<BaitKind>("basic");
-  const [shipTarget, setShipTarget] = useState<Fish | null>(null);
   const [renameTarget, setRenameTarget] = useState<Fish | null>(null);
   const [renameValue, setRenameValue] = useState("");
-  const [shippedMsg, setShippedMsg] = useState<string | null>(null);
 
-  // 初期配置（stateにまだ無い魚はこの座標から泳ぎはじめる）
-  const defaultPos = (i: number): Pos => ({
-    x: 15 + ((i * 25) % 65),
-    y: 25 + (i % 3) * 20,
-    facing: 1,
-  });
+  // 底生魚は y 65〜80%、その他は 15〜60% の範囲で泳ぐ
+  const defaultPos = (f: Fish, i: number): Pos => {
+    const master = getFishMaster(f.type);
+    const isBottom = master?.layer === "bottom";
+    const yMin = isBottom ? 65 : 15;
+    const yMax = isBottom ? 80 : 60;
+    return {
+      x: 15 + ((i * 25) % 65),
+      y: yMin + ((i % 3) * (yMax - yMin)) / 2,
+      facing: 1,
+    };
+  };
 
-  // ランダムウォーク（水平優位の2D）／eating中は餌へ向かう
+  // ランダムウォーク（底生魚は低層に固定）
   useEffect(() => {
     const timer = setInterval(() => {
       setPositions((prev) => {
         const next = { ...prev };
         fishList.forEach((f, i) => {
-          const pos = next[f.fishId] ?? defaultPos(i);
+          const master = getFishMaster(f.type);
+          const isBottom = master?.layer === "bottom";
+          const yMin = isBottom ? 65 : 8;
+          const yMax = isBottom ? 82 : 62;
+          const pos = next[f.fishId] ?? defaultPos(f, i);
           if (eatingIds.has(f.fishId) && baitRef.current) {
             const tx = baitRef.current.x;
-            const ty = baitRef.current.y;
+            const ty = isBottom ? Math.max(yMin, Math.min(yMax, baitRef.current.y)) : baitRef.current.y;
             next[f.fishId] = {
               x: tx - 4,
               y: ty - 3,
@@ -64,19 +71,13 @@ export default function AquariumView() {
             };
           } else {
             const dx = (Math.random() - 0.5) * 30;
-            const dy = (Math.random() - 0.5) * 12;
+            const dy = (Math.random() - 0.5) * (isBottom ? 6 : 12);
             let nx = pos.x + dx;
             let ny = pos.y + dy;
             let facing: 1 | -1 = dx >= 0 ? 1 : -1;
-            if (nx < 4) {
-              nx = 4;
-              facing = 1;
-            }
-            if (nx > 82) {
-              nx = 82;
-              facing = -1;
-            }
-            ny = Math.max(8, Math.min(72, ny));
+            if (nx < 4) { nx = 4; facing = 1; }
+            if (nx > 82) { nx = 82; facing = -1; }
+            ny = Math.max(yMin, Math.min(yMax, ny));
             next[f.fishId] = { x: nx, y: ny, facing };
           }
         });
@@ -84,9 +85,9 @@ export default function AquariumView() {
       });
     }, 1800);
     return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fishList, eatingIds]);
 
-  // 餌を落とす（仕様書§3: swimming → eating）
   const dropBait = (e: React.MouseEvent<HTMLDivElement>) => {
     if (bait || fishList.length === 0) return;
     if (!game.feedAllFish(baitKind)) {
@@ -106,7 +107,6 @@ export default function AquariumView() {
     baitRef.current = b;
     setEatingIds(new Set(fishList.map((f) => f.fishId)));
 
-    // 餌が縮んで消える → swimming へ戻す（仕様書§3）
     let scale = 1;
     const shrink = setInterval(() => {
       scale -= 0.25;
@@ -121,18 +121,6 @@ export default function AquariumView() {
     }, 900);
   };
 
-  const confirmShip = () => {
-    if (!shipTarget) return;
-    const value = game.shipFish(shipTarget.fishId);
-    if (value > 0) {
-      sfx.sell();
-      setShippedMsg(`${shipTarget.name} を出荷した！ +${value}G 🪙`);
-      setTimeout(() => setShippedMsg(null), 2500);
-      setSelected(null);
-    }
-    setShipTarget(null);
-  };
-
   const submitRename = () => {
     if (renameTarget && renameValue.trim()) {
       game.renameFish(renameTarget.fishId, renameValue.trim());
@@ -141,6 +129,8 @@ export default function AquariumView() {
   };
 
   const sel = fishList.find((f) => f.fishId === selected) ?? null;
+  const boxFish = user.boxFish ?? [];
+  const boxCapacity = user.boxCapacity ?? BOX_CAPACITY_INITIAL;
 
   return (
     <div className="flex flex-col h-full">
@@ -204,7 +194,7 @@ export default function AquariumView() {
 
         {/* 魚たち */}
         {fishList.map((f, i) => {
-          const pos = positions[f.fishId] ?? defaultPos(i);
+          const pos = positions[f.fishId] ?? defaultPos(f, i);
           const eating = eatingIds.has(f.fishId);
           return (
             <div
@@ -246,7 +236,7 @@ export default function AquariumView() {
           </div>
         )}
 
-        {/* 操作ヒント + 餌切り替え（UI補完 #15） */}
+        {/* 操作ヒント + 餌切り替え */}
         <div
           className="absolute top-2 left-1/2 -translate-x-1/2 flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-black/40 text-dim"
           onClick={(e) => e.stopPropagation()}
@@ -270,13 +260,6 @@ export default function AquariumView() {
         <div className="absolute top-2 right-2 text-xs px-2 py-1 rounded-full bg-black/40 text-dim">
           🐠 {fishList.length} / {user.tankCapacity}
         </div>
-
-        {/* 出荷完了メッセージ */}
-        {shippedMsg && (
-          <div className="absolute bottom-12 left-1/2 -translate-x-1/2 px-4 py-2 rounded-xl text-sm font-bold bg-sand text-deep shadow-lg whitespace-nowrap">
-            {shippedMsg}
-          </div>
-        )}
       </div>
 
       {/* 魚詳細パネル */}
@@ -323,14 +306,6 @@ export default function AquariumView() {
               >
                 🤝 相棒に
               </button>
-              <button
-                onClick={() => canShip(sel) && setShipTarget(sel)}
-                className={`text-xs px-3 py-1.5 rounded-lg font-bold ${
-                  canShip(sel) ? "bg-sand text-deep" : "bg-white/10 text-dim"
-                }`}
-              >
-                {canShip(sel) ? `出荷 ${shipValue(sel)}G` : `出荷ロック（好感度${MAX_AFFECTION[sel.rarity]}で解除）`}
-              </button>
             </div>
           </div>
           {/* 好感度バー */}
@@ -363,7 +338,7 @@ export default function AquariumView() {
                 <button
                   onClick={() => {
                     if (!game.recallCompanion(c.fishId)) {
-                      game.pushNotice("💦", "水槽がいっぱい！先に出荷か相棒にしよう");
+                      game.pushNotice("💦", "水槽がいっぱい！ボックスを使うか相棒にしよう");
                     }
                   }}
                   className="text-[10px] px-2 py-0.5 rounded-full bg-sand text-deep font-bold whitespace-nowrap"
@@ -376,46 +351,38 @@ export default function AquariumView() {
         </div>
       )}
 
-      {/* 出荷確認ダイアログ（UI補完 #12） */}
-      {shipTarget && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/70"
-          onClick={() => setShipTarget(null)}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-xs p-5 text-center bg-sea font-pixel"
-            style={{ border: "4px solid var(--aqua-sand)", boxShadow: "0 0 0 4px var(--aqua-deep)" }}
-          >
-            <div className="text-3xl mb-1">🚚</div>
-            <div className="font-bold text-foam mb-1">
-              {shipTarget.name} を出荷する？
-            </div>
-            <div className="text-xs text-dim mb-3">
-              {shipTarget.type}・Lv.{shipTarget.level}（もう水槽には戻らないよ）
-            </div>
-            <div className="text-lg font-bold text-sand mb-4">
-              +{shipValue(shipTarget)}G
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setShipTarget(null)}
-                className="flex-1 py-2 text-sm font-bold bg-white/10 text-dim"
-              >
-                やめておく
-              </button>
-              <button
-                onClick={confirmShip}
-                className="flex-1 py-2 text-sm font-bold bg-sand text-deep"
-              >
-                出荷する！
-              </button>
-            </div>
+      {/* 一時保存ボックス */}
+      {(boxFish.length > 0 || fishList.length >= user.tankCapacity) && (
+        <div className="bg-mid px-3 py-2 border-t border-white/10">
+          <div className="text-xs font-bold text-glow mb-1.5">
+            📦 ボックス（{boxFish.length}/{boxCapacity}）
           </div>
+          {boxFish.length === 0 ? (
+            <div className="text-xs text-dim">水槽が満杯の時に一時保管できるよ</div>
+          ) : (
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {boxFish.map((f) => (
+                <div key={f.fishId} className="flex flex-col items-center gap-1 shrink-0">
+                  <PixelFish type={f.type} size={36} />
+                  <div className="text-[10px] text-foam text-center whitespace-nowrap">{f.name}</div>
+                  <button
+                    onClick={() => {
+                      if (!game.moveBoxFishToTank(f.fishId)) {
+                        game.pushNotice("💦", "水槽がいっぱい！まず水槽に空きを作ろう");
+                      }
+                    }}
+                    className="text-[10px] px-2 py-0.5 rounded-full bg-glow text-deep font-bold whitespace-nowrap"
+                  >
+                    水槽へ
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
-      {/* 名前変更モーダル（UI補完 #13） */}
+      {/* 名前変更モーダル */}
       {renameTarget && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/70"

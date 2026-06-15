@@ -434,7 +434,7 @@ export default function WordManager() {
                   <div className="flex gap-2">
                     <button
                       onClick={() => {
-                        csvPreview.unknownGenres.forEach((g) => game.addCustomGenre(g));
+                        game.addCustomGenres(csvPreview.unknownGenres);
                         setCsvPreview({
                           ...csvPreview,
                           words: [...csvPreview.words, ...csvPreview.pendingWords],

@@ -13,7 +13,25 @@ import {
   type ReactNode,
 } from "react";
 import { getFishMaster, rollGachaWithWeights, type FishMaster } from "@/data/fishMaster";
-import { type GachaTier, GACHA_TIERS } from "@/lib/gameLogic";
+import {
+  ADULT_LEVEL,
+  AFFECTION_GAIN_RATE,
+  BAIT_EFFECT,
+  BOX_CAPACITY_INITIAL,
+  boxExpansionPrice,
+  calculateOfflineEffects,
+  type GachaTier,
+  GACHA_TIERS,
+  jobLevelFor,
+  MAX_AFFECTION,
+  MAX_FISH_LEVEL,
+  MAX_TANK_CAPACITY,
+  sessionGold,
+  SHOP_PRICES,
+  tankExpansionPrice,
+  titlesFor,
+  todayString,
+} from "@/lib/gameLogic";
 import {
   clearAllData,
   createInitialUserStatus,
@@ -41,23 +59,6 @@ import {
   putWords,
   putWordStats,
 } from "@/lib/db";
-import {
-  ADULT_LEVEL,
-  AFFECTION_GAIN_RATE,
-  BAIT_EFFECT,
-  calculateOfflineEffects,
-  canShip,
-  DAILY_REWARD,
-  jobLevelFor,
-  MAX_AFFECTION,
-  MAX_FISH_LEVEL,
-  sessionGold,
-  SHOP_PRICES,
-  shipValue,
-  tankExpansionPrice,
-  titlesFor,
-  todayString,
-} from "@/lib/gameLogic";
 import { sfx } from "@/lib/sound";
 import type {
   EncyclopediaEntry,
@@ -103,25 +104,27 @@ interface GameContextValue {
 
   // ユーザー・経済
   updateUser: (patch: Partial<UserStatus>) => void;
-  claimDailyReward: () => boolean;
   completeStudy: (
     mode: StudyMode,
     questionCount: number,
     correctCount: number
-  ) => { gold: number; leveledUp: boolean; newTitles: string[] };
-  completeFreeWork: (label: string, amount: number) => void;
+  ) => { gold: number; leveledUp: boolean; newTitles: string[]; sessionId: string };
+  completeFreeWork: (label: string, amount: number) => { sessionId: string };
+  patchStudySession: (sessionId: string, patch: Partial<StudySession>) => void;
+  addManualSession: (date: string, label: string, count: number) => void;
 
   // 水槽
   companionList: Fish[];
   feedAllFish: (kind: BaitKind) => boolean;
   useMedicine: (fishId: string) => boolean;
-  shipFish: (fishId: string) => number;
   makeCompanion: (fishId: string) => void;
   recallCompanion: (fishId: string) => boolean;
   renameFish: (fishId: string, name: string) => void;
   removeFish: (fishId: string) => void;
   buyGachaFish: (tier: GachaTier) => FishMaster | null;
   addFishToTank: (master: FishMaster, name: string) => void;
+  addFishToBox: (master: FishMaster, name: string) => void;
+  moveBoxFishToTank: (fishId: string) => boolean;
 
   // ショップ
   buyItem: (item: keyof typeof SHOP_PRICES) => boolean;
@@ -132,6 +135,7 @@ interface GameContextValue {
   removeWord: (id: string) => void;
   recordAnswer: (wordId: string, correct: boolean) => void;
   addCustomGenre: (genre: string) => void;
+  addCustomGenres: (genres: string[]) => void;
 
   // その他
   resetAllData: () => Promise<void>;
@@ -218,7 +222,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // ---------- 通帳への記帳 ----------
-  // ゴールドが変動するすべての処理から呼ぶ。balance は変動後の残高。
   const recordLedger = useCallback(
     (amount: number, reason: string, balance: number) => {
       const now = Date.now();
@@ -244,22 +247,26 @@ export function GameProvider({ children }: { children: ReactNode }) {
       label: string,
       count: number,
       correctCount: number,
-      goldEarned: number
-    ) => {
+      goldEarned: number,
+      extra?: { memo?: string; isManual?: boolean; date?: string }
+    ): string => {
       const now = Date.now();
       const session: StudySession = {
         sessionId: crypto.randomUUID(),
-        date: todayString(),
+        date: extra?.date ?? todayString(),
         timestamp: now,
         mode,
         label,
         count,
         correctCount,
         goldEarned,
+        memo: extra?.memo,
+        isManual: extra?.isManual,
         lastUpdated: now,
       };
       setStudySessions((s) => [...s, session]);
       void putStudySession(session);
+      return session.sessionId;
     },
     []
   );
@@ -329,7 +336,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
       setCompanionList(companions);
       setStudySessions(sessions.sort((a, b) => a.timestamp - b.timestamp));
       setGoldLedger(ledger.sort((a, b) => a.timestamp - b.timestamp));
-      // 放置ペナルティを適用してから画面表示
       const now = Date.now();
       if (u) {
         applyOfflineEffects(loadedUser, fish, now);
@@ -365,21 +371,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
     [persistUser]
   );
 
-  const claimDailyReward = useCallback((): boolean => {
-    const u = userRef.current;
-    const today = todayString();
-    if (u.lastRewardDate === today) return false;
-    const gold = DAILY_REWARD.gold + (u.jobLevel - 1) * 2;
-    persistUser({
-      ...u,
-      gold: u.gold + gold,
-      items: { ...u.items, baitBasic: u.items.baitBasic + DAILY_REWARD.baitBasic },
-      lastRewardDate: today,
-    });
-    recordLedger(gold, "デイリーリワード", u.gold + gold);
-    return true;
-  }, [persistUser, recordLedger]);
-
   const completeStudy = useCallback(
     (mode: StudyMode, questionCount: number, correctCount: number) => {
       const u = userRef.current;
@@ -401,21 +392,39 @@ export function GameProvider({ children }: { children: ReactNode }) {
         `${MODE_LABEL[mode]} ${questionCount}問`,
         u.gold + gold
       );
-      recordSession(mode, MODE_LABEL[mode], questionCount, correctCount, gold);
-      return { gold, leveledUp, newTitles };
+      const sessionId = recordSession(mode, MODE_LABEL[mode], questionCount, correctCount, gold);
+      return { gold, leveledUp, newTitles, sessionId };
     },
     [persistUser, recordLedger, recordSession]
   );
 
-  // フリーしごと: 内容と金額を自由入力してゴールドを得る（例: 筋トレ 50G）
   const completeFreeWork = useCallback(
     (label: string, amount: number) => {
       const u = userRef.current;
       persistUser({ ...u, gold: u.gold + amount });
       recordLedger(amount, `フリー: ${label}`, u.gold + amount);
-      recordSession("free", label, 0, 0, amount);
+      const sessionId = recordSession("free", label, 0, 0, amount);
+      return { sessionId };
     },
     [persistUser, recordLedger, recordSession]
+  );
+
+  const patchStudySession = useCallback((sessionId: string, patch: Partial<StudySession>) => {
+    setStudySessions((prev) => {
+      const next = prev.map((s) =>
+        s.sessionId === sessionId ? { ...s, ...patch, lastUpdated: Date.now() } : s
+      );
+      const updated = next.find((s) => s.sessionId === sessionId);
+      if (updated) void putStudySession(updated);
+      return next;
+    });
+  }, []);
+
+  const addManualSession = useCallback(
+    (date: string, label: string, count: number) => {
+      recordSession("free", label, count, 0, 0, { isManual: true, date });
+    },
+    [recordSession]
   );
 
   // ---------- 水槽 ----------
@@ -471,33 +480,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
     [persistUser, persistFishList, pushNotice]
   );
 
-  const shipFish = useCallback(
-    (fishId: string): number => {
-      const fish = fishRef.current.find((f) => f.fishId === fishId);
-      if (!fish || !canShip(fish)) return 0;
-      const value = shipValue(fish);
-      const u = userRef.current;
-      persistUser({ ...u, gold: u.gold + value });
-      recordLedger(value, `${fish.name} を出荷`, u.gold + value);
-      const next = fishRef.current.filter((f) => f.fishId !== fishId);
-      setFishList(next);
-      void dbDeleteFish(fishId);
-      const entry: FishHistoryEntry = {
-        entryId: crypto.randomUUID(),
-        fishType: fish.type,
-        name: fish.name,
-        reason: "shipped" as FishLeaveReason,
-        date: todayString(),
-        timestamp: Date.now(),
-        lastUpdated: Date.now(),
-      };
-      setFishHistory((h) => [...h, entry]);
-      void putFishHistoryEntry(entry);
-      return value;
-    },
-    [persistUser, recordLedger]
-  );
-
   const renameFish = useCallback(
     (fishId: string, name: string) => {
       const next = fishRef.current.map((f) =>
@@ -517,7 +499,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
     (fishId: string) => {
       const fish = fishRef.current.find((f) => f.fishId === fishId);
       if (!fish) return;
-      // 水槽から削除 → 相棒ストアへ
       setFishList((list) => list.filter((f) => f.fishId !== fishId));
       void dbDeleteFish(fishId);
       setCompanionList((list) => [...list, fish]);
@@ -533,7 +514,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
       if (!fish) return false;
       const { tank_expansion } = getCompanionBuffs(companionRef.current);
       if (fishRef.current.length >= userRef.current.tankCapacity + tank_expansion) return false;
-      // 相棒ストアから削除 → 水槽へ
       setCompanionList((list) => list.filter((f) => f.fishId !== fishId));
       void dbDeleteCompanion(fishId);
       const next = [...fishRef.current, fish];
@@ -564,7 +544,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
       const next = [...fishRef.current, fish];
       setFishList(next);
       void putFish(fish);
-      // 図鑑に登録
       void discoverFishType(master.type);
       setEncyclopedia((enc) =>
         enc.some((e) => e.fishType === master.type)
@@ -573,6 +552,53 @@ export function GameProvider({ children }: { children: ReactNode }) {
       );
     },
     []
+  );
+
+  const addFishToBox = useCallback(
+    (master: FishMaster, name: string) => {
+      const now = Date.now();
+      const fish: Fish = {
+        fishId: crypto.randomUUID(),
+        name,
+        type: master.type,
+        rarity: master.rarity,
+        growthStage: "幼魚",
+        level: 1,
+        affection: 10,
+        status: "swimming",
+        isSick: false,
+        sickStartTime: null,
+        lastUpdated: now,
+      };
+      const u = userRef.current;
+      persistUser({ ...u, boxFish: [...(u.boxFish ?? []), fish] });
+      void discoverFishType(master.type);
+      setEncyclopedia((enc) =>
+        enc.some((e) => e.fishType === master.type)
+          ? enc
+          : [...enc, { fishType: master.type, discoveredAt: now, lastUpdated: now }]
+      );
+      pushNotice("📦", `${name} はボックスに入った！水槽に空きができたら移せるよ`);
+    },
+    [persistUser, pushNotice]
+  );
+
+  const moveBoxFishToTank = useCallback(
+    (fishId: string): boolean => {
+      const u = userRef.current;
+      const { tank_expansion } = getCompanionBuffs(companionRef.current);
+      if (fishRef.current.length >= u.tankCapacity + tank_expansion) return false;
+      const boxFish = (u.boxFish ?? []).find((f) => f.fishId === fishId);
+      if (!boxFish) return false;
+      const newBoxFish = (u.boxFish ?? []).filter((f) => f.fishId !== fishId);
+      persistUser({ ...u, boxFish: newBoxFish });
+      const next = [...fishRef.current, boxFish];
+      setFishList(next);
+      void putFish(boxFish);
+      pushNotice("🐠", `${boxFish.name} が水槽に移った！`);
+      return true;
+    },
+    [persistUser, pushNotice]
   );
 
   const buyGachaFish = useCallback((tier: GachaTier): FishMaster | null => {
@@ -588,14 +614,18 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const buyItem = useCallback(
     (item: keyof typeof SHOP_PRICES): boolean => {
       const u = userRef.current;
-      // 水槽拡張キットは購入のたびに値上がりする
-      const price =
-        item === "tankExpansion"
-          ? tankExpansionPrice(u.tankCapacity)
-          : SHOP_PRICES[item];
+      let price: number;
+      if (item === "tankExpansion") {
+        price = tankExpansionPrice(u.tankCapacity);
+      } else if (item === "boxExpansion") {
+        price = boxExpansionPrice(u.boxCapacity ?? BOX_CAPACITY_INITIAL);
+      } else {
+        price = SHOP_PRICES[item];
+      }
       if (u.gold < price) return false;
       const items = { ...u.items };
       let tankCapacity = u.tankCapacity;
+      let boxCapacity = u.boxCapacity ?? BOX_CAPACITY_INITIAL;
       let label = "";
       switch (item) {
         case "baitBasic10":
@@ -611,14 +641,18 @@ export function GameProvider({ children }: { children: ReactNode }) {
           label = "おくすり";
           break;
         case "tankExpansion":
-          if (tankCapacity >= 10) return false;
-          tankCapacity = Math.min(10, tankCapacity + 2);
+          if (tankCapacity >= MAX_TANK_CAPACITY) return false;
+          tankCapacity = Math.min(MAX_TANK_CAPACITY, tankCapacity + 2);
           label = "水槽拡張キット";
           break;
+        case "boxExpansion":
+          boxCapacity = boxCapacity + 5;
+          label = "ボックス拡張キット";
+          break;
         default:
-          return false; // ガチャは buyGachaFish で処理
+          return false;
       }
-      persistUser({ ...u, gold: u.gold - price, items, tankCapacity });
+      persistUser({ ...u, gold: u.gold - price, items, tankCapacity, boxCapacity });
       recordLedger(-price, label, u.gold - price);
       return true;
     },
@@ -677,11 +711,19 @@ export function GameProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  // ---------- カスタムジャンル追加 ----------
+  // ---------- カスタムジャンル ----------
   const addCustomGenre = useCallback((genre: string) => {
     const u = userRef.current;
     if ((u.customGenres ?? []).includes(genre)) return;
     persistUser({ ...u, customGenres: [...(u.customGenres ?? []), genre] });
+  }, [persistUser]);
+
+  const addCustomGenres = useCallback((genres: string[]) => {
+    const u = userRef.current;
+    const existing = u.customGenres ?? [];
+    const newGenres = genres.filter((g) => !existing.includes(g));
+    if (newGenres.length === 0) return;
+    persistUser({ ...u, customGenres: [...existing, ...newGenres] });
   }, [persistUser]);
 
   // ---------- その他 ----------
@@ -697,7 +739,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     setGoldLedger([]);
   }, []);
 
-return (
+  return (
     <GameContext.Provider
       value={{
         ready,
@@ -713,25 +755,28 @@ return (
         dismissNotice,
         pushNotice,
         updateUser,
-        claimDailyReward,
         completeStudy,
         completeFreeWork,
+        patchStudySession,
+        addManualSession,
         companionList,
         feedAllFish,
         useMedicine,
-        shipFish,
         makeCompanion,
         recallCompanion,
         renameFish,
         removeFish,
         buyGachaFish,
         addFishToTank,
+        addFishToBox,
+        moveBoxFishToTank,
         buyItem,
         saveWord,
         saveWords,
         removeWord,
         recordAnswer,
         addCustomGenre,
+        addCustomGenres,
         resetAllData,
       }}
     >

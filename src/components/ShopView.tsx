@@ -7,6 +7,8 @@
 import { useState } from "react";
 import { RARITY_INFO, type FishMaster } from "@/data/fishMaster";
 import {
+  BOX_CAPACITY_INITIAL,
+  boxExpansionPrice,
   GACHA_TIERS,
   MAX_TANK_CAPACITY,
   SHOP_PRICES,
@@ -20,11 +22,12 @@ import PixelFish from "./PixelFish";
 type GachaPhase = "rolling" | "reveal" | "naming";
 
 const SHOP_ITEMS = [
-  { key: "baitBasic10", name: "ベーシック餌 ×10", desc: "好感度 +5 / 個", price: SHOP_PRICES.baitBasic10, icon: "🪱" },
-  { key: "baitPremium5", name: "高級フレーク ×5", desc: "好感度 +15 / 個", price: SHOP_PRICES.baitPremium5, icon: "🍤" },
-  { key: "medicine", name: "おくすり", desc: "病気を治療する", price: SHOP_PRICES.medicine, icon: "💊" },
-  { key: "tankExpansion", name: "水槽拡張キット", desc: "飼育上限 +2", price: SHOP_PRICES.tankExpansion, icon: "🪸" },
-] as const;
+  { key: "baitBasic10" as const, name: "ベーシック餌 ×10", desc: "好感度 +5 / 個", price: SHOP_PRICES.baitBasic10, icon: "🪱" },
+  { key: "baitPremium5" as const, name: "高級フレーク ×5", desc: "好感度 +15 / 個", price: SHOP_PRICES.baitPremium5, icon: "🍤" },
+  { key: "medicine" as const, name: "おくすり", desc: "病気を治療する", price: SHOP_PRICES.medicine, icon: "💊" },
+  { key: "tankExpansion" as const, name: "水槽拡張キット", desc: "飼育上限 +2", price: SHOP_PRICES.tankExpansion, icon: "🪸" },
+  { key: "boxExpansion" as const, name: "ボックス拡張キット", desc: "ボックス +5匹", price: SHOP_PRICES.boxExpansion, icon: "📦" },
+];
 
 // ガチャのレア度確率を表示用テキストに変換
 function rarityRateText(weights: Record<string, number>): string {
@@ -72,8 +75,17 @@ export default function ShopView() {
   const confirmName = () => {
     if (!gacha) return;
     const name = nameInput.trim() || gacha.fish.type;
-    game.addFishToTank(gacha.fish, name);
-    game.pushNotice("🐠", `${name} が水槽になかまいりした！`);
+    const boxCap = user.boxCapacity ?? BOX_CAPACITY_INITIAL;
+    if (fishList.length >= user.tankCapacity) {
+      if ((user.boxFish ?? []).length >= boxCap) {
+        flash(false, "水槽もボックスも満杯！ボックス拡張キットを買おう");
+        return;
+      }
+      game.addFishToBox(gacha.fish, name);
+    } else {
+      game.addFishToTank(gacha.fish, name);
+      game.pushNotice("🐠", `${name} が水槽になかまいりした！`);
+    }
     setGacha(null);
     setNameInput("");
   };
@@ -89,6 +101,20 @@ export default function ShopView() {
     } else {
       flash(false, "ゴールドが足りません");
     }
+  };
+
+  const getItemPrice = (item: (typeof SHOP_ITEMS)[number]): number => {
+    if (item.key === "tankExpansion") return tankExpansionPrice(user.tankCapacity);
+    if (item.key === "boxExpansion") return boxExpansionPrice(user.boxCapacity ?? BOX_CAPACITY_INITIAL);
+    return item.price;
+  };
+
+  const getItemOwned = (item: (typeof SHOP_ITEMS)[number]): string => {
+    if (item.key === "baitBasic10") return `所持 ${user.items.baitBasic}`;
+    if (item.key === "baitPremium5") return `所持 ${user.items.baitPremium}`;
+    if (item.key === "medicine") return `所持 ${user.items.medicine}`;
+    if (item.key === "tankExpansion") return `上限 ${user.tankCapacity}/${MAX_TANK_CAPACITY}`;
+    return `上限 ${user.boxCapacity ?? BOX_CAPACITY_INITIAL}匹`;
   };
 
   const TIER_KEYS: GachaTier[] = ["cheap", "normal", "premium"];
@@ -139,17 +165,9 @@ export default function ShopView() {
       <div className="space-y-2">
         <div className="text-xs font-bold text-glow">🛒 アイテム</div>
         {SHOP_ITEMS.map((item) => {
-          // 水槽拡張キットは買うたびに値上がりする
-          const price =
-            item.key === "tankExpansion"
-              ? tankExpansionPrice(user.tankCapacity)
-              : item.price;
+          const price = getItemPrice(item);
           const afford = user.gold >= price;
-          const owned =
-            item.key === "baitBasic10" ? `所持 ${user.items.baitBasic}` :
-            item.key === "baitPremium5" ? `所持 ${user.items.baitPremium}` :
-            item.key === "medicine" ? `所持 ${user.items.medicine}` :
-            `上限 ${user.tankCapacity}/${MAX_TANK_CAPACITY}`;
+          const owned = getItemOwned(item);
           return (
             <div key={item.key} className="flex items-center gap-3 rounded-xl p-3 bg-mid">
               <span className="text-2xl">{item.icon}</span>
@@ -231,16 +249,10 @@ export default function ShopView() {
                     にがす
                   </button>
                   <button
-                    onClick={() => {
-                      if (fishList.length >= user.tankCapacity) {
-                        flash(false, "水槽がいっぱい！にがすか相棒を呼び戻して空けよう");
-                        return;
-                      }
-                      setGacha((g) => (g ? { ...g, phase: "naming" } : g));
-                    }}
+                    onClick={() => setGacha((g) => (g ? { ...g, phase: "naming" } : g))}
                     className="flex-1 py-2.5 font-bold bg-sand text-deep active:scale-95 transition-transform"
                   >
-                    なかまにする！
+                    {fishList.length >= user.tankCapacity ? "📦 ボックスへ" : "なかまにする！"}
                   </button>
                 </div>
               </div>

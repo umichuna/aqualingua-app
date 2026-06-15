@@ -5,7 +5,7 @@
 
 import { useRef, useState } from "react";
 import { exportAllData, importAllData, type BackupData } from "@/lib/db";
-import { DAILY_REWARD, todayString } from "@/lib/gameLogic";
+import { todayString } from "@/lib/gameLogic";
 import {
   getBgmVolume,
   isBgmEnabled,
@@ -17,58 +17,6 @@ import {
 } from "@/lib/sound";
 import { useGame } from "./GameProvider";
 import PixelFish from "./PixelFish";
-
-// ---------- デイリーリワード ----------
-export function RewardModal({ onClose }: { onClose: () => void }) {
-  const game = useGame();
-  const { user } = game;
-  const claimed = user.lastRewardDate === todayString();
-
-  const rewards = [
-    { icon: "🪙", label: "ログインボーナス", value: `+${DAILY_REWARD.gold}G` },
-    { icon: "🪱", label: "ベーシック餌", value: `×${DAILY_REWARD.baitBasic}` },
-    { icon: "⭐", label: `職業Lv.${user.jobLevel} ボーナス`, value: `+${(user.jobLevel - 1) * 2}G` },
-  ];
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/70" onClick={onClose}>
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-xs p-5 text-center bg-sea font-pixel"
-        style={{ border: "4px solid var(--aqua-sand)", boxShadow: "0 0 0 4px var(--aqua-deep)" }}
-      >
-        <div className="text-3xl mb-1">🎁</div>
-        <div className="font-bold tracking-widest mb-3 text-foam">デイリーリワード</div>
-        <div className="space-y-2 mb-4">
-          {rewards.map((r) => (
-            <div key={r.label} className="flex items-center justify-between px-3 py-2 text-sm bg-black/30">
-              <span className="text-dim">
-                {r.icon} {r.label}
-              </span>
-              <span className="font-bold text-sand">{r.value}</span>
-            </div>
-          ))}
-        </div>
-        {claimed ? (
-          <div className="text-xs py-2 text-glow">✓ 本日分は受け取り済み！また明日 🐠</div>
-        ) : (
-          <button
-            onClick={() => {
-              if (game.claimDailyReward()) sfx.coin();
-            }}
-            className="w-full py-2.5 font-bold tracking-widest active:scale-95 transition-transform bg-sand text-deep"
-            style={{ border: "3px solid var(--aqua-deep)" }}
-          >
-            うけとる！
-          </button>
-        )}
-        <button onClick={onClose} className="mt-2 text-xs underline text-dim">
-          とじる
-        </button>
-      </div>
-    </div>
-  );
-}
 
 // ON/OFFトグルスイッチ（設定画面用）
 function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
@@ -326,7 +274,7 @@ const ONBOARD_SLIDES = [
   {
     icon: "🚚",
     title: "サボると大変…",
-    body: "1日サボると魚の好感度が3ずつ下がるよ。好感度が0になると病気に！病気のまま3日たつと海へ帰ってしまう…。好感度100の魚は高く出荷できるよ！",
+    body: "1日サボると魚の好感度が3ずつ下がるよ。好感度が0になると病気に！病気のまま3日たつと海へ帰ってしまう…。水槽が満杯のときはボックスに一時保存できるよ！",
   },
 ];
 
