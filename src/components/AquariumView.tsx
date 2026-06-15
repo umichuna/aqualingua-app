@@ -140,20 +140,12 @@ export default function AquariumView() {
         onClick={dropBait}
         className="relative flex-1 overflow-hidden cursor-pointer select-none"
         style={{
-          background: `linear-gradient(180deg, #134a7c 0%, var(--aqua-sea) 35%, var(--aqua-deep) 100%)`,
+          backgroundImage: "url('/aquarium-bg.png')",
+          backgroundSize: "cover",
+          backgroundPosition: "center bottom",
           minHeight: "320px",
         }}
       >
-        {/* 光の筋 */}
-        <div
-          className="absolute top-0 left-1/4 w-16 h-2/3 opacity-10 rotate-12"
-          style={{ background: "linear-gradient(180deg, var(--aqua-foam), transparent)" }}
-        />
-        <div
-          className="absolute top-0 left-2/3 w-10 h-1/2 opacity-10 rotate-12"
-          style={{ background: "linear-gradient(180deg, var(--aqua-foam), transparent)" }}
-        />
-
         {/* 泡 */}
         {[12, 30, 55, 75, 90].map((left, i) => (
           <div
@@ -168,15 +160,6 @@ export default function AquariumView() {
             }}
           />
         ))}
-
-        {/* 砂底 */}
-        <div
-          className="absolute bottom-0 w-full h-8"
-          style={{ background: "linear-gradient(180deg, transparent, #C9A85C55)" }}
-        />
-        <div className="absolute bottom-2 left-6 text-2xl">🪸</div>
-        <div className="absolute bottom-1 right-10 text-xl">🌿</div>
-        <div className="absolute bottom-2 left-1/2 text-lg">🐚</div>
 
         {/* 餌 */}
         {bait && (
