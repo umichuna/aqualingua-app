@@ -86,6 +86,14 @@ export interface UserItems {
   medicine: number; // おくすり（病気治療）
 }
 
+export interface CustomFishDef {
+  type: string;
+  rarity: Rarity;
+  description: string;
+  palette: { body: string; stripe: string; fin: string; eye: string };
+  layer?: "bottom" | "middle" | "top";
+}
+
 export interface UserStatus {
   userId: string;
   gold: number;
@@ -102,6 +110,8 @@ export interface UserStatus {
   customGenres: string[]; // ユーザーが追加したカスタムジャンル
   boxFish?: Fish[]; // 一時保存ボックス内の魚
   boxCapacity?: number; // ボックス上限（デフォルト5）
+  freeMemo?: string; // フリーしごと画面の永続メモ
+  customFish?: CustomFishDef[]; // 管理者が追加したカスタム魚
 }
 
 export type StudyMode = "self" | "choice" | "listen";

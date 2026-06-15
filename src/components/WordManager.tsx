@@ -714,6 +714,7 @@ function WordForm({
   onSave: (w: Word) => void;
   onClose: () => void;
 }) {
+  const game = useGame();
   const initExamples: WordExample[] =
     word.examples && word.examples.length > 0
       ? word.examples
@@ -729,6 +730,7 @@ function WordForm({
   const [examples, setExamples] = useState<WordExample[]>(initExamples);
   const [level, setLevel] = useState<WordLevel>(word.level);
   const [genre, setGenre] = useState<WordGenre>(word.genre);
+  const [newGenreInput, setNewGenreInput] = useState("");
   const [error, setError] = useState("");
   const [aiTranslating, setAiTranslating] = useState(false);
   const [aiGenerating, setAiGenerating] = useState(false);
@@ -824,6 +826,11 @@ function WordForm({
   const submit = () => {
     const sp = spelling.trim();
     if (!sp) { setError("単語（スペル）を入力してね"); return; }
+    const finalGenre = genre === "__new__" ? (newGenreInput.trim() as WordGenre) : genre;
+    if (!finalGenre) { setError("ジャンル名を入力してね"); return; }
+    if (genre === "__new__" && !genres.includes(finalGenre)) {
+      game.addCustomGenres([finalGenre]);
+    }
     const cleanMeanings = meanings.map((m) => m.trim()).filter(Boolean);
     const cleanExamples = examples
       .map((ex) => ({ sentence: ex.sentence.trim(), translation: ex.translation.trim() }))
@@ -838,7 +845,7 @@ function WordForm({
       exampleTranslation: firstEx.translation,
       examples: cleanExamples,
       level,
-      genre,
+      genre: finalGenre,
       lastUpdated: Date.now(),
     });
   };
@@ -917,7 +924,18 @@ function WordForm({
               onChange={(e) => setGenre(e.target.value as WordGenre)}
             >
               {genres.map((g) => <option key={g} value={g}>{g}</option>)}
+              <option value="__new__">＋ 新しいジャンル</option>
             </select>
+            {genre === "__new__" && (
+              <input
+                className={`${inputCls} mt-1`}
+                value={newGenreInput}
+                onChange={(e) => setNewGenreInput(e.target.value)}
+                placeholder="例: ビジネス"
+                maxLength={16}
+                autoFocus
+              />
+            )}
           </div>
         </div>
 

@@ -35,6 +35,7 @@ interface QuizConfig {
   weakFirst: boolean;
   direction: Direction;
   repeatUntilCorrect: boolean;
+  listenAfterMode: "loop" | "all"; // 聞き流し終了後: loop=絞り込みリピート / all=全単語に続ける
 }
 
 interface ChoiceQuestion {
@@ -130,6 +131,7 @@ export default function StudyView() {
     weakFirst: true,
     direction: "en2ja",
     repeatUntilCorrect: true,
+    listenAfterMode: "loop",
   });
   const [phase, setPhase] = useState<"setup" | "play" | "done">("setup");
   const [quizWords, setQuizWords] = useState<Word[]>([]); // 自己採点・聞き流しのキュー
@@ -421,9 +423,36 @@ export default function StudyView() {
         )}
 
         {mode === "listen" && (
-          <p className="text-xs text-dim">
-            🎧 聞き流しは「終了」を押すまでエンドレスで再生します。終了した時点で聞いた問題数ぶんのゴールドがもらえます。
-          </p>
+          <div className="space-y-3">
+            <div className={`rounded-xl p-3 text-center font-bold ${maxCount === 0 ? "bg-coral/10 text-coral" : "bg-mid text-foam"}`}>
+              🎧 対象: {maxCount}語
+              {maxCount === 0 && <div className="text-xs font-normal mt-0.5">絞り込み条件を変えてみてね</div>}
+            </div>
+            <div>
+              <div className="text-xs font-bold text-glow mb-1.5">全語を聞き終わった後の動作</div>
+              <div className="grid grid-cols-2 gap-1.5">
+                {(
+                  [
+                    ["loop", "🔁 絞り込みをリピート"],
+                    ["all", "🔀 全単語に続ける"],
+                  ] as ["loop" | "all", string][]
+                ).map(([m, label]) => (
+                  <button
+                    key={m}
+                    onClick={() => setConfig((c) => ({ ...c, listenAfterMode: m }))}
+                    className={`text-xs px-2 py-2.5 rounded-xl font-bold leading-tight ${
+                      config.listenAfterMode === m ? "bg-sand text-deep" : "bg-white/10 text-dim"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <p className="text-xs text-dim">
+              「終了」を押すまでエンドレスで再生します。終了した時点で聞いた問題数ぶんのゴールドがもらえます。
+            </p>
+          </div>
         )}
 
         <Toggle
@@ -567,6 +596,8 @@ export default function StudyView() {
   return (
     <ListenPlay
       words={quizWords}
+      allWords={words}
+      afterMode={config.listenAfterMode}
       onFinish={(playedCount) => finishQuiz("listen", playedCount, playedCount)}
       onQuit={backToMenu}
     />
@@ -576,17 +607,22 @@ export default function StudyView() {
 // ---------- フリーしごと ----------
 function FreeWork({ onQuit }: { onQuit: () => void }) {
   const game = useGame();
+  const { user } = game;
   const [label, setLabel] = useState("");
   const [amount, setAmount] = useState("");
-  const [memo, setMemo] = useState(""); // 自由メモ（任意）
   const [done, setDone] = useState<{ label: string; amount: number } | null>(null);
+  const [editingMemo, setEditingMemo] = useState(false);
+  const [memoValue, setMemoValue] = useState(user.freeMemo ?? "");
+
+  const saveMemo = () => {
+    game.updateUser({ freeMemo: memoValue.trim() || undefined });
+    setEditingMemo(false);
+  };
 
   const submit = () => {
     const n = Math.floor(Number(amount));
     if (!label.trim() || !Number.isFinite(n) || n <= 0) return;
-    const { sessionId } = game.completeFreeWork(label.trim(), n);
-    // メモが入力されていれば記録に保存する
-    if (memo.trim()) game.patchStudySession(sessionId, { memo: memo.trim() });
+    game.completeFreeWork(label.trim(), n);
     sfx.complete();
     setDone({ label: label.trim(), amount: n });
   };
@@ -616,6 +652,53 @@ function FreeWork({ onQuit }: { onQuit: () => void }) {
           ← 戻る
         </button>
       </div>
+
+      {/* 永続メモエリア */}
+      <div className="rounded-xl bg-mid p-3">
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-xs font-bold text-glow">📝 フリーメモ</span>
+          {!editingMemo && (
+            <button
+              onClick={() => { setMemoValue(user.freeMemo ?? ""); setEditingMemo(true); }}
+              className="text-[10px] px-2 py-0.5 rounded-full bg-white/10 text-dim"
+            >
+              ✏️ 編集
+            </button>
+          )}
+        </div>
+        {editingMemo ? (
+          <>
+            <textarea
+              value={memoValue}
+              onChange={(e) => setMemoValue(e.target.value)}
+              maxLength={300}
+              rows={4}
+              placeholder="自由に書けます（例: 今日の調子・目標・ひとこと）"
+              className="w-full px-3 py-2 rounded-lg bg-black/30 text-foam outline-none text-sm resize-none"
+              autoFocus
+            />
+            <div className="flex gap-2 mt-1.5">
+              <button
+                onClick={() => setEditingMemo(false)}
+                className="flex-1 py-1.5 text-xs font-bold bg-white/10 text-dim rounded-lg"
+              >
+                キャンセル
+              </button>
+              <button
+                onClick={saveMemo}
+                className="flex-1 py-1.5 text-xs font-bold bg-glow text-deep rounded-lg"
+              >
+                保存
+              </button>
+            </div>
+          </>
+        ) : (
+          <p className="text-sm text-foam whitespace-pre-wrap min-h-[2rem]">
+            {user.freeMemo || <span className="text-dim">（メモなし）</span>}
+          </p>
+        )}
+      </div>
+
       <p className="text-xs text-dim">
         英語以外のがんばりもゴールドにできます（例: 筋トレ 50）
       </p>
@@ -638,17 +721,6 @@ function FreeWork({ onQuit }: { onQuit: () => void }) {
           onChange={(e) => setAmount(e.target.value)}
           placeholder="例: 50"
           className="w-full px-3 py-2.5 rounded-xl bg-mid text-foam outline-none text-center font-bold"
-        />
-      </div>
-      <div>
-        <div className="text-xs font-bold text-glow mb-1.5">📝 メモ（任意）</div>
-        <textarea
-          value={memo}
-          onChange={(e) => setMemo(e.target.value)}
-          maxLength={200}
-          rows={3}
-          placeholder="自由に書けます（例: ランニング5km・調子よかった）"
-          className="w-full px-3 py-2.5 rounded-xl bg-mid text-foam outline-none text-sm resize-none"
         />
       </div>
       <button
@@ -893,27 +965,35 @@ function SelfPlay({
 // ---------- 聞き流し（エンドレス再生） ----------
 function ListenPlay({
   words,
+  allWords,
+  afterMode,
   onFinish,
   onQuit,
 }: {
   words: Word[];
+  allWords: Word[];
+  afterMode: "loop" | "all";
   onFinish: (playedCount: number) => void;
   onQuit: () => void;
 }) {
   const [index, setIndex] = useState(0);
-  const [playedCount, setPlayedCount] = useState(0); // これまで聞いた問題数（ゴールド算出用）
+  const [playedCount, setPlayedCount] = useState(0);
   const [playing, setPlaying] = useState(true);
   const [rate, setRate] = useState(1.0);
   const indexRef = useRef(0);
   const playedRef = useRef(0);
   const playingRef = useRef(true);
   const rateRef = useRef(1.0);
+  // 現在再生中の単語リスト（afterMode="all"のとき一周後に全単語に切り替わる）
+  const currentWordsRef = useRef<Word[]>(words);
+  const [currentWords, setCurrentWords] = useState<Word[]>(words);
+
   useEffect(() => {
     playingRef.current = playing;
     rateRef.current = rate;
   }, [playing, rate]);
 
-  // Wake Lock（設計書§4.2: 聞き流し中のスリープ防止）
+  // Wake Lock（聞き流し中のスリープ防止）
   useEffect(() => {
     void requestWakeLock();
     return () => {
@@ -922,8 +1002,7 @@ function ListenPlay({
     };
   }, []);
 
-  // 自動再生ループ: 英語 → 日本語 → 英語 → 日本語（例文なし）
-  // 終了ボタンを押すまでエンドレスでくり返す（最後まで行ったら先頭に戻る）
+  // 自動再生ループ: 英語 → 日本語 → 英語 → 日本語
   useEffect(() => {
     let stopped = false;
     (async () => {
@@ -932,39 +1011,48 @@ function ListenPlay({
           await new Promise((r) => setTimeout(r, 300));
           continue;
         }
-        const w = words[indexRef.current];
+        const pool = currentWordsRef.current;
+        const w = pool[indexRef.current];
         const meaning = w.meanings.length > 0 ? w.meanings.join("、") : null;
         // 1回目: 英語 → 日本語
         await speak(w.spelling, "en-US", rateRef.current);
         if (stopped || !playingRef.current) continue;
-        if (meaning) {
-          await speak(meaning, "ja-JP", rateRef.current);
-        }
+        if (meaning) await speak(meaning, "ja-JP", rateRef.current);
         if (stopped || !playingRef.current) continue;
         await new Promise((r) => setTimeout(r, 400));
         // 2回目: 英語 → 日本語
         await speak(w.spelling, "en-US", rateRef.current);
         if (stopped || !playingRef.current) continue;
-        if (meaning) {
-          await speak(meaning, "ja-JP", rateRef.current);
-        }
+        if (meaning) await speak(meaning, "ja-JP", rateRef.current);
         if (stopped) break;
         await new Promise((r) => setTimeout(r, 700));
         // 1問ぶん聞き終わった
         playedRef.current += 1;
         setPlayedCount(playedRef.current);
-        // 次の単語へ（最後まで行ったら先頭に戻ってエンドレス）
-        indexRef.current = (indexRef.current + 1) % words.length;
+        const nextIdx = indexRef.current + 1;
+        if (nextIdx >= currentWordsRef.current.length) {
+          // 一周完了
+          if (afterMode === "all") {
+            // 全単語をシャッフルして切り替え
+            const shuffled = [...allWords].sort(() => Math.random() - 0.5);
+            currentWordsRef.current = shuffled;
+            setCurrentWords(shuffled);
+            indexRef.current = 0;
+          } else {
+            // 絞り込みリストの先頭に戻る
+            indexRef.current = 0;
+          }
+        } else {
+          indexRef.current = nextIdx;
+        }
         setIndex(indexRef.current);
       }
     })();
-    return () => {
-      stopped = true;
-    };
+    return () => { stopped = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const w = words[Math.min(index, words.length - 1)];
+  const w = currentWords[Math.min(index, currentWords.length - 1)];
   return (
     <div className="p-4 flex flex-col gap-4 h-full">
       <div className="flex justify-between text-xs text-dim">
@@ -976,7 +1064,7 @@ function ListenPlay({
         <div className="text-3xl font-bold tracking-wide text-foam">{w?.spelling}</div>
         <div className="text-base font-bold text-glow">{w?.meanings.join("、")}</div>
         <div className="text-[10px] text-dim mt-1">
-          英語 → 日本語 を2回くり返します（{(index % words.length) + 1} / {words.length}語目）
+          英語 → 日本語 を2回くり返します（{index + 1} / {currentWords.length}語目）
         </div>
       </div>
       <div className="flex items-center gap-2">

@@ -5,7 +5,7 @@
 // - 発見済みの魚をタップ → 歴代おさかな一覧モーダル（出荷・逃走した記録 + 現在水槽にいる魚）
 
 import { useState } from "react";
-import { FISH_MASTER, RARITY_INFO } from "@/data/fishMaster";
+import { RARITY_INFO, RARITY_STARS } from "@/data/fishMaster";
 import { todayString } from "@/lib/gameLogic";
 import type { FishHistoryEntry } from "@/lib/types";
 import { useGame } from "./GameProvider";
@@ -89,7 +89,7 @@ function FishHistoryModal({
 }
 
 export default function EncyclopediaView() {
-  const { encyclopedia, fishHistory, fishList } = useGame();
+  const { encyclopedia, fishHistory, fishList, allFishMaster } = useGame();
   const discovered = new Set(encyclopedia.map((e) => e.fishType));
   const [selectedType, setSelectedType] = useState<string | null>(null);
 
@@ -105,11 +105,11 @@ export default function EncyclopediaView() {
       <h2 className="font-bold text-lg text-foam">
         おさかな図鑑{" "}
         <span className="text-xs text-dim">
-          {discovered.size} / {FISH_MASTER.length} 種 発見
+          {discovered.size} / {allFishMaster.length} 種 発見
         </span>
       </h2>
       <div className="flex-1 overflow-y-auto grid grid-cols-2 gap-2 content-start">
-        {FISH_MASTER.map((f) => {
+        {allFishMaster.map((f) => {
           const found = discovered.has(f.type);
           return (
             <div
@@ -127,7 +127,7 @@ export default function EncyclopediaView() {
                   color: found ? "var(--aqua-deep)" : "var(--aqua-dim)",
                 }}
               >
-                {found ? f.rarity : "？？？"}
+                {found ? RARITY_STARS[f.rarity] : "？？？"}
               </div>
               <div className="text-sm font-bold text-foam">
                 {found ? f.type : "？？？"}

@@ -17,6 +17,13 @@ export const RARITY_INFO: Record<Rarity, RarityInfo> = {
   ロマン: { color: "#F2705B", base: 15000, gachaWeight: 2 },
 };
 
+export const RARITY_STARS: Record<Rarity, string> = {
+  激安: "★☆☆☆",
+  普通: "★★☆☆",
+  高級: "★★★☆",
+  ロマン: "★★★★",
+};
+
 // PixelFish の配色パレット
 export interface FishPalette {
   body: string;

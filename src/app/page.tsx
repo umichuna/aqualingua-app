@@ -6,6 +6,7 @@
 // ホームから: 記録・単語帳・図鑑・設定 にもアクセスできる
 
 import { useState } from "react";
+import AdminView from "@/components/AdminView";
 import AquariumView from "@/components/AquariumView";
 import EncyclopediaView from "@/components/EncyclopediaView";
 import { GameProvider, useGame } from "@/components/GameProvider";
@@ -28,7 +29,7 @@ const NAV_TABS = [
 ] as const;
 
 // ナビ外のビュー（ホームから開く）
-type TabId = (typeof NAV_TABS)[number]["id"] | "record" | "words" | "zukan";
+type TabId = (typeof NAV_TABS)[number]["id"] | "record" | "words" | "zukan" | "admin";
 
 // ホーム画面のボタン一覧
 const HOME_BUTTONS: { id: TabId | "settings" | "tutorial"; label: string; icon: string; desc: string }[] = [
@@ -40,6 +41,7 @@ const HOME_BUTTONS: { id: TabId | "settings" | "tutorial"; label: string; icon: 
   { id: "shop", label: "ショップ", icon: "🛒", desc: "ガチャ・アイテム" },
   { id: "tutorial", label: "あそびかた", icon: "📖", desc: "チュートリアルを見る" },
   { id: "settings", label: "設定", icon: "⚙️", desc: "セーブ・音・初期化" },
+  { id: "admin", label: "管理者", icon: "🔧", desc: "図鑑のおさかなを追加" },
 ];
 
 function HomeView({
@@ -182,6 +184,7 @@ function AppShell() {
         {tab === "words" && <WordManager />}
         {tab === "zukan" && <EncyclopediaView />}
         {tab === "shop" && <ShopView />}
+        {tab === "admin" && <AdminView />}
       </main>
 
       {/* ボトムナビ（4タブ。記録・単語帳・図鑑はホームから開く） */}

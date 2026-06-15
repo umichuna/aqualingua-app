@@ -6,7 +6,7 @@ import type { Fish, Rarity, StudyMode } from "./types";
 // ---------- しごと報酬（1問あたりの金額） ----------
 export const MODE_BASE_GOLD: Record<StudyMode, number> = {
   self: 10, // 自己採点 10G/問
-  choice: 8, // 選択肢クイズ 8G/問
+  choice: 5, // 選択肢クイズ 5G/問
   listen: 2, // 聞き流し 2G/問
 };
 

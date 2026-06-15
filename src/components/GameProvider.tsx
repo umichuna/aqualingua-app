@@ -8,11 +8,12 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
 } from "react";
-import { getFishMaster, rollGachaWithWeights, type FishMaster } from "@/data/fishMaster";
+import { FISH_MASTER, getFishMaster, rollGachaWithWeights, type FishMaster } from "@/data/fishMaster";
 import {
   ADULT_LEVEL,
   AFFECTION_GAIN_RATE,
@@ -61,6 +62,7 @@ import {
 } from "@/lib/db";
 import { sfx } from "@/lib/sound";
 import type {
+  CustomFishDef,
   EncyclopediaEntry,
   Fish,
   FishHistoryEntry,
@@ -136,6 +138,11 @@ interface GameContextValue {
   recordAnswer: (wordId: string, correct: boolean) => void;
   addCustomGenre: (genre: string) => void;
   addCustomGenres: (genres: string[]) => void;
+
+  // 管理者
+  allFishMaster: FishMaster[];
+  addCustomFish: (def: CustomFishDef) => void;
+  removeCustomFish: (fishType: string) => void;
 
   // その他
   resetAllData: () => Promise<void>;
@@ -726,6 +733,30 @@ export function GameProvider({ children }: { children: ReactNode }) {
     persistUser({ ...u, customGenres: [...existing, ...newGenres] });
   }, [persistUser]);
 
+  // ---------- 管理者：カスタム魚 ----------
+  const allFishMaster = useMemo<FishMaster[]>(
+    () => [...FISH_MASTER, ...(user.customFish ?? [])],
+    [user.customFish]
+  );
+
+  const addCustomFish = useCallback(
+    (def: CustomFishDef) => {
+      const u = userRef.current;
+      const existing = u.customFish ?? [];
+      if (existing.some((f) => f.type === def.type)) return;
+      persistUser({ ...u, customFish: [...existing, def] });
+    },
+    [persistUser]
+  );
+
+  const removeCustomFish = useCallback(
+    (fishType: string) => {
+      const u = userRef.current;
+      persistUser({ ...u, customFish: (u.customFish ?? []).filter((f) => f.type !== fishType) });
+    },
+    [persistUser]
+  );
+
   // ---------- その他 ----------
   const resetAllData = useCallback(async () => {
     await clearAllData();
@@ -777,6 +808,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
         recordAnswer,
         addCustomGenre,
         addCustomGenres,
+        allFishMaster,
+        addCustomFish,
+        removeCustomFish,
         resetAllData,
       }}
     >

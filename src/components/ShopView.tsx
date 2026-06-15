@@ -5,7 +5,7 @@
 // - 餌・おくすり・水槽拡張
 
 import { useState } from "react";
-import { RARITY_INFO, type FishMaster } from "@/data/fishMaster";
+import { RARITY_INFO, RARITY_STARS, type FishMaster } from "@/data/fishMaster";
 import {
   BOX_CAPACITY_INITIAL,
   boxExpansionPrice,
@@ -230,7 +230,7 @@ export default function ShopView() {
                     color: "var(--aqua-deep)",
                   }}
                 >
-                  {gacha.fish.rarity}
+                  {RARITY_STARS[gacha.fish.rarity]}
                 </div>
                 <div className="flex justify-center animate-bounce" style={{ animationDuration: "2s" }}>
                   <PixelFish type={gacha.fish.type} size={80} />

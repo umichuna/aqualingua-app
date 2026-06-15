@@ -5,7 +5,7 @@
 // - 底生魚（layer:"bottom"）は下層に固定表示
 
 import { useEffect, useRef, useState } from "react";
-import { getFishMaster, RARITY_INFO } from "@/data/fishMaster";
+import { getFishMaster, RARITY_INFO, RARITY_STARS } from "@/data/fishMaster";
 import { BOX_CAPACITY_INITIAL, MAX_AFFECTION } from "@/lib/gameLogic";
 import { sfx } from "@/lib/sound";
 import type { Fish } from "@/lib/types";
@@ -63,10 +63,11 @@ export default function AquariumView() {
           const pos = next[f.fishId] ?? defaultPos(f, i);
           if (eatingIds.has(f.fishId) && baitRef.current) {
             const tx = baitRef.current.x;
-            const ty = isBottom ? Math.max(yMin, Math.min(yMax, baitRef.current.y)) : baitRef.current.y;
+            const rawTy = baitRef.current.y - 3;
+            const ty = isBottom ? Math.max(yMin, Math.min(yMax, rawTy)) : rawTy;
             next[f.fishId] = {
               x: tx - 4,
-              y: ty - 3,
+              y: ty,
               facing: tx >= pos.x ? 1 : -1,
             };
           } else {
@@ -269,7 +270,7 @@ export default function AquariumView() {
                 className="text-xs px-2 py-0.5 rounded-full mr-2 font-bold"
                 style={{ background: RARITY_INFO[sel.rarity].color, color: "var(--aqua-deep)" }}
               >
-                {sel.rarity}
+                {RARITY_STARS[sel.rarity]}
               </span>
               <button
                 className="font-bold text-foam underline decoration-dotted"
