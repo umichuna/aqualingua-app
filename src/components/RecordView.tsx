@@ -65,6 +65,7 @@ function StatsPanel({
   const game = useGame();
   const today = todayString();
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
+  const [selectedCalDate, setSelectedCalDate] = useState<string | null>(null);
   const [showManual, setShowManual] = useState(false);
   const [mDate, setMDate] = useState(today);
   const [mLabel, setMLabel] = useState("");
@@ -182,24 +183,31 @@ function StatsPanel({
           {["日", "月", "火", "水", "木", "金", "土"].map((d) => (
             <div key={d} className="text-[9px] text-dim">{d}</div>
           ))}
-          {calendar.flat().map((cell) => (
-            <div
-              key={cell.date}
-              title={`${cell.date}: ${cell.count}問`}
-              className="rounded flex flex-col items-center justify-center py-0.5 gap-0"
-              style={{
-                background: cellColor(cell.count),
-                outline: cell.isToday ? "2px solid var(--aqua-glow)" : "none",
-                color: cell.count > 0 ? "#F5EFE0" : "#9DB4C066",
-                minHeight: "28px",
-              }}
-            >
-              <span className="text-[9px] leading-none">{cell.day}</span>
-              {cell.count > 0 && (
-                <span className="text-[8px] leading-none opacity-80">{cell.count}</span>
-              )}
-            </div>
-          ))}
+          {calendar.flat().map((cell) => {
+            const isSelected = selectedCalDate === cell.date;
+            return (
+              <button
+                key={cell.date}
+                onClick={() => setSelectedCalDate(isSelected ? null : cell.date)}
+                className="rounded flex flex-col items-center justify-center py-0.5 gap-0 active:scale-95 transition-transform"
+                style={{
+                  background: cellColor(cell.count),
+                  outline: isSelected
+                    ? "2px solid var(--aqua-sand)"
+                    : cell.isToday
+                      ? "2px solid var(--aqua-glow)"
+                      : "none",
+                  color: cell.count > 0 ? "#F5EFE0" : "#9DB4C066",
+                  minHeight: "28px",
+                }}
+              >
+                <span className="text-[9px] leading-none">{cell.day}</span>
+                {cell.count > 0 && (
+                  <span className="text-[8px] leading-none opacity-80">{cell.count}</span>
+                )}
+              </button>
+            );
+          })}
         </div>
         <div className="flex items-center gap-1.5 mt-2 text-[9px] text-dim justify-end">
           <span>少</span>
@@ -212,6 +220,57 @@ function StatsPanel({
           ))}
           <span>多</span>
         </div>
+
+        {/* 選択日の詳細（カレンダーセルをタップすると表示） */}
+        {selectedCalDate && (() => {
+          const daySessions = sessions
+            .filter((s) => s.date === selectedCalDate)
+            .sort((a, b) => b.timestamp - a.timestamp);
+          return (
+            <div className="mt-3 border-t border-white/10 pt-3">
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-xs font-bold text-sand">📅 {selectedCalDate}</div>
+                <button
+                  onClick={() => setSelectedCalDate(null)}
+                  className="text-[10px] text-dim px-2 py-0.5 rounded-full bg-white/10"
+                >
+                  閉じる ✕
+                </button>
+              </div>
+              {daySessions.length === 0 ? (
+                <p className="text-xs text-dim">この日の記録はありません</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {daySessions.map((s) => (
+                    <div key={s.sessionId} className="rounded-xl bg-black/30 px-3 py-2 text-xs">
+                      <div className="flex items-center justify-between">
+                        <div className="font-bold text-foam">
+                          {s.isManual ? "✋ 手入力" : (MODE_LABEL[s.mode] ?? s.mode)} — {s.label}
+                          {s.isManual && (
+                            <span className="ml-1.5 text-[9px] px-1.5 py-0.5 rounded-full bg-white/10 text-dim align-middle">手入力</span>
+                          )}
+                        </div>
+                        <span className="font-bold text-sand shrink-0 ml-2">+{s.goldEarned}G</span>
+                      </div>
+                      <div className="text-[10px] text-dim mt-0.5">
+                        {s.count > 0
+                          ? `${s.count}問${!s.isManual && s.mode !== "listen" && s.mode !== "free" ? `（${s.correctCount}正解）` : ""}`
+                          : s.label}
+                      </div>
+                      {s.memo && (
+                        <div className="text-[10px] text-dim/80 mt-0.5 italic">📝 {s.memo}</div>
+                      )}
+                    </div>
+                  ))}
+                  <div className="text-[10px] text-dim text-right pt-0.5">
+                    合計 {daySessions.reduce((sum, s) => sum + s.count, 0)}問・
+                    +{daySessions.reduce((sum, s) => sum + s.goldEarned, 0)}G
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {/* 日付グループ履歴（クリックで内訳展開） */}

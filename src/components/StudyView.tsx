@@ -129,7 +129,7 @@ export default function StudyView() {
     count: 10,
     weakFirst: true,
     direction: "en2ja",
-    repeatUntilCorrect: false,
+    repeatUntilCorrect: true,
   });
   const [phase, setPhase] = useState<"setup" | "play" | "done">("setup");
   const [quizWords, setQuizWords] = useState<Word[]>([]); // 自己採点・聞き流しのキュー

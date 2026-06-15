@@ -644,7 +644,7 @@ function WordDetailModal({
           {/* タグ（種別・Lv・ジャンル） */}
           <div className="flex gap-1.5 flex-wrap">
             <Tag label={word.wordType} />
-            <Tag label={`Lv.${LEVEL_ORDER[word.level] + 1} ${LEVEL_LABEL[word.level]}`} color="sand" />
+            <Tag label={`Lv.${word.level}`} color="sand" />
             <Tag label={word.genre} color="glow" />
           </div>
 
