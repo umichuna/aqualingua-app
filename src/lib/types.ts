@@ -6,13 +6,8 @@ export type WordLevel = "1" | "2" | "3" | "4" | "5";
 
 export type WordGenre = string;
 
-export const DEFAULT_GENRES = [
-  "日常会話",
-  "ビジネス",
-  "旅行",
-  "ニュース",
-  "趣味・カルチャー",
-] as const;
+// デフォルトジャンルなし — すべて管理画面 or 単語データから自動検出
+export const DEFAULT_GENRES: readonly string[] = [];
 
 export type WordType = "単語" | "述語" | "会話文";
 

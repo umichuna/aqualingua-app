@@ -34,10 +34,12 @@ export default function AdminView() {
   const game = useGame();
   const { user, allFishMaster } = game;
   const customFish = user.customFish ?? [];
+  const customGenres = user.customGenres ?? [];
 
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [error, setError] = useState("");
+  const [newGenreInput, setNewGenreInput] = useState("");
 
   const builtinTypes = new Set(FISH_MASTER.map((f) => f.type));
 
@@ -222,6 +224,63 @@ export default function AdminView() {
       {/* ビルトイン魚の件数 */}
       <div className="text-xs text-dim text-center">
         デフォルト図鑑: {builtinTypes.size}種 ／ カスタム: {customFish.length}種
+      </div>
+
+      {/* ジャンル管理 */}
+      <div>
+        <h3 className="font-bold text-base text-foam mb-2">📁 ジャンル管理</h3>
+        <div className="text-xs text-dim mb-2">
+          ジャンルは単語データから自動検出されます。ここでは手動追加・削除ができます。
+        </div>
+
+        {/* ジャンル追加フォーム */}
+        <div className="flex gap-2 mb-3">
+          <input
+            value={newGenreInput}
+            onChange={(e) => setNewGenreInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                const g = newGenreInput.trim();
+                if (g) { game.addCustomGenre(g); setNewGenreInput(""); }
+              }
+            }}
+            maxLength={20}
+            placeholder="新しいジャンル名を入力"
+            className="flex-1 px-3 py-2 rounded-xl bg-black/30 text-foam outline-none text-sm"
+          />
+          <button
+            onClick={() => {
+              const g = newGenreInput.trim();
+              if (g) { game.addCustomGenre(g); setNewGenreInput(""); }
+            }}
+            className="px-3 py-2 rounded-xl bg-glow text-deep font-bold text-sm shrink-0"
+          >
+            追加
+          </button>
+        </div>
+
+        {/* カスタムジャンル一覧（削除可能） */}
+        {customGenres.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {customGenres.map((g) => (
+              <div key={g} className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-mid text-sm">
+                <span className="text-foam">{g}</span>
+                <button
+                  onClick={() => game.removeCustomGenre(g)}
+                  className="text-coral text-xs font-bold leading-none"
+                  title={`「${g}」を削除`}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {customGenres.length === 0 && (
+          <div className="text-xs text-dim">
+            手動追加したジャンルはありません（単語に含まれるジャンルは自動表示）
+          </div>
+        )}
       </div>
     </div>
   );

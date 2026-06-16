@@ -6,14 +6,13 @@
 // - 出題中: 英単語の自動読み上げ・🔊ボタン・ヒントボタン（自己採点）
 // - 正解するまで間違えた問題を繰り返すオプション
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { MODE_BASE_GOLD, sessionGold } from "@/lib/gameLogic";
 import { playBgmForScene, sfx } from "@/lib/sound";
 import { cancelSpeech, releaseWakeLock, requestWakeLock, speak } from "@/lib/speech";
-import { DEFAULT_GENRES, type StudyMode, type Word, type WordGenre, type WordLevel, type WordType } from "@/lib/types";
+import { type StudyMode, type Word, type WordGenre, type WordLevel, type WordType } from "@/lib/types";
 import { useGame } from "./GameProvider";
 
-const BASE_GENRES: WordGenre[] = [...DEFAULT_GENRES];
 const LEVELS: WordLevel[] = ["1", "2", "3", "4", "5"];
 const WORD_TYPES: WordType[] = ["単語", "述語", "会話文"];
 
@@ -118,10 +117,7 @@ function Toggle({
 export default function StudyView() {
   const game = useGame();
   const { words, wordStats, user } = game;
-  const GENRES: WordGenre[] = useMemo(
-    () => [...BASE_GENRES, ...(user.customGenres ?? [])],
-    [user.customGenres]
-  );
+  const GENRES = game.allGenres;
   const [mode, setMode] = useState<StudyMode | "free" | null>(null);
   const [config, setConfig] = useState<QuizConfig>({
     genres: new Set(),
@@ -866,6 +862,12 @@ function SelfPlay({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qIndex]);
+
+  // カードをめくった時に英語を自動読み上げ（ja2en: 答えが英語なので必須、en2ja: 再確認用）
+  useEffect(() => {
+    if (w && flipped) void speak(w.spelling);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flipped]);
 
   if (!w) return null;
 

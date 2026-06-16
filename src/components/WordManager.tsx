@@ -10,10 +10,9 @@
 import { useMemo, useRef, useState } from "react";
 import { parseVocabularyCsv, type CsvImportResult } from "@/lib/csv";
 import { speak } from "@/lib/speech";
-import { DEFAULT_GENRES, type Word, type WordExample, type WordGenre, type WordLevel, type WordType } from "@/lib/types";
+import { type Word, type WordExample, type WordGenre, type WordLevel, type WordType } from "@/lib/types";
 import { useGame } from "./GameProvider";
 
-const BASE_GENRES: WordGenre[] = [...DEFAULT_GENRES];
 const LEVELS: WordLevel[] = ["1", "2", "3", "4", "5"];
 const WORD_TYPES: WordType[] = ["単語", "述語", "会話文"];
 const LEVEL_LABEL: Record<WordLevel, string> = {
@@ -108,10 +107,7 @@ function Tag({ label, color = "dim" }: { label: string; color?: string }) {
 export default function WordManager() {
   const game = useGame();
   const { words, wordStats } = game;
-  const GENRES: WordGenre[] = useMemo(
-    () => [...BASE_GENRES, ...(game.user.customGenres ?? [])],
-    [game.user.customGenres]
-  );
+  const GENRES = game.allGenres;
 
   const [selGenres, setSelGenres] = useState<Set<WordGenre>>(new Set());
   const [selLevels, setSelLevels] = useState<Set<WordLevel>>(new Set());

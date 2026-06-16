@@ -136,8 +136,10 @@ interface GameContextValue {
   saveWords: (words: Word[]) => void;
   removeWord: (id: string) => void;
   recordAnswer: (wordId: string, correct: boolean) => void;
+  allGenres: string[]; // 単語データ + customGenres から自動生成
   addCustomGenre: (genre: string) => void;
   addCustomGenres: (genres: string[]) => void;
+  removeCustomGenre: (genre: string) => void;
 
   // 管理者
   allFishMaster: FishMaster[];
@@ -719,6 +721,15 @@ export function GameProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // ---------- カスタムジャンル ----------
+  // 単語データ + customGenres の和集合（フィルターに自動反映）
+  const allGenres = useMemo<string[]>(() => {
+    const fromWords = words.map((w) => w.genre).filter(Boolean);
+    const fromCustom = user.customGenres ?? [];
+    return Array.from(new Set([...fromCustom, ...fromWords])).sort((a, b) =>
+      a.localeCompare(b, "ja")
+    );
+  }, [words, user.customGenres]);
+
   const addCustomGenre = useCallback((genre: string) => {
     const u = userRef.current;
     if ((u.customGenres ?? []).includes(genre)) return;
@@ -731,6 +742,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
     const newGenres = genres.filter((g) => !existing.includes(g));
     if (newGenres.length === 0) return;
     persistUser({ ...u, customGenres: [...existing, ...newGenres] });
+  }, [persistUser]);
+
+  const removeCustomGenre = useCallback((genre: string) => {
+    const u = userRef.current;
+    persistUser({ ...u, customGenres: (u.customGenres ?? []).filter((g) => g !== genre) });
   }, [persistUser]);
 
   // ---------- 管理者：カスタム魚 ----------
@@ -806,8 +822,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
         saveWords,
         removeWord,
         recordAnswer,
+        allGenres,
         addCustomGenre,
         addCustomGenres,
+        removeCustomGenre,
         allFishMaster,
         addCustomFish,
         removeCustomFish,
