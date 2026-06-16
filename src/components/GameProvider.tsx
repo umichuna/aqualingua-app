@@ -744,10 +744,24 @@ export function GameProvider({ children }: { children: ReactNode }) {
     persistUser({ ...u, customGenres: [...existing, ...newGenres] });
   }, [persistUser]);
 
-  const removeCustomGenre = useCallback((genre: string) => {
-    const u = userRef.current;
-    persistUser({ ...u, customGenres: (u.customGenres ?? []).filter((g) => g !== genre) });
-  }, [persistUser]);
+  const removeCustomGenre = useCallback(
+    (genre: string) => {
+      const u = userRef.current;
+      persistUser({ ...u, customGenres: (u.customGenres ?? []).filter((g) => g !== genre) });
+      // そのジャンルを持つ単語のジャンルも空にする
+      const affected = words.filter((w) => w.genre === genre);
+      if (affected.length > 0) {
+        const cleared = affected.map((w) => ({ ...w, genre: "" as const, lastUpdated: Date.now() }));
+        setWords((ws) => {
+          const map = new Map(ws.map((w) => [w.id, w]));
+          for (const w of cleared) map.set(w.id, w);
+          return Array.from(map.values());
+        });
+        void putWords(cleared);
+      }
+    },
+    [persistUser, words]
+  );
 
   // ---------- 管理者：カスタム魚 ----------
   const allFishMaster = useMemo<FishMaster[]>(

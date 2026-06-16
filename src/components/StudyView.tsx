@@ -594,6 +594,7 @@ export default function StudyView() {
       words={quizWords}
       allWords={words}
       afterMode={config.listenAfterMode}
+      direction={config.direction}
       onFinish={(playedCount) => finishQuiz("listen", playedCount, playedCount)}
       onQuit={backToMenu}
     />
@@ -940,25 +941,29 @@ function SelfPlay({
         )}
       </div>
       <div className="mt-auto">
-        {!flipped && (
-          <p className="text-[10px] text-dim text-center mb-1.5">
-            ボタンを押すとまず答えが開きます。確認してもう一度押してね
-          </p>
+        {!flipped ? (
+          <button
+            onClick={() => setFlipped(true)}
+            className="w-full py-3 rounded-xl font-bold transition-transform active:scale-95 bg-sand text-deep"
+          >
+            答えを見る
+          </button>
+        ) : (
+          <div className="flex gap-2">
+            <button
+              onClick={() => onJudge(false)}
+              className="flex-1 py-3 rounded-xl font-bold transition-transform active:scale-95 bg-coral text-deep"
+            >
+              ✕ 不正解
+            </button>
+            <button
+              onClick={() => onJudge(true)}
+              className="flex-1 py-3 rounded-xl font-bold transition-transform active:scale-95 bg-glow text-deep"
+            >
+              ○ 正解
+            </button>
+          </div>
         )}
-        <div className="flex gap-2">
-          <button
-            onClick={() => (flipped ? onJudge(false) : setFlipped(true))}
-            className="flex-1 py-3 rounded-xl font-bold transition-transform active:scale-95 bg-coral text-deep"
-          >
-            ✕ わからなかった
-          </button>
-          <button
-            onClick={() => (flipped ? onJudge(true) : setFlipped(true))}
-            className="flex-1 py-3 rounded-xl font-bold transition-transform active:scale-95 bg-glow text-deep"
-          >
-            ○ わかった
-          </button>
-        </div>
       </div>
     </div>
   );
@@ -969,12 +974,14 @@ function ListenPlay({
   words,
   allWords,
   afterMode,
+  direction,
   onFinish,
   onQuit,
 }: {
   words: Word[];
   allWords: Word[];
   afterMode: "loop" | "all";
+  direction: Direction;
   onFinish: (playedCount: number) => void;
   onQuit: () => void;
 }) {
@@ -1016,16 +1023,23 @@ function ListenPlay({
         const pool = currentWordsRef.current;
         const w = pool[indexRef.current];
         const meaning = w.meanings.length > 0 ? w.meanings.join("、") : null;
-        // 1回目: 英語 → 日本語
-        await speak(w.spelling, "en-US", rateRef.current);
-        if (stopped || !playingRef.current) continue;
-        if (meaning) await speak(meaning, "ja-JP", rateRef.current);
+        const speakPair = async () => {
+          if (direction === "ja2en") {
+            if (meaning) await speak(meaning, "ja-JP", rateRef.current);
+            if (stopped || !playingRef.current) return;
+            await speak(w.spelling, "en-US", rateRef.current);
+          } else {
+            await speak(w.spelling, "en-US", rateRef.current);
+            if (stopped || !playingRef.current) return;
+            if (meaning) await speak(meaning, "ja-JP", rateRef.current);
+          }
+        };
+        // 1回目
+        await speakPair();
         if (stopped || !playingRef.current) continue;
         await new Promise((r) => setTimeout(r, 400));
-        // 2回目: 英語 → 日本語
-        await speak(w.spelling, "en-US", rateRef.current);
-        if (stopped || !playingRef.current) continue;
-        if (meaning) await speak(meaning, "ja-JP", rateRef.current);
+        // 2回目
+        await speakPair();
         if (stopped) break;
         await new Promise((r) => setTimeout(r, 700));
         // 1問ぶん聞き終わった
@@ -1066,7 +1080,7 @@ function ListenPlay({
         <div className="text-3xl font-bold tracking-wide text-foam">{w?.spelling}</div>
         <div className="text-base font-bold text-glow">{w?.meanings.join("、")}</div>
         <div className="text-[10px] text-dim mt-1">
-          英語 → 日本語 を2回くり返します（{index + 1} / {currentWords.length}語目）
+          {direction === "ja2en" ? "日本語 → 英語" : "英語 → 日本語"} を2回くり返します（{index + 1} / {currentWords.length}語目）
         </div>
       </div>
       <div className="flex items-center gap-2">

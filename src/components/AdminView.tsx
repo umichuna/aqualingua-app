@@ -32,14 +32,23 @@ const EMPTY_FORM: { type: string; rarity: Rarity; description: string; layer: "m
 
 export default function AdminView() {
   const game = useGame();
-  const { user, allFishMaster } = game;
+  const { user, allFishMaster, words } = game;
   const customFish = user.customFish ?? [];
-  const customGenres = user.customGenres ?? [];
 
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [error, setError] = useState("");
   const [newGenreInput, setNewGenreInput] = useState("");
+  const [confirmGenre, setConfirmGenre] = useState<string | null>(null);
+
+  const handleRemoveGenre = (genre: string) => {
+    const count = words.filter((w) => w.genre === genre).length;
+    if (count > 0) {
+      setConfirmGenre(genre);
+    } else {
+      game.removeCustomGenre(genre);
+    }
+  };
 
   const builtinTypes = new Set(FISH_MASTER.map((f) => f.type));
 
@@ -259,26 +268,60 @@ export default function AdminView() {
           </button>
         </div>
 
-        {/* カスタムジャンル一覧（削除可能） */}
-        {customGenres.length > 0 && (
+        {/* 全ジャンル一覧（削除可能） */}
+        {game.allGenres.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mb-2">
-            {customGenres.map((g) => (
-              <div key={g} className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-mid text-sm">
-                <span className="text-foam">{g}</span>
-                <button
-                  onClick={() => game.removeCustomGenre(g)}
-                  className="text-coral text-xs font-bold leading-none"
-                  title={`「${g}」を削除`}
-                >
-                  ×
-                </button>
-              </div>
-            ))}
+            {game.allGenres.map((g) => {
+              const wordCount = words.filter((w) => w.genre === g).length;
+              return (
+                <div key={g} className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-mid text-sm">
+                  <span className="text-foam">{g}</span>
+                  {wordCount > 0 && (
+                    <span className="text-dim text-[10px]">({wordCount})</span>
+                  )}
+                  <button
+                    onClick={() => handleRemoveGenre(g)}
+                    className="text-coral text-xs font-bold leading-none"
+                    title={`「${g}」を削除`}
+                  >
+                    ×
+                  </button>
+                </div>
+              );
+            })}
           </div>
         )}
-        {customGenres.length === 0 && (
+        {game.allGenres.length === 0 && (
           <div className="text-xs text-dim">
-            手動追加したジャンルはありません（単語に含まれるジャンルは自動表示）
+            ジャンルがありません
+          </div>
+        )}
+
+        {/* 確認ダイアログ */}
+        {confirmGenre !== null && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+            <div className="bg-deep rounded-2xl p-5 max-w-xs w-full flex flex-col gap-4">
+              <p className="text-foam text-sm font-bold">
+                「{confirmGenre}」を削除すると、このジャンルを持つ単語{words.filter((w) => w.genre === confirmGenre).length}件のジャンルも空白になります。よろしいですか？
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setConfirmGenre(null)}
+                  className="flex-1 py-2 rounded-xl bg-white/10 text-dim text-sm font-bold"
+                >
+                  キャンセル
+                </button>
+                <button
+                  onClick={() => {
+                    game.removeCustomGenre(confirmGenre);
+                    setConfirmGenre(null);
+                  }}
+                  className="flex-1 py-2 rounded-xl bg-coral text-white text-sm font-bold"
+                >
+                  削除する
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>
