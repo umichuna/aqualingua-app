@@ -153,8 +153,7 @@ export default function StudyView() {
   }, [words, config.genres, config.levels, config.wordTypes]);
 
   const maxCount = filterPool().length;
-  const effectiveCount =
-    config.count === 0 ? maxCount : Math.min(config.count, maxCount);
+  const effectiveCount = Math.min(Math.max(1, config.count), maxCount);
 
   const buildQuizWords = useCallback((): Word[] => {
     const pool = filterPool();
@@ -168,7 +167,7 @@ export default function StudyView() {
     } else {
       ordered = shuffle(pool);
     }
-    return config.count === 0 ? ordered : ordered.slice(0, config.count);
+    return ordered.slice(0, Math.max(1, config.count));
   }, [filterPool, wordStats, config.weakFirst, config.count]);
 
   // 4択を方向に合わせて生成
@@ -270,8 +269,7 @@ export default function StudyView() {
       <div className="p-4 space-y-3">
         <h2 className="font-bold text-lg text-foam">きょうのしごと</h2>
         <p className="text-xs text-dim">
-          しごとを完了するとゴールドがもらえます（職業Lv.{user.jobLevel} ボーナス +
-          {(user.jobLevel - 1) * 2}G）
+          しごとを完了するとゴールドがもらえます
         </p>
         {MODES.map((m) => (
           <button
@@ -397,15 +395,15 @@ export default function StudyView() {
         {mode !== "listen" && (
           <div>
             <div className="text-xs font-bold text-glow mb-1.5">
-              出題数（最大 {maxCount} 問・0で全部）
+              出題数（最大 {maxCount} 問）
             </div>
             <input
               type="number"
-              min={0}
+              min={1}
               max={maxCount}
               value={config.count}
               onChange={(e) => {
-                const n = Math.max(0, Math.floor(Number(e.target.value) || 0));
+                const n = Math.max(1, Math.floor(Number(e.target.value) || 1));
                 setConfig((c) => ({ ...c, count: n }));
               }}
               className="w-full px-3 py-2.5 rounded-xl bg-mid text-foam outline-none text-center font-bold"

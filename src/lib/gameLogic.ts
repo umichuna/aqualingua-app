@@ -10,16 +10,16 @@ export const MODE_BASE_GOLD: Record<StudyMode, number> = {
   listen: 2, // 聞き流し 2G/問
 };
 
-// セッション報酬 = 問題数 × 1問あたり金額 + ジョブレベルボーナス
+// セッション報酬 = 問題数 × 1問あたり金額
 export function sessionGold(
   mode: StudyMode,
   count: number,
-  jobLevel: number
+  _jobLevel?: number,
 ): number {
-  return count * MODE_BASE_GOLD[mode] + (jobLevel - 1) * 2;
+  return count * MODE_BASE_GOLD[mode];
 }
 
-export function dailyGoldReward(mode: StudyMode, jobLevel: number): number {
+export function dailyGoldReward(mode: StudyMode, jobLevel?: number): number {
   return sessionGold(mode, 1, jobLevel);
 }
 
@@ -160,11 +160,9 @@ export const SHOP_PRICES = {
 
 export const MAX_TANK_CAPACITY = 15;
 
-// 水槽拡張キットは買うたびに2倍に値上がりする
-// 容量4（初期）→1200G、容量6→2400G…
-export function tankExpansionPrice(tankCapacity: number): number {
-  const purchases = Math.max(0, Math.floor((tankCapacity - 4) / 2));
-  return SHOP_PRICES.tankExpansion * 2 ** purchases;
+// 水槽拡張キットは常に1200G固定
+export function tankExpansionPrice(_tankCapacity?: number): number {
+  return SHOP_PRICES.tankExpansion;
 }
 
 // ---------- ボックス ----------
