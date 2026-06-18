@@ -13,6 +13,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useSession } from "next-auth/react";
 import { FISH_MASTER, getFishMaster, rollGachaWithWeights, type FishMaster } from "@/data/fishMaster";
 import {
   ADULT_LEVEL,
@@ -58,6 +59,7 @@ import {
   putWordStats,
 } from "@/lib/db";
 import { sfx } from "@/lib/sound";
+import { pullFromCloud, pushToCloud } from "@/lib/sync";
 import type {
   CustomFishDef,
   EncyclopediaEntry,
@@ -157,6 +159,7 @@ export function useGame(): GameContextValue {
 let noticeSeq = 1;
 
 export function GameProvider({ children }: { children: ReactNode }) {
+  const { data: session } = useSession();
   const [ready, setReady] = useState(false);
   const [user, setUser] = useState<UserStatus>(createInitialUserStatus);
   const [fishList, setFishList] = useState<Fish[]>([]);
@@ -169,6 +172,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const [notices, setNotices] = useState<GameNotice[]>([]);
   const userRef = useRef(user);
   const fishRef = useRef(fishList);
+  const pushTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   useEffect(() => {
     userRef.current = user;
     fishRef.current = fishList;
@@ -184,16 +188,28 @@ export function GameProvider({ children }: { children: ReactNode }) {
     setNotices((n) => n.filter((x) => x.id !== id));
   }, []);
 
+  // Debounced cloud push（2秒後に自動実行）
+  const schedulePush = useCallback(() => {
+    if (!session?.user?.email) return;
+    if (pushTimeoutRef.current) clearTimeout(pushTimeoutRef.current);
+    pushTimeoutRef.current = setTimeout(() => {
+      const userId = session.user!.email!;
+      void pushToCloud(userId).catch((err) => console.error("[Sync] Push error:", err));
+    }, 2000);
+  }, [session?.user?.email]);
+
   // ---------- 永続化ヘルパー ----------
   const persistUser = useCallback((next: UserStatus) => {
     setUser(next);
     void putUserStatus(next);
-  }, []);
+    schedulePush();
+  }, [schedulePush]);
 
   const persistFishList = useCallback((next: Fish[]) => {
     setFishList(next);
     void putFishList(next);
-  }, []);
+    schedulePush();
+  }, [schedulePush]);
 
   // ---------- 通帳への記帳 ----------
   const recordLedger = useCallback(
@@ -210,8 +226,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
       };
       setGoldLedger((l) => [...l, entry]);
       void putGoldLedgerEntry(entry);
+      schedulePush();
     },
-    []
+    [schedulePush]
   );
 
   // ---------- しごとセッションの記録 ----------
@@ -240,9 +257,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
       };
       setStudySessions((s) => [...s, session]);
       void putStudySession(session);
+      schedulePush();
       return session.sessionId;
     },
-    []
+    [schedulePush]
   );
 
   // ---------- 放置ペナルティの適用 ----------
@@ -315,13 +333,23 @@ export function GameProvider({ children }: { children: ReactNode }) {
         setUser(loadedUser);
         setFishList(fish);
       }
+
+      // Cloud pull（ログイン済みの場合）
+      if (session?.user?.email) {
+        try {
+          await pullFromCloud(session.user.email);
+        } catch (err) {
+          console.error("[Sync] Initial pull failed:", err);
+        }
+      }
+
       setReady(true);
     })();
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [session?.user?.email]);
 
   // ---------- フォーカス復帰時にも放置チェック ----------
   useEffect(() => {
@@ -390,7 +418,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
       if (updated) void putStudySession(updated);
       return next;
     });
-  }, []);
+    schedulePush();
+  }, [schedulePush]);
 
   const addManualSession = useCallback(
     (date: string, label: string, count: number) => {
@@ -507,8 +536,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
           ? enc
           : [...enc, { fishType: master.type, discoveredAt: now, lastUpdated: now }]
       );
+      schedulePush();
     },
-    []
+    [schedulePush]
   );
 
   const addFishToBox = useCallback(
@@ -627,7 +657,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
       return [...ws, word];
     });
     void putWord(word);
-  }, []);
+    schedulePush();
+  }, [schedulePush]);
 
   const saveWords = useCallback((newWords: Word[]) => {
     setWords((ws) => {
@@ -636,7 +667,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
       return Array.from(map.values());
     });
     void putWords(newWords);
-  }, []);
+    schedulePush();
+  }, [schedulePush]);
 
   const removeWord = useCallback((id: string) => {
     setWords((ws) => ws.filter((w) => w.id !== id));
@@ -646,7 +678,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
       return next;
     });
     void dbDeleteWord(id);
-  }, []);
+    schedulePush();
+  }, [schedulePush]);
 
   const recordAnswer = useCallback((wordId: string, correct: boolean) => {
     setWordStats((s) => {
@@ -665,7 +698,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
       void putWordStats(next);
       return { ...s, [wordId]: next };
     });
-  }, []);
+    schedulePush();
+  }, [schedulePush]);
 
   // ---------- カスタムジャンル ----------
   // 単語データ + customGenres の和集合（フィルターに自動反映）

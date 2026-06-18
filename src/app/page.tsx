@@ -6,6 +6,7 @@
 // ホームから: 記録・単語帳・図鑑・設定 にもアクセスできる
 
 import { useState } from "react";
+import { signIn, useSession } from "next-auth/react";
 import AdminView from "@/components/AdminView";
 import AquariumView from "@/components/AquariumView";
 import EncyclopediaView from "@/components/EncyclopediaView";
@@ -228,7 +229,41 @@ function AppShell() {
   );
 }
 
+function LoginScreen() {
+  return (
+    <div className="w-full h-dvh flex flex-col items-center justify-center bg-deep text-foam font-pixel p-4">
+      <div className="text-center space-y-6">
+        <div className="text-6xl">🌊</div>
+        <h1 className="text-3xl font-bold">AquaLingua</h1>
+        <p className="text-sm text-dim">水族館で英単語を学ぼう</p>
+
+        <button
+          onClick={() => signIn("google")}
+          className="mt-8 px-6 py-3 bg-glow text-deep font-bold rounded-lg active:scale-95 transition-transform text-sm"
+        >
+          Google でログイン
+        </button>
+        <p className="text-xs text-dim">ゲーム進捗はクラウドに保存されます</p>
+      </div>
+    </div>
+  );
+}
+
 export default function Page() {
+  const { status } = useSession();
+
+  if (status === "loading") {
+    return (
+      <div className="w-full h-dvh flex items-center justify-center bg-deep text-dim text-sm font-pixel">
+        🫧 よみこみ中…
+      </div>
+    );
+  }
+
+  if (status === "unauthenticated") {
+    return <LoginScreen />;
+  }
+
   return (
     <GameProvider>
       <AppShell />
