@@ -125,6 +125,8 @@ export default function WordManager() {
   const [importProgress, setImportProgress] = useState(0);
   const [selWords, setSelWords] = useState<Set<string>>(new Set());
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
+  const [lastWordType, setLastWordType] = useState<WordType>("単語");
+  const [lastGenre, setLastGenre] = useState<WordGenre>("日常会話");
   const fileRef = useRef<HTMLInputElement>(null);
 
   const toggleSet = <T,>(set: Set<T>, val: T): Set<T> => {
@@ -224,7 +226,7 @@ export default function WordManager() {
             📄 CSV取込
           </button>
           <button
-            onClick={() => { setEditing(blankWord()); setIsNew(true); }}
+            onClick={() => { setEditing({ ...blankWord(), wordType: lastWordType, genre: lastGenre }); setIsNew(true); }}
             className="text-xs px-2 py-1.5 rounded-lg font-bold bg-white/10 text-foam"
           >
             ＋追加
@@ -498,6 +500,8 @@ export default function WordManager() {
           genres={GENRES}
           onSave={(w) => {
             game.saveWord(w);
+            setLastWordType(w.wordType);
+            setLastGenre(w.genre);
             setEditing(null);
             game.pushNotice("📚", isNew ? `「${w.spelling}」を追加した！` : `「${w.spelling}」を更新した！`);
           }}

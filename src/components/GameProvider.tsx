@@ -36,11 +36,9 @@ import {
 import {
   clearAllData,
   createInitialUserStatus,
-  deleteCompanion as dbDeleteCompanion,
   deleteFish as dbDeleteFish,
   deleteWord as dbDeleteWord,
   discoverFishType,
-  getAllCompanions,
   getAllEncyclopedia,
   getAllFish,
   getAllFishHistory,
@@ -49,7 +47,6 @@ import {
   getAllWordStats,
   getAllWords,
   getUserStatus,
-  putCompanion,
   putFish,
   putFishHistoryEntry,
   putFishList,
@@ -116,11 +113,9 @@ interface GameContextValue {
   addManualSession: (date: string, label: string, count: number) => void;
 
   // 水槽
-  companionList: Fish[];
   feedAllFish: (kind: BaitKind) => boolean;
   useMedicine: (fishId: string) => boolean;
-  makeCompanion: (fishId: string) => void;
-  recallCompanion: (fishId: string) => boolean;
+  moveTankFishToBox: (fishId: string) => void;
   renameFish: (fishId: string, name: string) => void;
   removeFish: (fishId: string) => void;
   buyGachaFish: (tier: GachaTier) => FishMaster | null;
@@ -158,33 +153,6 @@ export function useGame(): GameContextValue {
   return ctx;
 }
 
-// 相棒リストからアクティブなバフ値を集約する
-function getCompanionBuffs(companions: Fish[]) {
-  let disease_resistance = 0;
-  let affection_boost = 0;
-  let decay_reduction = 0;
-  let tank_expansion = 0;
-  for (const companion of companions) {
-    const master = getFishMaster(companion.type);
-    if (!master?.companionBuff) continue;
-    const { type, value } = master.companionBuff;
-    switch (type) {
-      case "disease_resistance":
-        disease_resistance = Math.max(disease_resistance, value);
-        break;
-      case "affection_boost":
-        affection_boost += value;
-        break;
-      case "decay_reduction":
-        decay_reduction = Math.max(decay_reduction, value);
-        break;
-      case "tank_expansion":
-        tank_expansion += value;
-        break;
-    }
-  }
-  return { disease_resistance, affection_boost, decay_reduction, tank_expansion };
-}
 
 let noticeSeq = 1;
 
@@ -196,18 +164,15 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const [wordStats, setWordStats] = useState<Record<string, WordStats>>({});
   const [encyclopedia, setEncyclopedia] = useState<EncyclopediaEntry[]>([]);
   const [fishHistory, setFishHistory] = useState<FishHistoryEntry[]>([]);
-  const [companionList, setCompanionList] = useState<Fish[]>([]);
   const [studySessions, setStudySessions] = useState<StudySession[]>([]);
   const [goldLedger, setGoldLedger] = useState<GoldLedgerEntry[]>([]);
   const [notices, setNotices] = useState<GameNotice[]>([]);
   const userRef = useRef(user);
   const fishRef = useRef(fishList);
-  const companionRef = useRef(companionList);
   useEffect(() => {
     userRef.current = user;
     fishRef.current = fishList;
-    companionRef.current = companionList;
-  }, [user, fishList, companionList]);
+  }, [user, fishList]);
 
   const pushNotice = useCallback((icon: string, text: string) => {
     const id = noticeSeq++;
@@ -287,7 +252,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         currentFish,
         currentUser.lastActiveTime,
         now,
-        getCompanionBuffs(companionRef.current)
+        { decay_reduction: 0, disease_resistance: 0 }
       );
       const runaways = updated.filter((f) => f.status === "running_away");
       const stayed = updated.filter((f) => f.status !== "running_away");
@@ -325,7 +290,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [u, fish, ws, stats, enc, history, sessions, ledger, companions] = await Promise.all([
+      const [u, fish, ws, stats, enc, history, sessions, ledger] = await Promise.all([
         getUserStatus(),
         getAllFish(),
         getAllWords(),
@@ -334,7 +299,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
         getAllFishHistory(),
         getAllStudySessions(),
         getAllGoldLedger(),
-        getAllCompanions(),
       ]);
       if (cancelled) return;
       const loadedUser = u ?? createInitialUserStatus();
@@ -342,7 +306,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
       setWordStats(Object.fromEntries(stats.map((s) => [s.wordId, s])));
       setEncyclopedia(enc);
       setFishHistory(history.sort((a, b) => a.timestamp - b.timestamp));
-      setCompanionList(companions);
       setStudySessions(sessions.sort((a, b) => a.timestamp - b.timestamp));
       setGoldLedger(ledger.sort((a, b) => a.timestamp - b.timestamp));
       const now = Date.now();
@@ -447,7 +410,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         items: { ...u.items, [itemKey]: u.items[itemKey] - 1 },
       });
       const baseGain = kind === "basic" ? BAIT_EFFECT.basic : BAIT_EFFECT.premium;
-      const { affection_boost } = getCompanionBuffs(companionRef.current);
+      const affection_boost = 0;
       const next = fishRef.current.map((f) => {
         const level = Math.min(MAX_FISH_LEVEL, f.level + 1);
         const grew = f.growthStage === "幼魚" && level >= ADULT_LEVEL;
@@ -504,34 +467,19 @@ export function GameProvider({ children }: { children: ReactNode }) {
     void dbDeleteFish(fishId);
   }, []);
 
-  const makeCompanion = useCallback(
+  const moveTankFishToBox = useCallback(
     (fishId: string) => {
       const fish = fishRef.current.find((f) => f.fishId === fishId);
       if (!fish) return;
       setFishList((list) => list.filter((f) => f.fishId !== fishId));
       void dbDeleteFish(fishId);
-      setCompanionList((list) => [...list, fish]);
-      void putCompanion(fish);
-      pushNotice("🤝", `${fish.name} が相棒になった！好きな時に呼び戻せるよ`);
+      setUser((u) => ({
+        ...u,
+        boxFish: [...(u.boxFish || []), fish],
+      }));
+      pushNotice("📦", `${fish.name} をボックスに入れました`);
     },
     [pushNotice]
-  );
-
-  const recallCompanion = useCallback(
-    (fishId: string): boolean => {
-      const fish = companionList.find((f) => f.fishId === fishId);
-      if (!fish) return false;
-      const { tank_expansion } = getCompanionBuffs(companionRef.current);
-      if (fishRef.current.length >= userRef.current.tankCapacity + tank_expansion) return false;
-      setCompanionList((list) => list.filter((f) => f.fishId !== fishId));
-      void dbDeleteCompanion(fishId);
-      const next = [...fishRef.current, fish];
-      setFishList(next);
-      void putFish(fish);
-      pushNotice("🐠", `${fish.name} が帰ってきた！`);
-      return true;
-    },
-    [companionList, pushNotice]
   );
 
   const addFishToTank = useCallback(
@@ -595,8 +543,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const moveBoxFishToTank = useCallback(
     (fishId: string): boolean => {
       const u = userRef.current;
-      const { tank_expansion } = getCompanionBuffs(companionRef.current);
-      if (fishRef.current.length >= u.tankCapacity + tank_expansion) return false;
+      if (fishRef.current.length >= u.tankCapacity) return false;
       const boxFish = (u.boxFish ?? []).find((f) => f.fishId === fishId);
       if (!boxFish) return false;
       const newBoxFish = (u.boxFish ?? []).filter((f) => f.fishId !== fishId);
@@ -822,11 +769,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
         completeFreeWork,
         patchStudySession,
         addManualSession,
-        companionList,
         feedAllFish,
         useMedicine,
-        makeCompanion,
-        recallCompanion,
+        moveTankFishToBox,
         renameFish,
         removeFish,
         buyGachaFish,
