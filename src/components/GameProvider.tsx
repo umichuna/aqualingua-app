@@ -139,7 +139,7 @@ interface GameContextValue {
   allGenres: string[]; // 単語データ + customGenres から自動生成
   addCustomGenre: (genre: string) => void;
   addCustomGenres: (genres: string[]) => void;
-  removeCustomGenre: (genre: string) => void;
+  removeCustomGenre: (genre: string, clearWords?: boolean) => void;
 
   // 管理者
   allFishMaster: FishMaster[];
@@ -745,19 +745,21 @@ export function GameProvider({ children }: { children: ReactNode }) {
   }, [persistUser]);
 
   const removeCustomGenre = useCallback(
-    (genre: string) => {
+    (genre: string, clearWords = true) => {
       const u = userRef.current;
       persistUser({ ...u, customGenres: (u.customGenres ?? []).filter((g) => g !== genre) });
-      // そのジャンルを持つ単語のジャンルも空にする
-      const affected = words.filter((w) => w.genre === genre);
-      if (affected.length > 0) {
-        const cleared = affected.map((w) => ({ ...w, genre: "" as const, lastUpdated: Date.now() }));
-        setWords((ws) => {
-          const map = new Map(ws.map((w) => [w.id, w]));
-          for (const w of cleared) map.set(w.id, w);
-          return Array.from(map.values());
-        });
-        void putWords(cleared);
+      // clearWords が true の場合、そのジャンルを持つ単語のジャンルも空にする
+      if (clearWords) {
+        const affected = words.filter((w) => w.genre === genre);
+        if (affected.length > 0) {
+          const cleared = affected.map((w) => ({ ...w, genre: "" as const, lastUpdated: Date.now() }));
+          setWords((ws) => {
+            const map = new Map(ws.map((w) => [w.id, w]));
+            for (const w of cleared) map.set(w.id, w);
+            return Array.from(map.values());
+          });
+          void putWords(cleared);
+        }
       }
     },
     [persistUser, words]

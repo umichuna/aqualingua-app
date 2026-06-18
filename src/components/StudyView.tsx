@@ -34,7 +34,7 @@ interface QuizConfig {
   weakFirst: boolean;
   direction: Direction;
   repeatUntilCorrect: boolean;
-  listenAfterMode: "loop" | "all"; // 聞き流し終了後: loop=絞り込みリピート / all=全単語に続ける
+  listenAfterMode: "loop"; // 聞き流し終了後: 絞り込みをリピート
 }
 
 interface ChoiceQuestion {
@@ -124,8 +124,8 @@ export default function StudyView() {
     levels: new Set(),
     wordTypes: new Set(),
     count: 10,
-    weakFirst: true,
-    direction: "en2ja",
+    weakFirst: false,
+    direction: "ja2en",
     repeatUntilCorrect: true,
     listenAfterMode: "loop",
   });
@@ -155,10 +155,10 @@ export default function StudyView() {
   const maxCount = filterPool().length;
   const effectiveCount = Math.min(Math.max(1, config.count), maxCount);
 
-  const buildQuizWords = useCallback((): Word[] => {
+  const buildQuizWords = useCallback((forListen: boolean = false): Word[] => {
     const pool = filterPool();
     let ordered: Word[];
-    if (config.weakFirst) {
+    if (config.weakFirst && !forListen) {
       ordered = shuffle(pool).sort(
         (a, b) =>
           (wordStats[b.id]?.incorrectCount ?? 0) -
@@ -166,6 +166,9 @@ export default function StudyView() {
       );
     } else {
       ordered = shuffle(pool);
+    }
+    if (forListen) {
+      return ordered;
     }
     return ordered.slice(0, Math.max(1, config.count));
   }, [filterPool, wordStats, config.weakFirst, config.count]);
@@ -204,7 +207,11 @@ export default function StudyView() {
   );
 
   const startQuiz = (m: StudyMode) => {
-    const qWords = buildQuizWords();
+    if (m !== "listen" && config.count === 0) {
+      game.pushNotice("⚠️", "数字を入力してください");
+      return;
+    }
+    const qWords = buildQuizWords(m === "listen");
     if (qWords.length === 0) {
       game.pushNotice("📚", "出題できる単語がない！単語帳に追加しよう");
       return;
@@ -401,9 +408,10 @@ export default function StudyView() {
               type="number"
               min={1}
               max={maxCount}
-              value={config.count}
+              value={config.count || ""}
               onChange={(e) => {
-                const n = Math.max(1, Math.floor(Number(e.target.value) || 1));
+                const val = e.target.value.trim();
+                const n = val === "" ? 0 : Math.max(1, Math.floor(Number(val)));
                 setConfig((c) => ({ ...c, count: n }));
               }}
               className="w-full px-3 py-2.5 rounded-xl bg-mid text-foam outline-none text-center font-bold"
@@ -421,27 +429,6 @@ export default function StudyView() {
             <div className={`rounded-xl p-3 text-center font-bold ${maxCount === 0 ? "bg-coral/10 text-coral" : "bg-mid text-foam"}`}>
               🎧 対象: {maxCount}語
               {maxCount === 0 && <div className="text-xs font-normal mt-0.5">絞り込み条件を変えてみてね</div>}
-            </div>
-            <div>
-              <div className="text-xs font-bold text-glow mb-1.5">全語を聞き終わった後の動作</div>
-              <div className="grid grid-cols-2 gap-1.5">
-                {(
-                  [
-                    ["loop", "🔁 絞り込みをリピート"],
-                    ["all", "🔀 全単語に続ける"],
-                  ] as ["loop" | "all", string][]
-                ).map(([m, label]) => (
-                  <button
-                    key={m}
-                    onClick={() => setConfig((c) => ({ ...c, listenAfterMode: m }))}
-                    className={`text-xs px-2 py-2.5 rounded-xl font-bold leading-tight ${
-                      config.listenAfterMode === m ? "bg-sand text-deep" : "bg-white/10 text-dim"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
             </div>
             <p className="text-xs text-dim">
               「終了」を押すまでエンドレスで再生します。終了した時点で聞いた問題数ぶんのゴールドがもらえます。
@@ -590,8 +577,6 @@ export default function StudyView() {
   return (
     <ListenPlay
       words={quizWords}
-      allWords={words}
-      afterMode={config.listenAfterMode}
       direction={config.direction}
       onFinish={(playedCount) => finishQuiz("listen", playedCount, playedCount)}
       onQuit={backToMenu}
@@ -970,15 +955,11 @@ function SelfPlay({
 // ---------- 聞き流し（エンドレス再生） ----------
 function ListenPlay({
   words,
-  allWords,
-  afterMode,
   direction,
   onFinish,
   onQuit,
 }: {
   words: Word[];
-  allWords: Word[];
-  afterMode: "loop" | "all";
   direction: Direction;
   onFinish: (playedCount: number) => void;
   onQuit: () => void;
@@ -991,9 +972,7 @@ function ListenPlay({
   const playedRef = useRef(0);
   const playingRef = useRef(true);
   const rateRef = useRef(1.0);
-  // 現在再生中の単語リスト（afterMode="all"のとき一周後に全単語に切り替わる）
   const currentWordsRef = useRef<Word[]>(words);
-  const [currentWords, setCurrentWords] = useState<Word[]>(words);
 
   useEffect(() => {
     playingRef.current = playing;
@@ -1045,17 +1024,8 @@ function ListenPlay({
         setPlayedCount(playedRef.current);
         const nextIdx = indexRef.current + 1;
         if (nextIdx >= currentWordsRef.current.length) {
-          // 一周完了
-          if (afterMode === "all") {
-            // 全単語をシャッフルして切り替え
-            const shuffled = [...allWords].sort(() => Math.random() - 0.5);
-            currentWordsRef.current = shuffled;
-            setCurrentWords(shuffled);
-            indexRef.current = 0;
-          } else {
-            // 絞り込みリストの先頭に戻る
-            indexRef.current = 0;
-          }
+          // 一周完了 — 絞り込みリストの先頭に戻る
+          indexRef.current = 0;
         } else {
           indexRef.current = nextIdx;
         }
@@ -1066,7 +1036,7 @@ function ListenPlay({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const w = currentWords[Math.min(index, currentWords.length - 1)];
+  const w = currentWordsRef.current[Math.min(index, currentWordsRef.current.length - 1)];
   return (
     <div className="p-4 flex flex-col gap-4 h-full">
       <div className="flex justify-between text-xs text-dim">
@@ -1078,7 +1048,7 @@ function ListenPlay({
         <div className="text-3xl font-bold tracking-wide text-foam">{w?.spelling}</div>
         <div className="text-base font-bold text-glow">{w?.meanings.join("、")}</div>
         <div className="text-[10px] text-dim mt-1">
-          {direction === "ja2en" ? "日本語 → 英語" : "英語 → 日本語"} を2回くり返します（{index + 1} / {currentWords.length}語目）
+          {direction === "ja2en" ? "日本語 → 英語" : "英語 → 日本語"} を2回くり返します（{index + 1} / {currentWordsRef.current.length}語目）
         </div>
       </div>
       <div className="flex items-center gap-2">

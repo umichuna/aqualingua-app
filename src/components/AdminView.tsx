@@ -313,7 +313,7 @@ export default function AdminView() {
                 </button>
                 <button
                   onClick={() => {
-                    game.removeCustomGenre(confirmGenre);
+                    game.removeCustomGenre(confirmGenre, true);
                     setConfirmGenre(null);
                   }}
                   className="flex-1 py-2 rounded-xl bg-coral text-white text-sm font-bold"
