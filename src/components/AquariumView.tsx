@@ -348,6 +348,12 @@ export default function AquariumView() {
                     >
                       水槽へ
                     </button>
+                    <button
+                      onClick={() => game.releaseBoxFish(f.fishId)}
+                      className="text-[10px] px-2 py-0.5 rounded-full bg-white/10 text-dim font-bold whitespace-nowrap"
+                    >
+                      🌊 逃がす
+                    </button>
                   </div>
                 ))}
               </div>

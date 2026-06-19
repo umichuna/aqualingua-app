@@ -41,6 +41,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   const [bgmOn, setBgmOn] = useState(isBgmEnabled);
   const [bgmVol, setBgmVol] = useState(getBgmVolume);
   const [ioMsg, setIoMsg] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   // セーブ: 全データをJSONファイルとしてダウンロード
@@ -202,10 +203,20 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
         <div className="rounded-xl px-3 py-2.5 mb-3 bg-mid">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm font-bold text-foam">クラウド同期・アカウント</div>
-              <div className="text-[10px] text-dim">v2で対応予定（今はこのPCの中に保存）</div>
+              <div className="text-sm font-bold text-foam">クラウド同期</div>
+              <div className="text-[10px] text-dim">今すぐクラウドと同期する</div>
             </div>
-            <span className="text-xs px-2 py-0.5 rounded-full font-bold bg-white/10 text-dim">準備中</span>
+            <button
+              disabled={syncing}
+              onClick={async () => {
+                setSyncing(true);
+                await game.syncNow();
+                setSyncing(false);
+              }}
+              className="text-xs px-2.5 py-1 rounded-lg font-bold bg-glow text-deep disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {syncing ? "同期中…" : "☁️ 同期"}
+            </button>
           </div>
         </div>
 

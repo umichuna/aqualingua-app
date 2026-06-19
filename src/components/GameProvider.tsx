@@ -124,6 +124,7 @@ interface GameContextValue {
   addFishToTank: (master: FishMaster, name: string) => void;
   addFishToBox: (master: FishMaster, name: string) => void;
   moveBoxFishToTank: (fishId: string) => boolean;
+  releaseBoxFish: (fishId: string) => void;
 
   // ショップ
   buyItem: (item: keyof typeof SHOP_PRICES) => boolean;
@@ -146,6 +147,7 @@ interface GameContextValue {
 
   // その他
   resetAllData: () => Promise<void>;
+  syncNow: () => Promise<void>;
 }
 
 const GameContext = createContext<GameContextValue | null>(null);
@@ -792,6 +794,29 @@ export function GameProvider({ children }: { children: ReactNode }) {
     [persistUser]
   );
 
+  const releaseBoxFish = useCallback(
+    (fishId: string) => {
+      const u = userRef.current;
+      const fish = (u.boxFish ?? []).find((f) => f.fishId === fishId);
+      if (!fish) return;
+      const now = Date.now();
+      persistUser({ ...u, boxFish: (u.boxFish ?? []).filter((f) => f.fishId !== fishId) });
+      const entry: FishHistoryEntry = {
+        entryId: crypto.randomUUID(),
+        fishType: fish.type,
+        name: fish.name,
+        reason: "runaway" as FishLeaveReason,
+        date: todayString(),
+        timestamp: now,
+        lastUpdated: now,
+      };
+      setFishHistory((h) => [...h, entry]);
+      void putFishHistoryEntry(entry);
+      pushNotice("🌊", `${fish.name} を海へ帰した`);
+    },
+    [persistUser, pushNotice]
+  );
+
   // ---------- その他 ----------
   const resetAllData = useCallback(async () => {
     await clearAllData();
@@ -804,6 +829,16 @@ export function GameProvider({ children }: { children: ReactNode }) {
     setStudySessions([]);
     setGoldLedger([]);
   }, []);
+
+  const syncNow = useCallback(async () => {
+    const email = session?.user?.email;
+    if (!email) { pushNotice("⚠️", "ログインしていないため同期できません"); return; }
+    let failed = false;
+    try { await pullFromCloud(email); } catch (err) { console.error("[Sync] pull failed:", err); failed = true; }
+    try { await pushToCloud(email); } catch (err) { console.error("[Sync] push failed:", err); failed = true; }
+    if (failed) { pushNotice("⚠️", "同期に失敗しました"); } else { pushNotice("☁️", "同期が完了しました"); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.user?.email, pushNotice]);
 
   return (
     <GameContext.Provider
@@ -834,6 +869,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         addFishToTank,
         addFishToBox,
         moveBoxFishToTank,
+        releaseBoxFish,
         buyItem,
         saveWord,
         saveWords,
@@ -848,6 +884,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         addCustomFish,
         removeCustomFish,
         resetAllData,
+        syncNow,
       }}
     >
       {children}
