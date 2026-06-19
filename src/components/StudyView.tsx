@@ -141,6 +141,8 @@ export default function StudyView() {
   const [resultExtra, setResultExtra] = useState<string[]>([]);
   // 繰り返し出題で2回目以降かどうかを判定（初回正解だけスコアに数える）
   const attemptedRef = useRef<Set<string>>(new Set());
+  // このセッションで直前に間違えた単語（次に1発正解したら苦手リセット）
+  const lastWrongRef = useRef<Set<string>>(new Set());
 
   // ---------- 絞り込み（複数選択対応） ----------
   const filterPool = useCallback((): Word[] => {
@@ -230,6 +232,7 @@ export default function StudyView() {
       setOriginalCount(qWords.length);
     }
     attemptedRef.current = new Set();
+    lastWrongRef.current = new Set();
     setQuizWords(qWords);
     setQIndex(0);
     setScore(0);
@@ -517,6 +520,13 @@ export default function StudyView() {
           if (correct) sfx.correct();
           else sfx.wrong();
           if (correct && firstTry) setScore((s) => s + 1);
+          // 直前に間違えた単語を1発で正解したら苦手リセット
+          if (correct && lastWrongRef.current.has(q.word.id)) {
+            game.resetWordWeak(q.word.id);
+            lastWrongRef.current.delete(q.word.id);
+          } else if (!correct) {
+            lastWrongRef.current.add(q.word.id);
+          }
           game.recordAnswer(q.word.id, correct);
           // 間違えた問題を末尾に追加（繰り返しオプション）
           let queue = choiceQs;
@@ -555,6 +565,13 @@ export default function StudyView() {
           if (ok) sfx.correct();
           else sfx.wrong();
           if (ok && firstTry) setScore((s) => s + 1);
+          // 直前に間違えた単語を1発で正解したら苦手リセット
+          if (ok && lastWrongRef.current.has(w.id)) {
+            game.resetWordWeak(w.id);
+            lastWrongRef.current.delete(w.id);
+          } else if (!ok) {
+            lastWrongRef.current.add(w.id);
+          }
           game.recordAnswer(w.id, ok);
           let queue = quizWords;
           if (!ok && config.repeatUntilCorrect) {

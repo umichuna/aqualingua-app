@@ -133,6 +133,7 @@ interface GameContextValue {
   saveWords: (words: Word[]) => void;
   removeWord: (id: string) => void;
   recordAnswer: (wordId: string, correct: boolean) => void;
+  resetWordWeak: (wordId: string) => void;
   allGenres: string[]; // 単語データ + customGenres から自動生成
   addCustomGenre: (genre: string) => void;
   addCustomGenres: (genres: string[]) => void;
@@ -697,10 +698,21 @@ export function GameProvider({ children }: { children: ReactNode }) {
       };
       const next: WordStats = {
         ...prev,
-        incorrectCount: Math.max(0, prev.incorrectCount + (correct ? -1 : 1)),
+        incorrectCount: prev.incorrectCount + (correct ? 0 : 1),
         lastReviewedAt: Date.now(),
         lastUpdated: Date.now(),
       };
+      void putWordStats(next);
+      return { ...s, [wordId]: next };
+    });
+    schedulePush();
+  }, [schedulePush]);
+
+  const resetWordWeak = useCallback((wordId: string) => {
+    setWordStats((s) => {
+      const prev = s[wordId];
+      if (!prev || prev.incorrectCount === 0) return s;
+      const next: WordStats = { ...prev, incorrectCount: 0, lastUpdated: Date.now() };
       void putWordStats(next);
       return { ...s, [wordId]: next };
     });
@@ -823,6 +835,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         saveWords,
         removeWord,
         recordAnswer,
+        resetWordWeak,
         allGenres,
         addCustomGenre,
         addCustomGenres,
