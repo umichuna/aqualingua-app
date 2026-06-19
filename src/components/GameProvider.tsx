@@ -336,21 +336,25 @@ export function GameProvider({ children }: { children: ReactNode }) {
         setFishList(fish);
       }
 
+      // ローカルDBの読み込みが終わったらすぐに表示（クラウド同期はバックグラウンドで）
+      setReady(true);
+
       // Cloud sync（ログイン済みの場合）: pull → push の順で実行
       if (session?.user?.email) {
-        try {
-          await pullFromCloud(session.user.email);
-        } catch (err) {
-          console.error("[Sync] Initial pull failed:", err);
-        }
-        try {
-          await pushToCloud(session.user.email);
-        } catch (err) {
-          console.error("[Sync] Initial push failed:", err);
-        }
+        const email = session.user.email;
+        (async () => {
+          try {
+            await pullFromCloud(email);
+          } catch (err) {
+            console.error("[Sync] Initial pull failed:", err);
+          }
+          try {
+            await pushToCloud(email);
+          } catch (err) {
+            console.error("[Sync] Initial push failed:", err);
+          }
+        })();
       }
-
-      setReady(true);
     })();
     return () => {
       cancelled = true;
