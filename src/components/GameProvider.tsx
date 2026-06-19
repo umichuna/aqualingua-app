@@ -697,7 +697,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       };
       const next: WordStats = {
         ...prev,
-        incorrectCount: prev.incorrectCount + (correct ? 0 : 1),
+        incorrectCount: Math.max(0, prev.incorrectCount + (correct ? -1 : 1)),
         lastReviewedAt: Date.now(),
         lastUpdated: Date.now(),
       };
