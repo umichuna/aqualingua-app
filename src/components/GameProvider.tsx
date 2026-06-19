@@ -200,8 +200,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
   // ---------- 永続化ヘルパー ----------
   const persistUser = useCallback((next: UserStatus) => {
-    setUser(next);
-    void putUserStatus(next);
+    const stamped = { ...next, lastUpdated: Date.now() };
+    setUser(stamped);
+    void putUserStatus(stamped);
     schedulePush();
   }, [schedulePush]);
 
@@ -334,12 +335,17 @@ export function GameProvider({ children }: { children: ReactNode }) {
         setFishList(fish);
       }
 
-      // Cloud pull（ログイン済みの場合）
+      // Cloud sync（ログイン済みの場合）: pull → push の順で実行
       if (session?.user?.email) {
         try {
           await pullFromCloud(session.user.email);
         } catch (err) {
           console.error("[Sync] Initial pull failed:", err);
+        }
+        try {
+          await pushToCloud(session.user.email);
+        } catch (err) {
+          console.error("[Sync] Initial push failed:", err);
         }
       }
 

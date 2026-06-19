@@ -120,7 +120,7 @@ export async function getUserStatus(): Promise<UserStatus | undefined> {
 export async function putUserStatus(status: UserStatus): Promise<void> {
   await (await getLocalDB()).put("userStatus", {
     ...status,
-    lastUpdated: Date.now(),
+    lastUpdated: status.lastUpdated ?? Date.now(),
   });
 }
 
