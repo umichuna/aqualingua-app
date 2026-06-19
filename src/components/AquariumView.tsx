@@ -26,7 +26,7 @@ interface BaitDrop {
 
 export default function AquariumView() {
   const game = useGame();
-  const { fishList, user } = game;
+  const { fishList, user, allFishMaster } = game;
   const tankRef = useRef<HTMLDivElement>(null);
   const [positions, setPositions] = useState<Record<string, Pos>>({});
   const [bait, setBait] = useState<BaitDrop | null>(null);
@@ -201,6 +201,7 @@ export default function AquariumView() {
                 facing={pos.facing}
                 sick={f.isSick}
                 size={f.growthStage === "幼魚" ? 32 : 48}
+                imageUrl={allFishMaster.find((m) => m.type === f.type)?.imageUrl}
               />
               {f.isSick && (
                 <div className="absolute -top-3 -right-1 text-sm">🤒</div>
@@ -335,7 +336,7 @@ export default function AquariumView() {
               <div className="flex gap-2 overflow-x-auto pb-1">
                 {boxFish.map((f) => (
                   <div key={f.fishId} className="flex flex-col items-center gap-1 shrink-0">
-                    <PixelFish type={f.type} size={36} />
+                    <PixelFish type={f.type} size={36} imageUrl={allFishMaster.find((m) => m.type === f.type)?.imageUrl} />
                     <div className="text-[10px] text-foam text-center whitespace-nowrap">{f.name}</div>
                     <button
                       onClick={() => {

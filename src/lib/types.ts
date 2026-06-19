@@ -87,6 +87,7 @@ export interface CustomFishDef {
   description: string;
   palette: { body: string; stripe: string; fin: string; eye: string };
   layer?: "bottom" | "middle" | "top";
+  imageUrl?: string; // base64画像（canvas縮小後のJPEG）
 }
 
 export interface UserStatus {

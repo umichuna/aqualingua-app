@@ -118,7 +118,7 @@ export default function EncyclopediaView() {
               className={`rounded-xl p-3 bg-mid text-center ${found ? "cursor-pointer active:bg-white/10 transition-colors" : ""}`}
             >
               <div className="flex justify-center py-1">
-                <PixelFish type={f.type} size={56} silhouette={!found} />
+                <PixelFish type={f.type} size={56} silhouette={!found} imageUrl={f.imageUrl} />
               </div>
               <div
                 className="inline-block text-[10px] px-2 py-0.5 rounded-full font-bold mb-1"

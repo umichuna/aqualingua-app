@@ -22,13 +22,36 @@ const PALETTE_PRESETS: { label: string; palette: CustomFishDef["palette"] }[] = 
   { label: "銀", palette: { body: "#A0A0B8", stripe: "#C8C8D8", fin: "#808098", eye: "#1B1B1B" } },
 ];
 
-const EMPTY_FORM: { type: string; rarity: Rarity; description: string; layer: "middle" | "bottom"; paletteIdx: number } = {
+const EMPTY_FORM: { type: string; rarity: Rarity; description: string; layer: "middle" | "bottom"; paletteIdx: number; imageUrl: string } = {
   type: "",
   rarity: "普通",
   description: "",
   layer: "middle",
   paletteIdx: 0,
+  imageUrl: "",
 };
+
+function resizeToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 256;
+        const scale = Math.min(MAX / img.width, MAX / img.height, 1);
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/jpeg", 0.85));
+      };
+      img.onerror = reject;
+      img.src = e.target!.result as string;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
 
 export default function AdminView() {
   const game = useGame();
@@ -66,6 +89,7 @@ export default function AdminView() {
       description: form.description.trim(),
       palette: PALETTE_PRESETS[form.paletteIdx].palette,
       layer: form.layer === "bottom" ? "bottom" : undefined,
+      imageUrl: form.imageUrl || undefined,
     };
     game.addCustomFish(def);
     setForm({ ...EMPTY_FORM });
@@ -84,7 +108,7 @@ export default function AdminView() {
           <div className="flex flex-col gap-2">
             {customFish.map((f) => (
               <div key={f.type} className="flex items-center gap-3 rounded-xl bg-mid p-3">
-                <PixelFish type={f.type} size={40} />
+                <PixelFish type={f.type} size={40} imageUrl={f.imageUrl} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
                     <span
@@ -211,6 +235,41 @@ export default function AdminView() {
               placeholder="例: 海の底をゆっくり泳ぐ不思議な生き物。"
               className="w-full px-3 py-2 rounded-xl bg-black/30 text-foam outline-none text-sm resize-none"
             />
+          </div>
+
+          <div>
+            <div className="text-xs font-bold text-glow mb-1">画像（任意）</div>
+            {form.imageUrl ? (
+              <div className="flex items-center gap-3">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={form.imageUrl} alt="プレビュー" className="w-16 h-16 rounded-xl object-contain bg-black/20" />
+                <button
+                  onClick={() => setForm((f) => ({ ...f, imageUrl: "" }))}
+                  className="text-xs text-coral underline"
+                >
+                  削除
+                </button>
+              </div>
+            ) : (
+              <label className="flex items-center gap-2 cursor-pointer w-full px-3 py-2 rounded-xl bg-black/30 text-dim text-sm">
+                <span>📷 画像を選ぶ</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    try {
+                      const url = await resizeToBase64(file);
+                      setForm((f) => ({ ...f, imageUrl: url }));
+                    } catch {
+                      setError("画像の読み込みに失敗しました");
+                    }
+                  }}
+                />
+              </label>
+            )}
           </div>
 
           <div className="flex gap-2">

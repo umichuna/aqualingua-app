@@ -12,6 +12,7 @@ interface PixelFishProps {
   facing?: 1 | -1;
   sick?: boolean;
   silhouette?: boolean; // 図鑑の未発見表示用
+  imageUrl?: string; // カスタム魚のbase64画像
 }
 
 export default function PixelFish({
@@ -20,8 +21,10 @@ export default function PixelFish({
   facing = 1,
   sick = false,
   silhouette = false,
+  imageUrl,
 }: PixelFishProps) {
   const master = getFishMaster(type);
+  const resolvedImageUrl = imageUrl ?? master?.imageUrl;
   const imageId = master?.imageId;
 
   const cssFilter = silhouette
@@ -36,8 +39,10 @@ export default function PixelFish({
     display: "block",
   };
 
-  // imageId がない魚は絵文字フォールバック
-  if (!imageId) {
+  // base64画像（カスタム魚）またはstaticファイル（imageId）を優先表示
+  const src = resolvedImageUrl ?? (imageId ? `/fish/${imageId}.png` : null);
+
+  if (!src) {
     return (
       <span
         style={{
@@ -60,11 +65,11 @@ export default function PixelFish({
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={`/fish/${imageId}.png`}
+      src={src}
       alt={type}
       width={size}
       height={size}
-      style={commonStyle}
+      style={{ ...commonStyle, objectFit: "contain" }}
       className="pixelated"
       onError={(e) => {
         (e.target as HTMLImageElement).style.display = "none";

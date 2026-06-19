@@ -38,6 +38,7 @@ export interface FishMaster {
   palette: FishPalette;
   description: string; // 図鑑の説明文
   imageId?: string; // public/fish/{imageId}.png が存在する場合はそちらを表示
+  imageUrl?: string; // base64画像（カスタム魚の場合に使用）
   companionBuff?: CompanionBuff; // 相棒にしたときの効果
   layer?: "bottom" | "middle" | "top"; // 水槽内の表示層（bottom=底生）
 }
