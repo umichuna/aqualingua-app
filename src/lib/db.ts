@@ -76,6 +76,14 @@ export async function putWords(words: Word[]): Promise<void> {
   await tx.done;
 }
 
+// 同期専用: LWW マージ済みデータをそのまま保存（lastUpdated を上書きしない）
+export async function syncPutWords(words: Word[]): Promise<void> {
+  const db = await getLocalDB();
+  const tx = db.transaction("words", "readwrite");
+  await Promise.all(words.map((w) => tx.store.put(w)));
+  await tx.done;
+}
+
 export async function deleteWord(id: string): Promise<void> {
   const db = await getLocalDB();
   await db.delete("words", id);
@@ -92,6 +100,13 @@ export async function putWordStats(stats: WordStats): Promise<void> {
     ...stats,
     lastUpdated: Date.now(),
   });
+}
+
+export async function syncPutWordStats(stats: WordStats[]): Promise<void> {
+  const db = await getLocalDB();
+  const tx = db.transaction("wordStats", "readwrite");
+  await Promise.all(stats.map((s) => tx.store.put(s)));
+  await tx.done;
 }
 
 // ---------- UserStatus ----------
@@ -147,6 +162,13 @@ export async function putFishList(fishList: Fish[]): Promise<void> {
   await tx.done;
 }
 
+export async function syncPutFishList(fishList: Fish[]): Promise<void> {
+  const db = await getLocalDB();
+  const tx = db.transaction("aquarium", "readwrite");
+  await Promise.all(fishList.map((f) => tx.store.put(f)));
+  await tx.done;
+}
+
 export async function deleteFish(fishId: string): Promise<void> {
   await (await getLocalDB()).delete("aquarium", fishId);
 }
@@ -176,6 +198,10 @@ export async function discoverFishType(fishType: string): Promise<void> {
   }
 }
 
+export async function putEncyclopediaEntry(entry: EncyclopediaEntry): Promise<void> {
+  await (await getLocalDB()).put("encyclopedia", entry);
+}
+
 // ---------- StudySessions（しごと記録） ----------
 export async function getAllStudySessions(): Promise<StudySession[]> {
   return (await getLocalDB()).getAll("studySessions");
@@ -186,6 +212,10 @@ export async function putStudySession(session: StudySession): Promise<void> {
     ...session,
     lastUpdated: Date.now(),
   });
+}
+
+export async function syncPutStudySession(session: StudySession): Promise<void> {
+  await (await getLocalDB()).put("studySessions", session);
 }
 
 // ---------- Companions（相棒おさかな） ----------
@@ -216,6 +246,10 @@ export async function putFishHistoryEntry(entry: FishHistoryEntry): Promise<void
   });
 }
 
+export async function syncPutFishHistoryEntry(entry: FishHistoryEntry): Promise<void> {
+  await (await getLocalDB()).put("fishHistory", entry);
+}
+
 // ---------- GoldLedger（ゴールド通帳） ----------
 export async function getAllGoldLedger(): Promise<GoldLedgerEntry[]> {
   return (await getLocalDB()).getAll("goldLedger");
@@ -228,6 +262,10 @@ export async function putGoldLedgerEntry(
     ...entry,
     lastUpdated: Date.now(),
   });
+}
+
+export async function syncPutGoldLedgerEntry(entry: GoldLedgerEntry): Promise<void> {
+  await (await getLocalDB()).put("goldLedger", entry);
 }
 
 // ---------- 全データ初期化（設定画面の危険ゾーン用） ----------

@@ -44,8 +44,9 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   const [syncing, setSyncing] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // セーブ: 全データをJSONファイルとしてダウンロード
+  // セーブ: ローカル→クラウド（push）＋ JSONファイルをダウンロード
   const saveToFile = async () => {
+    await game.pushNow();
     const data = await exportAllData();
     const blob = new Blob([JSON.stringify(data, null, 2)], {
       type: "application/json",
@@ -204,14 +205,13 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
           <div className="flex items-center justify-between">
             <div>
               <div className="text-sm font-bold text-foam">クラウド同期</div>
-              <div className="text-[10px] text-dim">今すぐクラウドと同期する</div>
+              <div className="text-[10px] text-dim">クラウド→ローカルに受信する</div>
             </div>
             <button
               disabled={syncing}
-              onClick={async () => {
+              onClick={() => {
                 setSyncing(true);
-                await game.syncNow();
-                setSyncing(false);
+                void game.syncNow().finally(() => setSyncing(false));
               }}
               className="text-xs px-2.5 py-1 rounded-lg font-bold bg-glow text-deep disabled:opacity-50 disabled:cursor-not-allowed"
             >

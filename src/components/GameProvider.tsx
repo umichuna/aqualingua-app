@@ -148,6 +148,7 @@ interface GameContextValue {
   // その他
   resetAllData: () => Promise<void>;
   syncNow: () => Promise<void>;
+  pushNow: () => Promise<void>;
 }
 
 const GameContext = createContext<GameContextValue | null>(null);
@@ -812,13 +813,13 @@ export function GameProvider({ children }: { children: ReactNode }) {
     setGoldLedger([]);
   }, []);
 
+  // ☁️ 同期ボタン: クラウド→ローカル（pull のみ）
   const syncNow = useCallback(async () => {
     const email = session?.user?.email;
     if (!email) { pushNotice("⚠️", "ログインしていないため同期できません"); return; }
-    let failed = false;
     try {
       await pullFromCloud(email);
-      // pull 後に全 state を IndexedDB から再読み込み（単語・図鑑・記録も含む）
+      // pull 後に全 state を IndexedDB から再読み込み
       const [updatedFish, updatedUser, updatedWords, updatedStats, updatedEncy, updatedHistory, updatedSessions, updatedLedger] = await Promise.all([
         getAllFish(), getUserStatus(), getAllWords(), getAllWordStats(), getAllEncyclopedia(), getAllFishHistory(), getAllStudySessions(), getAllGoldLedger()
       ]);
@@ -830,9 +831,25 @@ export function GameProvider({ children }: { children: ReactNode }) {
       setFishHistory(updatedHistory.sort((a, b) => a.timestamp - b.timestamp));
       setStudySessions(updatedSessions.sort((a, b) => a.timestamp - b.timestamp));
       setGoldLedger(updatedLedger.sort((a, b) => a.timestamp - b.timestamp));
-    } catch (err) { console.error("[Sync] pull failed:", err); failed = true; }
-    try { await pushToCloud(email); } catch (err) { console.error("[Sync] push failed:", err); failed = true; }
-    if (failed) { pushNotice("⚠️", "同期に失敗しました"); } else { pushNotice("☁️", "同期が完了しました"); }
+      pushNotice("☁️", "クラウドから同期しました");
+    } catch (err) {
+      console.error("[Sync] pull failed:", err);
+      pushNotice("⚠️", "同期に失敗しました");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.user?.email, pushNotice]);
+
+  // 💾 セーブボタン: ローカル→クラウド（push のみ）。JSON ダウンロードは Modals 側で行う
+  const pushNow = useCallback(async () => {
+    const email = session?.user?.email;
+    if (!email) { pushNotice("⚠️", "ログインしていないため保存できません"); return; }
+    try {
+      await pushToCloud(email);
+      pushNotice("💾", "クラウドに保存しました");
+    } catch (err) {
+      console.error("[Sync] push failed:", err);
+      pushNotice("⚠️", "クラウド保存に失敗しました");
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user?.email, pushNotice]);
 
@@ -881,6 +898,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         removeCustomFish,
         resetAllData,
         syncNow,
+        pushNow,
       }}
     >
       {children}

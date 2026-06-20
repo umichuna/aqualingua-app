@@ -39,7 +39,7 @@ export async function pullFromCloud(userId: string): Promise<void> {
           const localWord = localWords.find(w => w.id === cloudWord.id);
           return mergeLWW(localWord, cloudWord);
         });
-      await db.putWords(mergedWords);
+      await db.syncPutWords(mergedWords);
     }
 
     // word_stats テーブル → IndexedDB `wordStats` ストア
@@ -49,9 +49,7 @@ export async function pullFromCloud(userId: string): Promise<void> {
         const localStat = localStats.find(s => s.wordId === cloudStat.wordId);
         return mergeLWW(localStat, cloudStat);
       });
-      for (const stat of mergedStats) {
-        await db.putWordStats(stat);
-      }
+      await db.syncPutWordStats(mergedStats);
     }
 
     // fish テーブル → IndexedDB `aquarium` ストア
@@ -87,7 +85,7 @@ export async function pullFromCloud(userId: string): Promise<void> {
 
       await db.clearFishList();
       const allMerged = [...mergedFromCloud, ...localOnly];
-      if (allMerged.length > 0) await db.putFishList(allMerged);
+      if (allMerged.length > 0) await db.syncPutFishList(allMerged);
     }
 
     // encyclopedia テーブル → IndexedDB `encyclopedia` ストア
@@ -98,7 +96,7 @@ export async function pullFromCloud(userId: string): Promise<void> {
         return mergeLWW(localE, cloudE);
       });
       for (const ency of mergedEncy) {
-        await db.discoverFishType(ency.fishType);
+        await db.putEncyclopediaEntry(ency);
       }
     }
 
@@ -110,7 +108,7 @@ export async function pullFromCloud(userId: string): Promise<void> {
         return mergeLWW(localSession, cloudSession);
       });
       for (const session of mergedSessions) {
-        await db.putStudySession(session);
+        await db.syncPutStudySession(session);
       }
     }
 
@@ -122,7 +120,7 @@ export async function pullFromCloud(userId: string): Promise<void> {
         return mergeLWW(localEntry, cloudEntry);
       });
       for (const entry of mergedLedger) {
-        await db.putGoldLedgerEntry(entry);
+        await db.syncPutGoldLedgerEntry(entry);
       }
     }
 
@@ -134,7 +132,7 @@ export async function pullFromCloud(userId: string): Promise<void> {
         return mergeLWW(localEntry, cloudEntry);
       });
       for (const entry of mergedHistory) {
-        await db.putFishHistoryEntry(entry);
+        await db.syncPutFishHistoryEntry(entry);
       }
     }
 
