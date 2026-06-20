@@ -175,7 +175,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const [notices, setNotices] = useState<GameNotice[]>([]);
   const userRef = useRef(user);
   const fishRef = useRef(fishList);
-  const pushTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   useEffect(() => {
     userRef.current = user;
     fishRef.current = fishList;
@@ -191,15 +190,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
     setNotices((n) => n.filter((x) => x.id !== id));
   }, []);
 
-  // Debounced cloud push（2秒後に自動実行）
-  const schedulePush = useCallback(() => {
-    if (!session?.user?.email) return;
-    if (pushTimeoutRef.current) clearTimeout(pushTimeoutRef.current);
-    pushTimeoutRef.current = setTimeout(() => {
-      const userId = session.user!.email!;
-      void pushToCloud(userId).catch((err) => console.error("[Sync] Push error:", err));
-    }, 2000);
-  }, [session?.user?.email]);
+  // 自動同期は無効。手動同期のみ（syncNow ボタンで実行）
+  // eslint-disable-next-line @typescript-eslint/no-empty-function
+  const schedulePush = useCallback(() => {}, []);
 
   // ---------- 永続化ヘルパー ----------
   const persistUser = useCallback((next: UserStatus) => {
@@ -365,16 +358,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
             console.error("[Sync] Initial pull failed:", err);
             failed = true;
           }
-          try {
-            await pushToCloud(email);
-          } catch (err) {
-            console.error("[Sync] Initial push failed:", err);
-            failed = true;
-          }
           if (failed) {
-            pushNotice("⚠️", "同期に失敗しました");
+            pushNotice("⚠️", "同期（pull）に失敗しました");
           } else {
-            pushNotice("☁️", "クラウド同期が完了しました");
+            pushNotice("☁️", "クラウドからデータを取得しました");
           }
         })();
       }

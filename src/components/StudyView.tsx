@@ -178,10 +178,14 @@ export default function StudyView() {
   // 4択を方向に合わせて生成
   const buildChoiceQuestion = useCallback(
     (w: Word): ChoiceQuestion | null => {
+      // 同じ種別（単語/述語/会話文）の単語を選択肢候補にする。同種別が4語未満なら全単語にフォールバック
+      const sameType = words.filter((x) => x.wordType === w.wordType);
+      const pool = sameType.length >= 4 ? sameType : words;
+
       if (config.direction === "en2ja") {
         if (w.meanings.length === 0) return null;
         const allMeanings = Array.from(
-          new Set(words.flatMap((x) => x.meanings).filter(Boolean))
+          new Set(pool.flatMap((x) => x.meanings).filter(Boolean))
         );
         const correct = w.meanings[0];
         const wrongs = shuffle(
@@ -193,7 +197,7 @@ export default function StudyView() {
       // ja2en: 日本語の意味を見て英語スペルを選ぶ
       if (w.meanings.length === 0) return null;
       const allSpellings = Array.from(
-        new Set(words.map((x) => x.spelling).filter(Boolean))
+        new Set(pool.map((x) => x.spelling).filter(Boolean))
       );
       const correct = w.spelling;
       const wrongs = shuffle(allSpellings.filter((s) => s !== w.spelling)).slice(0, 3);
@@ -990,6 +994,7 @@ function ListenPlay({
   const playingRef = useRef(true);
   const rateRef = useRef(1.0);
   const currentWordsRef = useRef<Word[]>(words);
+  const skipRef = useRef(false);
 
   useEffect(() => {
     playingRef.current = playing;
@@ -1004,6 +1009,47 @@ function ListenPlay({
       cancelSpeech();
     };
   }, []);
+
+  // Media Session API: OS/ブラウザのメディアコントロール（イヤホンボタン等）に対応
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+    navigator.mediaSession.setActionHandler("play", () => setPlaying(true));
+    navigator.mediaSession.setActionHandler("pause", () => {
+      cancelSpeech();
+      setPlaying(false);
+    });
+    navigator.mediaSession.setActionHandler("nexttrack", () => {
+      cancelSpeech();
+      const next = (indexRef.current + 1) % currentWordsRef.current.length;
+      indexRef.current = next;
+      setIndex(next);
+      skipRef.current = true;
+    });
+    return () => {
+      navigator.mediaSession.setActionHandler("play", null);
+      navigator.mediaSession.setActionHandler("pause", null);
+      navigator.mediaSession.setActionHandler("nexttrack", null);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 現在の単語が変わったらロック画面・通知センターのメタデータを更新
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+    const word = currentWordsRef.current[index];
+    if (!word) return;
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: word.spelling,
+      artist: word.meanings.join("、"),
+      album: "AquaLingua 聞き流し",
+    });
+  }, [index]);
+
+  // 再生/一時停止状態をOSに通知
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+    navigator.mediaSession.playbackState = playing ? "playing" : "paused";
+  }, [playing]);
 
   // 自動再生ループ: 英語 → 日本語 → 英語 → 日本語
   useEffect(() => {
@@ -1020,21 +1066,22 @@ function ListenPlay({
         const speakPair = async () => {
           if (direction === "ja2en") {
             if (meaning) await speak(meaning, "ja-JP", rateRef.current);
-            if (stopped || !playingRef.current) return;
+            if (stopped || !playingRef.current || skipRef.current) return;
             await speak(w.spelling, "en-US", rateRef.current);
           } else {
             await speak(w.spelling, "en-US", rateRef.current);
-            if (stopped || !playingRef.current) return;
+            if (stopped || !playingRef.current || skipRef.current) return;
             if (meaning) await speak(meaning, "ja-JP", rateRef.current);
           }
         };
         // 1回目
         await speakPair();
-        if (stopped || !playingRef.current) continue;
+        if (stopped || skipRef.current) { skipRef.current = false; continue; }
+        if (!playingRef.current) continue;
         await new Promise((r) => setTimeout(r, 400));
         // 2回目
         await speakPair();
-        if (stopped) break;
+        if (stopped || skipRef.current) { skipRef.current = false; continue; }
         await new Promise((r) => setTimeout(r, 700));
         // 1問ぶん聞き終わった
         playedRef.current += 1;
