@@ -285,6 +285,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         void dbDeleteFish(f.fishId);
         const entry: FishHistoryEntry = {
           entryId: crypto.randomUUID(),
+          fishId: f.fishId,
           fishType: f.type,
           name: f.name,
           reason: "runaway" as FishLeaveReason,
@@ -825,6 +826,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       persistUser({ ...u, boxFish: (u.boxFish ?? []).filter((f) => f.fishId !== fishId) });
       const entry: FishHistoryEntry = {
         entryId: crypto.randomUUID(),
+        fishId: fish.fishId,
         fishType: fish.type,
         name: fish.name,
         reason: "released" as FishLeaveReason,

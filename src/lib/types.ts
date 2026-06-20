@@ -132,6 +132,7 @@ export type FishLeaveReason = "shipped" | "runaway" | "released";
 
 export interface FishHistoryEntry {
   entryId: string;
+  fishId?: string; // 同期でのゾンビ復活防止に使用（旧データは undefined）
   fishType: string;
   name: string;
   reason: FishLeaveReason;
