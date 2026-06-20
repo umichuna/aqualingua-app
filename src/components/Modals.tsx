@@ -48,8 +48,18 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   // セーブ: ローカル→クラウド（push）＋ JSONファイルをダウンロード
   const saveToFile = async () => {
     setSaving(true);
+    let cloudMsg = "";
     try {
       await game.pushNow();
+      cloudMsg = "☁️ クラウド保存OK　";
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "";
+      cloudMsg = msg === "not-logged-in"
+        ? "⚠️ 未ログインのためクラウド保存スキップ　"
+        : "⚠️ クラウド保存失敗　";
+      console.error("[Save] push failed:", err);
+    }
+    try {
       const data = await exportAllData();
       const blob = new Blob([JSON.stringify(data, null, 2)], {
         type: "application/json",
@@ -60,7 +70,9 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
       a.download = `aqualingua-save-${todayString()}.json`;
       a.click();
       URL.revokeObjectURL(url);
-      setIoMsg("💾 セーブファイルをダウンロードしました");
+      setIoMsg(cloudMsg + "💾 JSONダウンロードしました");
+    } catch {
+      setIoMsg(cloudMsg + "⚠️ JSONダウンロード失敗");
     } finally {
       setSaving(false);
     }

@@ -842,16 +842,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
   // 💾 セーブボタン: ローカル→クラウド（push のみ）。JSON ダウンロードは Modals 側で行う
   const pushNow = useCallback(async () => {
     const email = session?.user?.email;
-    if (!email) { pushNotice("⚠️", "ログインしていないため保存できません"); return; }
-    try {
-      await pushToCloud(email);
-      pushNotice("💾", "クラウドに保存しました");
-    } catch (err) {
-      console.error("[Sync] push failed:", err);
-      pushNotice("⚠️", "クラウド保存に失敗しました");
-    }
+    if (!email) throw new Error("not-logged-in");
+    await pushToCloud(email);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.user?.email, pushNotice]);
+  }, [session?.user?.email]);
 
   return (
     <GameContext.Provider
