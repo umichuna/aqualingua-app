@@ -56,14 +56,21 @@ export async function pullFromCloud(userId: string): Promise<void> {
       const cloudFish: Fish[] = Array.isArray(cloudData.fish) ? cloudData.fish : [];
       const cloudIds = new Set(cloudFish.map(f => f.fishId));
 
-      // クラウドの魚と LWW マージ
-      const mergedFromCloud = cloudFish.map((cloudF: Fish) => {
-        const localF = localFish.find(f => f.fishId === cloudF.fishId);
-        return mergeLWW(localF, cloudF);
-      });
+      // userStatus pull 後の最新状態を読み取り、boxFish に入っている魚ID を取得
+      // ボックスに移した魚がクラウドの fish テーブルから水槽に復活しないよう除外する
+      const latestUser = await db.getUserStatus();
+      const boxFishIds = new Set((latestUser?.boxFish ?? []).map((f: Fish) => f.fishId));
 
-      // ローカルにしかない魚（まだ push されていない新規魚）も保持
-      const localOnly = localFish.filter(f => !cloudIds.has(f.fishId));
+      // クラウドの魚と LWW マージ（ボックス内の魚は除外）
+      const mergedFromCloud = cloudFish
+        .filter((cloudF: Fish) => !boxFishIds.has(cloudF.fishId))
+        .map((cloudF: Fish) => {
+          const localF = localFish.find(f => f.fishId === cloudF.fishId);
+          return mergeLWW(localF, cloudF);
+        });
+
+      // ローカルにしかない魚（まだ push されていない新規魚）も保持（ボックス内は除外）
+      const localOnly = localFish.filter(f => !cloudIds.has(f.fishId) && !boxFishIds.has(f.fishId));
 
       await db.clearFishList();
       const allMerged = [...mergedFromCloud, ...localOnly];

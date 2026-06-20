@@ -348,10 +348,18 @@ export function GameProvider({ children }: { children: ReactNode }) {
           let failed = false;
           try {
             await pullFromCloud(email);
-            // pull 完了後に React state を IndexedDB から再読み込み
-            const [updatedFish, updatedUser] = await Promise.all([getAllFish(), getUserStatus()]);
+            // pull 完了後に全 state を IndexedDB から再読み込み
+            const [updatedFish, updatedUser, updatedWords, updatedStats, updatedEncy, updatedHistory, updatedSessions, updatedLedger] = await Promise.all([
+              getAllFish(), getUserStatus(), getAllWords(), getAllWordStats(), getAllEncyclopedia(), getAllFishHistory(), getAllStudySessions(), getAllGoldLedger()
+            ]);
             setFishList(updatedFish);
             if (updatedUser) setUser(updatedUser);
+            setWords(updatedWords);
+            setWordStats(Object.fromEntries(updatedStats.map((s) => [s.wordId, s])));
+            setEncyclopedia(updatedEncy);
+            setFishHistory(updatedHistory.sort((a, b) => a.timestamp - b.timestamp));
+            setStudySessions(updatedSessions.sort((a, b) => a.timestamp - b.timestamp));
+            setGoldLedger(updatedLedger.sort((a, b) => a.timestamp - b.timestamp));
           } catch (err) {
             console.error("[Sync] Initial pull failed:", err);
             failed = true;
@@ -848,7 +856,21 @@ export function GameProvider({ children }: { children: ReactNode }) {
     const email = session?.user?.email;
     if (!email) { pushNotice("⚠️", "ログインしていないため同期できません"); return; }
     let failed = false;
-    try { await pullFromCloud(email); } catch (err) { console.error("[Sync] pull failed:", err); failed = true; }
+    try {
+      await pullFromCloud(email);
+      // pull 後に全 state を IndexedDB から再読み込み（単語・図鑑・記録も含む）
+      const [updatedFish, updatedUser, updatedWords, updatedStats, updatedEncy, updatedHistory, updatedSessions, updatedLedger] = await Promise.all([
+        getAllFish(), getUserStatus(), getAllWords(), getAllWordStats(), getAllEncyclopedia(), getAllFishHistory(), getAllStudySessions(), getAllGoldLedger()
+      ]);
+      setFishList(updatedFish);
+      if (updatedUser) setUser(updatedUser);
+      setWords(updatedWords);
+      setWordStats(Object.fromEntries(updatedStats.map((s) => [s.wordId, s])));
+      setEncyclopedia(updatedEncy);
+      setFishHistory(updatedHistory.sort((a, b) => a.timestamp - b.timestamp));
+      setStudySessions(updatedSessions.sort((a, b) => a.timestamp - b.timestamp));
+      setGoldLedger(updatedLedger.sort((a, b) => a.timestamp - b.timestamp));
+    } catch (err) { console.error("[Sync] pull failed:", err); failed = true; }
     try { await pushToCloud(email); } catch (err) { console.error("[Sync] push failed:", err); failed = true; }
     if (failed) { pushNotice("⚠️", "同期に失敗しました"); } else { pushNotice("☁️", "同期が完了しました"); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
