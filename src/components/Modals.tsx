@@ -41,23 +41,29 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   const [bgmOn, setBgmOn] = useState(isBgmEnabled);
   const [bgmVol, setBgmVol] = useState(getBgmVolume);
   const [ioMsg, setIoMsg] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   // セーブ: ローカル→クラウド（push）＋ JSONファイルをダウンロード
   const saveToFile = async () => {
-    await game.pushNow();
-    const data = await exportAllData();
-    const blob = new Blob([JSON.stringify(data, null, 2)], {
-      type: "application/json",
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `aqualingua-save-${todayString()}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    setIoMsg("💾 セーブファイルをダウンロードしました");
+    setSaving(true);
+    try {
+      await game.pushNow();
+      const data = await exportAllData();
+      const blob = new Blob([JSON.stringify(data, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `aqualingua-save-${todayString()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setIoMsg("💾 セーブファイルをダウンロードしました");
+    } finally {
+      setSaving(false);
+    }
   };
 
   // ロード: JSONファイルを読み込んで全データを置き換え → リロードで反映
@@ -166,13 +172,14 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
         <div className="rounded-xl px-3 py-2.5 mb-2 bg-mid flex items-center justify-between">
           <div>
             <div className="text-sm font-bold text-foam">データをセーブ</div>
-            <div className="text-[10px] text-dim">JSONファイルとしてダウンロード（バックアップ）</div>
+            <div className="text-[10px] text-dim">クラウド保存＋JSONダウンロード</div>
           </div>
           <button
+            disabled={saving}
             onClick={() => void saveToFile()}
-            className="text-xs px-2.5 py-1 rounded-lg font-bold bg-glow text-deep"
+            className="text-xs px-2.5 py-1 rounded-lg font-bold bg-glow text-deep disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            💾 セーブ
+            {saving ? "保存中…" : "💾 セーブ"}
           </button>
         </div>
         <div className="rounded-xl px-3 py-2.5 mb-2 bg-mid flex items-center justify-between">
