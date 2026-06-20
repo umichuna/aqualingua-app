@@ -43,7 +43,7 @@ function resizeToBase64(file: File): Promise<string> {
         canvas.width = Math.round(img.width * scale);
         canvas.height = Math.round(img.height * scale);
         canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL("image/jpeg", 0.85));
+        resolve(canvas.toDataURL("image/png"));
       };
       img.onerror = reject;
       img.src = e.target!.result as string;
@@ -238,7 +238,7 @@ export default function AdminView() {
           </div>
 
           <div>
-            <div className="text-xs font-bold text-glow mb-1">画像（任意）</div>
+            <div className="text-xs font-bold text-glow mb-1">画像（任意）<span className="font-normal text-dim ml-1">透明背景のPNGで自然に見えます</span></div>
             {form.imageUrl ? (
               <div className="flex items-center gap-3">
                 {/* eslint-disable-next-line @next/next/no-img-element */}

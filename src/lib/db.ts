@@ -150,6 +150,13 @@ export async function deleteFish(fishId: string): Promise<void> {
   await (await getLocalDB()).delete("aquarium", fishId);
 }
 
+export async function clearFishList(): Promise<void> {
+  const db = await getLocalDB();
+  const tx = db.transaction("aquarium", "readwrite");
+  await tx.store.clear();
+  await tx.done;
+}
+
 // ---------- Encyclopedia ----------
 export async function getAllEncyclopedia(): Promise<EncyclopediaEntry[]> {
   return (await getLocalDB()).getAll("encyclopedia");

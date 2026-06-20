@@ -52,6 +52,8 @@ export async function POST(req: NextRequest) {
 
   if (body.words?.length) await upsertRows(pool, userId, "words", "id", body.words.map(r => ({ ...r, data: r.data })));
   if (body.wordStats?.length) await upsertRows(pool, userId, "word_stats", "wordId", body.wordStats.map(r => ({ ...r, data: r.data })));
+  // fish は clear+rewrite（削除した魚がクラウドに残り続けるのを防ぐ）
+  await pool.request().input("userId", userId).query(`DELETE FROM fish WHERE userId = @userId`);
   if (body.fish?.length) await upsertRows(pool, userId, "fish", "fishId", body.fish.map(r => ({ ...r, data: r.data })));
   if (body.encyclopedia?.length) await upsertRows(pool, userId, "encyclopedia", "fishType", body.encyclopedia.map(r => ({ ...r, data: r.data })));
   if (body.studySessions?.length) await upsertRows(pool, userId, "study_sessions", "sessionId", body.studySessions.map(r => ({ ...r, data: r.data })));

@@ -14,7 +14,7 @@ import {
   type ReactNode,
 } from "react";
 import { useSession } from "next-auth/react";
-import { FISH_MASTER, getFishMaster, rollGachaWithWeights, type FishMaster } from "@/data/fishMaster";
+import { FISH_MASTER, rollGachaWithWeights, type FishMaster } from "@/data/fishMaster";
 import {
   ADULT_LEVEL,
   AFFECTION_GAIN_RATE,
@@ -345,15 +345,27 @@ export function GameProvider({ children }: { children: ReactNode }) {
       if (session?.user?.email) {
         const email = session.user.email;
         (async () => {
+          let failed = false;
           try {
             await pullFromCloud(email);
+            // pull 完了後に React state を IndexedDB から再読み込み
+            const [updatedFish, updatedUser] = await Promise.all([getAllFish(), getUserStatus()]);
+            setFishList(updatedFish);
+            if (updatedUser) setUser(updatedUser);
           } catch (err) {
             console.error("[Sync] Initial pull failed:", err);
+            failed = true;
           }
           try {
             await pushToCloud(email);
           } catch (err) {
             console.error("[Sync] Initial push failed:", err);
+            failed = true;
+          }
+          if (failed) {
+            pushNotice("⚠️", "同期に失敗しました");
+          } else {
+            pushNotice("☁️", "クラウド同期が完了しました");
           }
         })();
       }
@@ -790,6 +802,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
     (fishType: string) => {
       const u = userRef.current;
       persistUser({ ...u, customFish: (u.customFish ?? []).filter((f) => f.type !== fishType) });
+      // 水槽内にいる同 type の魚も削除
+      const toRemove = fishRef.current.filter((f) => f.type === fishType);
+      for (const f of toRemove) void dbDeleteFish(f.fishId);
+      if (toRemove.length > 0) setFishList((list) => list.filter((f) => f.type !== fishType));
     },
     [persistUser]
   );
