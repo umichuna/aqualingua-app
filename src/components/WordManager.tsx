@@ -7,7 +7,7 @@
 // - 登録フォーム（複数意味+ボタン、複数例文、種別ラジオ）
 // - CSV一括登録
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { parseVocabularyCsv, type CsvImportResult } from "@/lib/csv";
 import { speak } from "@/lib/speech";
 import { type Word, type WordExample, type WordGenre, type WordLevel, type WordType } from "@/lib/types";
@@ -128,6 +128,10 @@ export default function WordManager() {
   const [lastWordType, setLastWordType] = useState<WordType>("単語");
   const [lastGenre, setLastGenre] = useState<WordGenre>("日常会話");
   const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setSelWords(new Set());
+  }, [selGenres, selLevels, selTypes, query]);
 
   const toggleSet = <T,>(set: Set<T>, val: T): Set<T> => {
     const next = new Set(set);

@@ -332,39 +332,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
         setFishList(fish);
       }
 
-      // ローカルDBの読み込みが終わったらすぐに表示（クラウド同期はバックグラウンドで）
+      // ローカルDBの読み込みが終わったらすぐに表示
+      // 自動同期は完全に無効。クラウドとの同期は「☁️ 同期」ボタン（syncNow）押下時のみ実行する
       setReady(true);
-
-      // Cloud sync（ログイン済みの場合）: pull → push の順で実行
-      if (session?.user?.email) {
-        const email = session.user.email;
-        (async () => {
-          let failed = false;
-          try {
-            await pullFromCloud(email);
-            // pull 完了後に全 state を IndexedDB から再読み込み
-            const [updatedFish, updatedUser, updatedWords, updatedStats, updatedEncy, updatedHistory, updatedSessions, updatedLedger] = await Promise.all([
-              getAllFish(), getUserStatus(), getAllWords(), getAllWordStats(), getAllEncyclopedia(), getAllFishHistory(), getAllStudySessions(), getAllGoldLedger()
-            ]);
-            setFishList(updatedFish);
-            if (updatedUser) setUser(updatedUser);
-            setWords(updatedWords);
-            setWordStats(Object.fromEntries(updatedStats.map((s) => [s.wordId, s])));
-            setEncyclopedia(updatedEncy);
-            setFishHistory(updatedHistory.sort((a, b) => a.timestamp - b.timestamp));
-            setStudySessions(updatedSessions.sort((a, b) => a.timestamp - b.timestamp));
-            setGoldLedger(updatedLedger.sort((a, b) => a.timestamp - b.timestamp));
-          } catch (err) {
-            console.error("[Sync] Initial pull failed:", err);
-            failed = true;
-          }
-          if (failed) {
-            pushNotice("⚠️", "同期（pull）に失敗しました");
-          } else {
-            pushNotice("☁️", "クラウドからデータを取得しました");
-          }
-        })();
-      }
     })();
     return () => {
       cancelled = true;

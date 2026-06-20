@@ -178,9 +178,8 @@ export default function StudyView() {
   // 4択を方向に合わせて生成
   const buildChoiceQuestion = useCallback(
     (w: Word): ChoiceQuestion | null => {
-      // 同じ種別（単語/述語/会話文）の単語を選択肢候補にする。同種別が4語未満なら全単語にフォールバック
-      const sameType = words.filter((x) => x.wordType === w.wordType);
-      const pool = sameType.length >= 4 ? sameType : words;
+      // 選択肢候補は常に問題と同じ種別（単語/述語/会話文）のみ。異なる種別を混在させない
+      const pool = words.filter((x) => x.wordType === w.wordType);
 
       if (config.direction === "en2ja") {
         if (w.meanings.length === 0) return null;
@@ -227,7 +226,7 @@ export default function StudyView() {
         .map(buildChoiceQuestion)
         .filter((q): q is ChoiceQuestion => q !== null);
       if (qs.length < 1) {
-        game.pushNotice("📚", "4択を作るには単語が4つ以上必要だよ");
+        game.pushNotice("📚", "この種別では4択を作れないよ（同じ種別の単語が4つ以上必要）");
         return;
       }
       setChoiceQs(qs);

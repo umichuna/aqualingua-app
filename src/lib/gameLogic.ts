@@ -137,14 +137,14 @@ export const GACHA_TIERS: Record<GachaTier, GachaInfo> = {
     label: "スタンダードガチャ",
     price: 500,
     icon: "🎰",
-    weights: { 激安: 50, 普通: 35, 高級: 13, ロマン: 2 },
+    weights: { 激安: 35, 普通: 50, 高級: 10, ロマン: 5 },
     desc: "バランスのいい定番ガチャ。高級も狙える。",
   },
   premium: {
     label: "プレミアムガチャ",
     price: 1500,
     icon: "💎",
-    weights: { 激安: 10, 普通: 35, 高級: 40, ロマン: 15 },
+    weights: { 激安: 0, 普通: 10, 高級: 50, ロマン: 40 },
     desc: "高価だが高級・ロマンが大幅アップ！",
   },
 };
