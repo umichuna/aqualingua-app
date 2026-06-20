@@ -1,5 +1,5 @@
 import * as db from "./db";
-import type { Fish, Word, WordStats, UserStatus, EncyclopediaEntry, StudySession, GoldLedgerEntry, FishHistoryEntry } from "./types";
+import type { Fish } from "./types";
 
 /**
  * クラウド（Azure SQL）からデータを pull してローカル（IndexedDB）とマージ
@@ -49,14 +49,25 @@ export async function pullFromCloud(userId: string): Promise<void> {
       }
     }
 
-    // fish テーブル → IndexedDB `aquarium` ストア（テーブル名に注意）
-    if (cloudData.fish && Array.isArray(cloudData.fish)) {
+    // fish テーブル → IndexedDB `aquarium` ストア
+    // clear+rewrite: クラウドにない削除済み魚がゾンビ復活しないように
+    {
       const localFish = await db.getAllFish();
-      const mergedFish = cloudData.fish.map((cloudF: any) => {
+      const cloudFish: Fish[] = Array.isArray(cloudData.fish) ? cloudData.fish : [];
+      const cloudIds = new Set(cloudFish.map(f => f.fishId));
+
+      // クラウドの魚と LWW マージ
+      const mergedFromCloud = cloudFish.map((cloudF: Fish) => {
         const localF = localFish.find(f => f.fishId === cloudF.fishId);
         return mergeLWW(localF, cloudF);
       });
-      await db.putFishList(mergedFish);
+
+      // ローカルにしかない魚（まだ push されていない新規魚）も保持
+      const localOnly = localFish.filter(f => !cloudIds.has(f.fishId));
+
+      await db.clearFishList();
+      const allMerged = [...mergedFromCloud, ...localOnly];
+      if (allMerged.length > 0) await db.putFishList(allMerged);
     }
 
     // encyclopedia テーブル → IndexedDB `encyclopedia` ストア

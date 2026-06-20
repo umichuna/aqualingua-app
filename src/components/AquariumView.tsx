@@ -36,6 +36,7 @@ export default function AquariumView() {
   const [baitKind, setBaitKind] = useState<BaitKind>("basic");
   const [renameTarget, setRenameTarget] = useState<Fish | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [releaseConfirm, setReleaseConfirm] = useState<string | null>(null);
 
   // 底生魚は y 65〜80%、その他は 15〜60% の範囲で泳ぐ
   const defaultPos = (f: Fish, i: number): Pos => {
@@ -349,7 +350,7 @@ export default function AquariumView() {
                       水槽へ
                     </button>
                     <button
-                      onClick={() => game.releaseBoxFish(f.fishId)}
+                      onClick={() => setReleaseConfirm(f.fishId)}
                       className="text-[10px] px-2 py-0.5 rounded-full bg-white/10 text-dim font-bold whitespace-nowrap"
                     >
                       🌊 逃がす
@@ -361,6 +362,43 @@ export default function AquariumView() {
           </div>
         </div>
       )}
+
+      {/* 逃がす確認ダイアログ */}
+      {releaseConfirm !== null && (() => {
+        const boxFish = user.boxFish ?? [];
+        const f = boxFish.find((b) => b.fishId === releaseConfirm);
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/70"
+            onClick={() => setReleaseConfirm(null)}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-xs p-5 bg-sea font-pixel flex flex-col gap-4"
+              style={{ border: "4px solid var(--aqua-glow)", boxShadow: "0 0 0 4px var(--aqua-deep)" }}
+            >
+              <p className="text-foam text-sm font-bold text-center">
+                🌊 {f?.name ?? "この魚"} を海へ帰す？
+              </p>
+              <p className="text-dim text-xs text-center">帰した魚は戻ってこないよ</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setReleaseConfirm(null)}
+                  className="flex-1 py-2 text-sm font-bold bg-white/10 text-dim"
+                >
+                  やめる
+                </button>
+                <button
+                  onClick={() => { game.releaseBoxFish(releaseConfirm); setReleaseConfirm(null); }}
+                  className="flex-1 py-2 text-sm font-bold bg-coral text-white"
+                >
+                  逃がす
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* 名前変更モーダル */}
       {renameTarget && (

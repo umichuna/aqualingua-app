@@ -128,7 +128,7 @@ export interface StudySession {
 }
 
 // 歴代おさかな履歴（出荷・逃走したおさかなの記録）
-export type FishLeaveReason = "shipped" | "runaway";
+export type FishLeaveReason = "shipped" | "runaway" | "released";
 
 export interface FishHistoryEntry {
   entryId: string;

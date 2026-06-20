@@ -525,15 +525,13 @@ export function GameProvider({ children }: { children: ReactNode }) {
     (fishId: string) => {
       const fish = fishRef.current.find((f) => f.fishId === fishId);
       if (!fish) return;
+      const u = userRef.current;
       setFishList((list) => list.filter((f) => f.fishId !== fishId));
       void dbDeleteFish(fishId);
-      setUser((u) => ({
-        ...u,
-        boxFish: [...(u.boxFish || []), fish],
-      }));
+      persistUser({ ...u, boxFish: [...(u.boxFish ?? []), fish] });
       pushNotice("📦", `${fish.name} をボックスに入れました`);
     },
-    [pushNotice]
+    [persistUser, pushNotice]
   );
 
   const addFishToTank = useCallback(
@@ -821,7 +819,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         entryId: crypto.randomUUID(),
         fishType: fish.type,
         name: fish.name,
-        reason: "runaway" as FishLeaveReason,
+        reason: "released" as FishLeaveReason,
         date: todayString(),
         timestamp: now,
         lastUpdated: now,
