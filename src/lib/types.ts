@@ -108,6 +108,7 @@ export interface UserStatus {
   boxCapacity?: number; // ボックス上限（デフォルト5）
   freeMemo?: string; // フリーしごと画面の永続メモ
   customFish?: CustomFishDef[]; // 管理者が追加したカスタム魚
+  deletedWordIds?: string[]; // 削除した単語ID（同期でのゾンビ復活防止）
 }
 
 export type StudyMode = "self" | "choice" | "listen";

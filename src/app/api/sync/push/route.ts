@@ -50,6 +50,8 @@ export async function POST(req: NextRequest) {
   const body: PushPayload = await req.json();
   const pool = await getPool();
 
+  // words は clear+rewrite（削除した単語がクラウドに残り続けるのを防ぐ）
+  await pool.request().input("userId", userId).query(`DELETE FROM words WHERE userId = @userId`);
   if (body.words?.length) await upsertRows(pool, userId, "words", "id", body.words.map(r => ({ ...r, data: r.data })));
   if (body.wordStats?.length) await upsertRows(pool, userId, "word_stats", "wordId", body.wordStats.map(r => ({ ...r, data: r.data })));
   // fish は clear+rewrite（削除した魚がクラウドに残り続けるのを防ぐ）

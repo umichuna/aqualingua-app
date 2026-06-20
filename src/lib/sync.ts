@@ -30,10 +30,15 @@ export async function pullFromCloud(userId: string): Promise<void> {
     // words テーブル → IndexedDB `words` ストア
     if (cloudData.words && Array.isArray(cloudData.words)) {
       const localWords = await db.getAllWords();
-      const mergedWords = cloudData.words.map((cloudWord: any) => {
-        const localWord = localWords.find(w => w.id === cloudWord.id);
-        return mergeLWW(localWord, cloudWord);
-      });
+      // userStatus pull 後の deletedWordIds で削除済み単語の復活を防ぐ
+      const latestUser = await db.getUserStatus();
+      const deletedWordIds = new Set(latestUser?.deletedWordIds ?? []);
+      const mergedWords = cloudData.words
+        .filter((cloudWord: any) => !deletedWordIds.has(cloudWord.id))
+        .map((cloudWord: any) => {
+          const localWord = localWords.find(w => w.id === cloudWord.id);
+          return mergeLWW(localWord, cloudWord);
+        });
       await db.putWords(mergedWords);
     }
 

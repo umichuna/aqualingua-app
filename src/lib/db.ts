@@ -110,6 +110,7 @@ export function createInitialUserStatus(): UserStatus {
     lastRewardDate: "",
     onboardingDone: false,
     customGenres: [],
+    deletedWordIds: [],
   };
 }
 

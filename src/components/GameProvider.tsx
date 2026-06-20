@@ -710,8 +710,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
       return next;
     });
     void dbDeleteWord(id);
-    schedulePush();
-  }, [schedulePush]);
+    const u = userRef.current;
+    persistUser({ ...u, deletedWordIds: [...(u.deletedWordIds ?? []), id] });
+  }, [persistUser]);
 
   const recordAnswer = useCallback((wordId: string, correct: boolean) => {
     setWordStats((s) => {
