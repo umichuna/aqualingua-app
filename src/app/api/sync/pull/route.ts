@@ -3,15 +3,19 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getPool } from "@/lib/azure-sql";
 
+// Vercel のサーバー実行時間上限を延長（許可プランで有効。非対応でも無害）
+export const maxDuration = 60;
+
 export async function GET() {
   const session = await getServerSession(authOptions);
   const userId = (session?.user as { id?: string } | undefined)?.id ?? session?.user?.email;
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const pool = await getPool();
+  try {
+    const pool = await getPool();
 
-  // sync.ts のキー名（camelCase）に合わせる
-  const tables = [
+    // sync.ts のキー名（camelCase）に合わせる
+    const tables = [
     { name: "words",          resultKey: "words",         key: "id" },
     { name: "word_stats",     resultKey: "wordStats",     key: "wordId" },
     { name: "fish",           resultKey: "fish",          key: "fishId" },
@@ -41,5 +45,10 @@ export async function GET() {
     ? { ...JSON.parse(sr.data), lastUpdated: sr.lastUpdated }
     : null;
 
-  return NextResponse.json(result);
+    return NextResponse.json(result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "unknown error";
+    console.error("[Sync] pull failed:", err);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }

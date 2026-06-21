@@ -59,7 +59,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
       const msg = err instanceof Error ? err.message : "";
       cloudMsg = msg === "not-logged-in"
         ? "⚠️ 未ログインのためクラウド保存スキップ　"
-        : "⚠️ クラウド保存失敗　";
+        : `⚠️ クラウド保存失敗（${msg || "原因不明"}）　`;
       console.error("[Save] push failed:", err);
     }
     try {

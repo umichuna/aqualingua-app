@@ -1,6 +1,17 @@
 import * as db from "./db";
 import type { Fish } from "./types";
 
+// サーバーが返した実エラー文言（{ error } JSON）を読み取る。無ければ statusText。
+async function readError(response: Response): Promise<string> {
+  try {
+    const body = await response.json();
+    if (body && typeof body.error === "string" && body.error) return body.error;
+  } catch {
+    // JSON でない場合は無視
+  }
+  return response.statusText || `HTTP ${response.status}`;
+}
+
 /**
  * クラウド（Azure SQL）からデータを pull してローカル（IndexedDB）とマージ
  * LWW（Last Write Wins）: lastUpdated が新しい方を採用
@@ -15,7 +26,7 @@ export async function pullFromCloud(userId: string): Promise<void> {
     });
 
     if (!response.ok) {
-      throw new Error(`Pull failed: ${response.statusText}`);
+      throw new Error(`Pull failed: ${await readError(response)}`);
     }
 
     const cloudData = await response.json();
@@ -179,7 +190,7 @@ export async function pushToCloud(userId: string): Promise<void> {
     });
 
     if (!response.ok) {
-      throw new Error(`Push failed: ${response.statusText}`);
+      throw new Error(`Push failed: ${await readError(response)}`);
     }
 
     console.log(`[Sync] Push completed for userId: ${userId}`);
