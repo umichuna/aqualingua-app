@@ -4,6 +4,7 @@
 // UI補完: デイリー日付判定(#18)・設定のMVP対応(#19)・オンボーディング(#16)
 
 import { useRef, useState } from "react";
+import { signIn, signOut, useSession } from "next-auth/react";
 import { exportAllData, importAllData, type BackupData } from "@/lib/db";
 import { todayString } from "@/lib/gameLogic";
 import {
@@ -36,6 +37,8 @@ function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
 // ---------- 設定（UI補完 #19: MVP対応版） ----------
 export function SettingsModal({ onClose }: { onClose: () => void }) {
   const game = useGame();
+  const { data: session } = useSession();
+  const email = session?.user?.email;
   const [confirmReset, setConfirmReset] = useState(false);
   const [sfxOn, setSfxOn] = useState(isSfxEnabled);
   const [bgmOn, setBgmOn] = useState(isBgmEnabled);
@@ -44,7 +47,6 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-  const busy = saving || syncing;
 
   // セーブ: ローカル→クラウド（push）＋ JSONファイルをダウンロード
   const saveToFile = async () => {
@@ -96,15 +98,15 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70" onClick={busy ? undefined : onClose}>
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70" onClick={onClose}>
       <div
         onClick={(e) => e.stopPropagation()}
         className="w-full max-w-md rounded-t-3xl sm:rounded-3xl p-5 bg-sea max-h-[90dvh] overflow-y-auto"
       >
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-bold text-lg text-foam">⚙️ 設定</h2>
-          <button onClick={busy ? undefined : onClose} disabled={busy} className="text-sm px-3 py-1 rounded-lg bg-white/10 text-dim disabled:opacity-40 disabled:cursor-not-allowed">
-            {busy ? "処理中…" : "閉じる"}
+          <button onClick={onClose} className="text-sm px-3 py-1 rounded-lg bg-white/10 text-dim">
+            閉じる
           </button>
         </div>
 
@@ -238,6 +240,37 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
               {syncing ? "同期中…" : "☁️ 同期"}
             </button>
           </div>
+        </div>
+
+        <div className="text-[10px] font-bold tracking-widest mb-1 text-glow">アカウント</div>
+        <div className="rounded-xl px-3 py-2.5 mb-3 bg-mid">
+          {email ? (
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm font-bold text-foam">ログイン中</div>
+                <div className="text-[10px] text-dim truncate max-w-[200px]">{email}</div>
+              </div>
+              <button
+                onClick={() => void signOut()}
+                className="text-xs px-2.5 py-1 rounded-lg bg-white/10 text-dim"
+              >
+                ログアウト
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm font-bold text-foam">未ログイン</div>
+                <div className="text-[10px] text-dim">クラウド同期にはログインが必要です</div>
+              </div>
+              <button
+                onClick={() => void signIn("google")}
+                className="text-xs px-2.5 py-1 rounded-lg font-bold bg-glow text-deep"
+              >
+                Googleでログイン
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="text-[10px] font-bold tracking-widest mb-1 text-coral">危険ゾーン</div>
