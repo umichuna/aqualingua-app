@@ -44,6 +44,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const busy = saving || syncing;
 
   // セーブ: ローカル→クラウド（push）＋ JSONファイルをダウンロード
   const saveToFile = async () => {
@@ -95,15 +96,15 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70" onClick={busy ? undefined : onClose}>
       <div
         onClick={(e) => e.stopPropagation()}
         className="w-full max-w-md rounded-t-3xl sm:rounded-3xl p-5 bg-sea max-h-[90dvh] overflow-y-auto"
       >
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-bold text-lg text-foam">⚙️ 設定</h2>
-          <button onClick={onClose} className="text-sm px-3 py-1 rounded-lg bg-white/10 text-dim">
-            閉じる
+          <button onClick={busy ? undefined : onClose} disabled={busy} className="text-sm px-3 py-1 rounded-lg bg-white/10 text-dim disabled:opacity-40 disabled:cursor-not-allowed">
+            {busy ? "処理中…" : "閉じる"}
           </button>
         </div>
 
