@@ -298,9 +298,12 @@ export function GameProvider({ children }: { children: ReactNode }) {
         pushNotice("🤒", `${f.name} が病気になってしまった！おくすりをあげよう`);
       }
       persistFishList(stayed);
-      persistUser({ ...currentUser, lastActiveTime: now });
+      // lastActiveTime だけの更新は lastUpdated を上書きしない（LWW の整合性を守るため）
+      const withActive = { ...currentUser, lastActiveTime: now };
+      setUser(withActive);
+      void putUserStatus(withActive);
     },
-    [persistFishList, persistUser, pushNotice]
+    [persistFishList, setUser, pushNotice]
   );
 
   // ---------- 初期ロード ----------

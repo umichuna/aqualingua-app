@@ -118,7 +118,7 @@ export function createInitialUserStatus(): UserStatus {
     jobLevel: 1,
     achievedTitles: [],
     lastActiveTime: now,
-    lastUpdated: now,
+    lastUpdated: 0, // 0 = 未同期の初期値。クラウドデータが常に勝つようにする
     items: { baitBasic: 5, baitPremium: 0, medicine: 0 },
     tankCapacity: 4,
     totalStudyCount: 0,
