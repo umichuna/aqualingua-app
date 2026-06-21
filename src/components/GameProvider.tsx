@@ -821,7 +821,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
     const email = session?.user?.email;
     if (!email) { pushNotice("⚠️", "ログインしていないため同期できません"); return; }
     try {
-      await pullFromCloud(email);
+      const restored = await pullFromCloud(email);
+      if (!restored) {
+        pushNotice("⚠️", "クラウドにデータがありません（先にセーブしてください）");
+        return;
+      }
       // pull 後に全 state を IndexedDB から再読み込み
       const [updatedFish, updatedUser, updatedWords, updatedStats, updatedEncy, updatedHistory, updatedSessions, updatedLedger] = await Promise.all([
         getAllFish(), getUserStatus(), getAllWords(), getAllWordStats(), getAllEncyclopedia(), getAllFishHistory(), getAllStudySessions(), getAllGoldLedger()
@@ -834,10 +838,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
       setFishHistory(updatedHistory.sort((a, b) => a.timestamp - b.timestamp));
       setStudySessions(updatedSessions.sort((a, b) => a.timestamp - b.timestamp));
       setGoldLedger(updatedLedger.sort((a, b) => a.timestamp - b.timestamp));
-      pushNotice("☁️", "クラウドから同期しました");
+      pushNotice("☁️", "クラウドから復元しました");
     } catch (err) {
       console.error("[Sync] pull failed:", err);
-      pushNotice("⚠️", "同期に失敗しました");
+      const msg = err instanceof Error ? err.message : "";
+      pushNotice("⚠️", `同期に失敗しました${msg ? `（${msg}）` : ""}`);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user?.email, pushNotice]);

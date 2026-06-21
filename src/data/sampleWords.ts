@@ -138,5 +138,11 @@ const SAMPLES: Omit<Word, "id" | "lastUpdated">[] = [
 
 export function buildSampleWords(): Word[] {
   const now = Date.now();
-  return SAMPLES.map((s) => ({ ...s, id: crypto.randomUUID(), lastUpdated: now }));
+  // ID は固定（sample-001〜）。別端末で再オンボーディングしても同じカードは同じIDになり、
+  // 同期時に重複しない。
+  return SAMPLES.map((s, i) => ({
+    ...s,
+    id: `sample-${String(i + 1).padStart(3, "0")}`,
+    lastUpdated: now,
+  }));
 }

@@ -268,6 +268,40 @@ export async function syncPutGoldLedgerEntry(entry: GoldLedgerEntry): Promise<vo
   await (await getLocalDB()).put("goldLedger", entry);
 }
 
+// ---------- クラウド復元用: 各ストアをまるごと置き換える（clear → put） ----------
+// 同期（クラウド=正）の pull で使用。lastUpdated は上書きしない。
+async function replaceStore<K extends "words" | "wordStats" | "encyclopedia" | "studySessions" | "goldLedger" | "fishHistory">(
+  storeName: K,
+  records: AppDBSchema[K]["value"][]
+): Promise<void> {
+  const db = await getLocalDB();
+  const tx = db.transaction(storeName, "readwrite");
+  await tx.store.clear();
+  // 型の都合上 any キャストせず put（各ストアの value 型に一致）
+  await Promise.all(records.map((r) => tx.store.put(r)));
+  await tx.done;
+}
+
+export async function replaceWords(words: Word[]): Promise<void> {
+  await replaceStore("words", words);
+}
+export async function replaceWordStats(stats: WordStats[]): Promise<void> {
+  await replaceStore("wordStats", stats);
+}
+export async function replaceEncyclopedia(entries: EncyclopediaEntry[]): Promise<void> {
+  await replaceStore("encyclopedia", entries);
+}
+export async function replaceStudySessions(sessions: StudySession[]): Promise<void> {
+  await replaceStore("studySessions", sessions);
+}
+export async function replaceGoldLedger(entries: GoldLedgerEntry[]): Promise<void> {
+  await replaceStore("goldLedger", entries);
+}
+export async function replaceFishHistory(entries: FishHistoryEntry[]): Promise<void> {
+  await replaceStore("fishHistory", entries);
+}
+// 魚は clearFishList() + syncPutFishList() を流用するため専用ヘルパーは不要
+
 // ---------- 全データ初期化（設定画面の危険ゾーン用） ----------
 const ALL_STORES = [
   "words",

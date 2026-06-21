@@ -226,18 +226,22 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
         <div className="rounded-xl px-3 py-2.5 mb-3 bg-mid">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm font-bold text-foam">クラウド同期</div>
-              <div className="text-[10px] text-dim">クラウド→ローカルに受信する</div>
+              <div className="text-sm font-bold text-foam">クラウドから復元</div>
+              <div className="text-[10px] text-dim">クラウドの内容で手元を上書きする</div>
             </div>
             <button
               disabled={syncing}
               onClick={() => {
+                const ok = window.confirm(
+                  "クラウドのデータで上書きして復元します。\nまだセーブしていない手元の変更は消えます。よろしいですか？"
+                );
+                if (!ok) return;
                 setSyncing(true);
                 void game.syncNow().finally(() => setSyncing(false));
               }}
               className="text-xs px-2.5 py-1 rounded-lg font-bold bg-glow text-deep disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {syncing ? "同期中…" : "☁️ 同期"}
+              {syncing ? "復元中…" : "☁️ 復元"}
             </button>
           </div>
         </div>
