@@ -50,6 +50,14 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
 
   // セーブ: ローカル→クラウド（push）＋ JSONファイルをダウンロード
   const saveToFile = async () => {
+    // 事故防止: 手元が空に見えるときは、クラウドの本物を上書きしないか確認する
+    const looksEmpty = game.user.totalStudyCount === 0 && game.user.gold === 0;
+    if (looksEmpty) {
+      const ok = window.confirm(
+        "手元のデータが空のようです。\nこのまま保存すると、クラウドにある以前のデータを上書きして消してしまう恐れがあります。\n\n（前のデータを取り戻したい場合は、キャンセルして先に「☁️復元」を押してください）\n\n本当に保存しますか？"
+      );
+      if (!ok) return;
+    }
     setSaving(true);
     let cloudMsg = "";
     try {

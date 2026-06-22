@@ -57,7 +57,7 @@ async function mergeTable(
         ) j
       ) AS s
         ON t.userId = s.userId AND t.${keyCol} = s.${keyCol}
-      WHEN MATCHED AND s.lastUpdated > t.lastUpdated THEN
+      WHEN MATCHED THEN
         UPDATE SET data = s.data, lastUpdated = s.lastUpdated
       WHEN NOT MATCHED THEN
         INSERT (userId, ${keyCol}, data, lastUpdated)
@@ -120,7 +120,7 @@ export async function POST(req: NextRequest) {
         .query(`
           MERGE user_status AS t
           USING (SELECT @userId AS userId) AS s ON t.userId = s.userId
-          WHEN MATCHED AND @lastUpdated > t.lastUpdated THEN
+          WHEN MATCHED THEN
             UPDATE SET data = @data, lastUpdated = @lastUpdated
           WHEN NOT MATCHED THEN
             INSERT (userId, data, lastUpdated) VALUES (@userId, @data, @lastUpdated);
