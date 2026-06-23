@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { DotGothic16 } from "next/font/google";
 import { SessionProviderWrapper } from "@/components/SessionProviderWrapper";
+import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import "./globals.css";
 
 const dotGothic = DotGothic16({
@@ -38,6 +39,7 @@ export default function RootLayout({
   return (
     <html lang="ja" className={`${dotGothic.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col">
+        <ServiceWorkerRegister />
         <SessionProviderWrapper>
           {children}
         </SessionProviderWrapper>
