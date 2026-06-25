@@ -48,28 +48,9 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   const [syncing, setSyncing] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // セーブ: ローカル→クラウド（push）＋ JSONファイルをダウンロード
-  const saveToFile = async () => {
-    // 事故防止: 手元が空に見えるときは、クラウドの本物を上書きしないか確認する
-    const looksEmpty = game.user.totalStudyCount === 0 && game.user.gold === 0;
-    if (looksEmpty) {
-      const ok = window.confirm(
-        "手元のデータが空のようです。\nこのまま保存すると、クラウドにある以前のデータを上書きして消してしまう恐れがあります。\n\n（前のデータを取り戻したい場合は、キャンセルして先に「☁️復元」を押してください）\n\n本当に保存しますか？"
-      );
-      if (!ok) return;
-    }
+  // JSONセーブ: JSONファイルをダウンロード
+  const saveToJSON = async () => {
     setSaving(true);
-    let cloudMsg = "";
-    try {
-      await game.pushNow();
-      cloudMsg = "☁️ クラウド保存OK　";
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "";
-      cloudMsg = msg === "not-logged-in"
-        ? "⚠️ 未ログインのためクラウド保存スキップ　"
-        : `⚠️ クラウド保存失敗（${msg || "原因不明"}）　`;
-      console.error("[Save] push failed:", err);
-    }
     try {
       const data = await exportAllData();
       const blob = new Blob([JSON.stringify(data, null, 2)], {
@@ -81,9 +62,35 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
       a.download = `aqualingua-save-${todayString()}.json`;
       a.click();
       URL.revokeObjectURL(url);
-      setIoMsg(cloudMsg + "💾 JSONダウンロードしました");
+      setIoMsg("💾 JSONダウンロードしました");
     } catch {
-      setIoMsg(cloudMsg + "⚠️ JSONダウンロード失敗");
+      setIoMsg("⚠️ JSONダウンロード失敗");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // クラウドセーブ: ローカル→クラウド（push）
+  const pushToCloud = async () => {
+    // 事故防止: 手元が空に見えるときは、クラウドの本物を上書きしないか確認する
+    const looksEmpty = game.user.totalStudyCount === 0 && game.user.gold === 0;
+    if (looksEmpty) {
+      const ok = window.confirm(
+        "手元のデータが空のようです。\nこのまま保存すると、クラウドにある以前のデータを上書きして消してしまう恐れがあります。\n\n（前のデータを取り戻したい場合は、キャンセルして先に「☁️復元」を押してください）\n\n本当に保存しますか？"
+      );
+      if (!ok) return;
+    }
+    setSaving(true);
+    try {
+      await game.pushNow();
+      setIoMsg("☁️ クラウド保存OK");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "";
+      const errorMsg = msg === "not-logged-in"
+        ? "⚠️ 未ログイン（クラウド保存にはログインが必要）"
+        : `⚠️ クラウド保存失敗（${msg || "原因不明"}）`;
+      setIoMsg(errorMsg);
+      console.error("[Cloud Save] push failed:", err);
     } finally {
       setSaving(false);
     }
@@ -191,15 +198,15 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
           )}
         </div>
 
-        <div className="text-[10px] font-bold tracking-widest mb-1 text-glow">セーブ &amp; ロード</div>
+        <div className="text-[10px] font-bold tracking-widest mb-1 text-glow">JSONファイル</div>
         <div className="rounded-xl px-3 py-2.5 mb-2 bg-mid flex items-center justify-between">
           <div>
-            <div className="text-sm font-bold text-foam">データをセーブ</div>
-            <div className="text-[10px] text-dim">クラウド保存＋JSONダウンロード</div>
+            <div className="text-sm font-bold text-foam">JSONセーブ</div>
+            <div className="text-[10px] text-dim">データをダウンロード</div>
           </div>
           <button
             disabled={saving}
-            onClick={() => void saveToFile()}
+            onClick={() => void saveToJSON()}
             className="text-xs px-2.5 py-1 rounded-lg font-bold bg-glow text-deep disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {saving ? "保存中…" : "💾 セーブ"}
@@ -207,8 +214,8 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
         </div>
         <div className="rounded-xl px-3 py-2.5 mb-2 bg-mid flex items-center justify-between">
           <div>
-            <div className="text-sm font-bold text-foam">データをロード</div>
-            <div className="text-[10px] text-dim">セーブファイルを読み込み（今のデータは上書き）</div>
+            <div className="text-sm font-bold text-foam">JSONロード</div>
+            <div className="text-[10px] text-dim">セーブファイルを読み込み（上書き）</div>
           </div>
           <button
             onClick={() => fileRef.current?.click()}
@@ -231,10 +238,23 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
         {ioMsg && <p className="text-xs text-glow mb-2">{ioMsg}</p>}
 
         <div className="text-[10px] font-bold tracking-widest mb-1 text-glow">データ &amp; 同期</div>
+        <div className="rounded-xl px-3 py-2.5 mb-2 bg-mid flex items-center justify-between">
+          <div>
+            <div className="text-sm font-bold text-foam">クラウドセーブ</div>
+            <div className="text-[10px] text-dim">手元のデータをアップロード</div>
+          </div>
+          <button
+            disabled={saving}
+            onClick={() => void pushToCloud()}
+            className="text-xs px-2.5 py-1 rounded-lg font-bold bg-glow text-deep disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {saving ? "保存中…" : "☁️ セーブ"}
+          </button>
+        </div>
         <div className="rounded-xl px-3 py-2.5 mb-3 bg-mid">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm font-bold text-foam">クラウドから復元</div>
+              <div className="text-sm font-bold text-foam">クラウド復元</div>
               <div className="text-[10px] text-dim">クラウドの内容で手元を上書きする</div>
             </div>
             <button
