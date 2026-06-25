@@ -44,13 +44,14 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   const [bgmOn, setBgmOn] = useState(isBgmEnabled);
   const [bgmVol, setBgmVol] = useState(getBgmVolume);
   const [ioMsg, setIoMsg] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [savingJSON, setSavingJSON] = useState(false);
+  const [savingCloud, setSavingCloud] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   // JSONセーブ: JSONファイルをダウンロード
   const saveToJSON = async () => {
-    setSaving(true);
+    setSavingJSON(true);
     try {
       const data = await exportAllData();
       const blob = new Blob([JSON.stringify(data, null, 2)], {
@@ -66,7 +67,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
     } catch {
       setIoMsg("⚠️ JSONダウンロード失敗");
     } finally {
-      setSaving(false);
+      setSavingJSON(false);
     }
   };
 
@@ -80,7 +81,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
       );
       if (!ok) return;
     }
-    setSaving(true);
+    setSavingCloud(true);
     try {
       await game.pushNow();
       setIoMsg("☁️ クラウド保存OK");
@@ -92,7 +93,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
       setIoMsg(errorMsg);
       console.error("[Cloud Save] push failed:", err);
     } finally {
-      setSaving(false);
+      setSavingCloud(false);
     }
   };
 
@@ -205,11 +206,11 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
             <div className="text-[10px] text-dim">データをダウンロード</div>
           </div>
           <button
-            disabled={saving}
+            disabled={savingJSON}
             onClick={() => void saveToJSON()}
             className="text-xs px-2.5 py-1 rounded-lg font-bold bg-glow text-deep disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {saving ? "保存中…" : "💾 セーブ"}
+            {savingJSON ? "保存中…" : "💾 セーブ"}
           </button>
         </div>
         <div className="rounded-xl px-3 py-2.5 mb-2 bg-mid flex items-center justify-between">
@@ -244,11 +245,11 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
             <div className="text-[10px] text-dim">手元のデータをアップロード</div>
           </div>
           <button
-            disabled={saving}
+            disabled={savingCloud}
             onClick={() => void pushToCloud()}
             className="text-xs px-2.5 py-1 rounded-lg font-bold bg-glow text-deep disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {saving ? "保存中…" : "☁️ セーブ"}
+            {savingCloud ? "保存中…" : "☁️ セーブ"}
           </button>
         </div>
         <div className="rounded-xl px-3 py-2.5 mb-3 bg-mid">
