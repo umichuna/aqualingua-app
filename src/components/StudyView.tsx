@@ -145,8 +145,8 @@ export default function StudyView() {
   const [resultExtra, setResultExtra] = useState<string[]>([]);
   // 繰り返し出題で2回目以降かどうかを判定（初回正解だけスコアに数える）
   const attemptedRef = useRef<Set<string>>(new Set());
-  // このセッションで直前に間違えた単語（次に1発正解したら苦手リセット）
-  const lastWrongRef = useRef<Set<string>>(new Set());
+  // セッション内の単語ごとの間違い回数（3回でに苦手登録）
+  const sessionWrongRef = useRef<Record<string, number>>({});
 
   // ---------- 絞り込み（複数選択対応） ----------
   const filterPool = useCallback((): Word[] => {
@@ -239,7 +239,7 @@ export default function StudyView() {
       setOriginalCount(qWords.length);
     }
     attemptedRef.current = new Set();
-    lastWrongRef.current = new Set();
+    sessionWrongRef.current = {};
     setQuizWords(qWords);
     setQIndex(0);
     setScore(0);
@@ -536,15 +536,19 @@ export default function StudyView() {
           attemptedRef.current.add(q.word.id);
           if (correct) sfx.correct();
           else sfx.wrong();
-          if (correct && firstTry) setScore((s) => s + 1);
-          // 直前に間違えた単語を1発で正解したら苦手リセット
-          if (correct && lastWrongRef.current.has(q.word.id)) {
-            game.resetWordWeak(q.word.id);
-            lastWrongRef.current.delete(q.word.id);
-          } else if (!correct) {
-            lastWrongRef.current.add(q.word.id);
+          if (correct) {
+            if (firstTry) {
+              setScore((s) => s + 1);
+              game.resetWordWeak(q.word.id); // 1発正解で苦手リセット（セッションをまたいでもOK）
+            }
+            game.recordAnswer(q.word.id, true);
+          } else {
+            const cnt = (sessionWrongRef.current[q.word.id] ?? 0) + 1;
+            sessionWrongRef.current[q.word.id] = cnt;
+            if (cnt === 3) {
+              game.recordAnswer(q.word.id, false); // セッション内3回目で苦手登録
+            }
           }
-          game.recordAnswer(q.word.id, correct);
           // 間違えた問題を末尾に追加（繰り返しオプション）
           let queue = choiceQs;
           if (!correct && config.repeatUntilCorrect) {
@@ -581,15 +585,19 @@ export default function StudyView() {
           attemptedRef.current.add(w.id);
           if (ok) sfx.correct();
           else sfx.wrong();
-          if (ok && firstTry) setScore((s) => s + 1);
-          // 直前に間違えた単語を1発で正解したら苦手リセット
-          if (ok && lastWrongRef.current.has(w.id)) {
-            game.resetWordWeak(w.id);
-            lastWrongRef.current.delete(w.id);
-          } else if (!ok) {
-            lastWrongRef.current.add(w.id);
+          if (ok) {
+            if (firstTry) {
+              setScore((s) => s + 1);
+              game.resetWordWeak(w.id); // 1発正解で苦手リセット（セッションをまたいでもOK）
+            }
+            game.recordAnswer(w.id, true);
+          } else {
+            const cnt = (sessionWrongRef.current[w.id] ?? 0) + 1;
+            sessionWrongRef.current[w.id] = cnt;
+            if (cnt === 3) {
+              game.recordAnswer(w.id, false); // セッション内3回目で苦手登録
+            }
           }
-          game.recordAnswer(w.id, ok);
           let queue = quizWords;
           if (!ok && config.repeatUntilCorrect) {
             queue = [...quizWords, w];
