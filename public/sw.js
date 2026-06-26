@@ -1,6 +1,5 @@
-const CACHE_NAME = "aqualingua-v2";
+const CACHE_NAME = "aqualingua-v3";
 const STATIC_ASSETS = [
-  "/",
   "/manifest.json",
 ];
 const API_NO_CACHE = [
@@ -37,10 +36,12 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
-// フェッチ: API はネットワーク優先、静的アセットはキャッシュ優先
+// フェッチ戦略
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   const url = new URL(request.url);
+
+  if (request.method !== "GET") return;
 
   // API エンドポイント → ネットワーク優先（セッション/同期は必ずサーバーと通信）
   if (API_NO_CACHE.some((path) => url.pathname.startsWith(path))) {
@@ -55,11 +56,28 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // 静的アセット → キャッシュファースト
-  if (
-    request.method === "GET" &&
-    (url.pathname.match(/\.(js|css|png|jpg|jpeg|svg|gif|woff2)$/i) || url.pathname === "/")
-  ) {
+  // HTML（ページ本体）→ ネットワーク優先。
+  // これをキャッシュ優先にすると、古いHTMLが古いJSを指し続けて
+  // 新しいコードが永遠に反映されなくなるため必ずネットワーク優先にする。
+  const isHTML =
+    request.mode === "navigate" ||
+    request.destination === "document" ||
+    url.pathname === "/";
+  if (isHTML) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+          return response;
+        })
+        .catch(() => caches.match(request).then((r) => r || caches.match("/")))
+    );
+    return;
+  }
+
+  // ハッシュ付き静的アセット（JS/CSS/画像/フォント）→ 内容不変なのでキャッシュ優先でOK
+  if (url.pathname.match(/\.(js|css|png|jpg|jpeg|svg|gif|woff2)$/i)) {
     event.respondWith(
       caches.match(request).then((response) => {
         if (response) return response;
