@@ -60,6 +60,7 @@ import {
 } from "@/lib/db";
 import { sfx } from "@/lib/sound";
 import { pullFromCloud, pushToCloud } from "@/lib/sync";
+import { deleteSharedCustomFish, fetchSharedCustomFish, postSharedCustomFish } from "@/lib/customFish";
 import type {
   CustomFishDef,
   EncyclopediaEntry,
@@ -174,8 +175,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const [studySessions, setStudySessions] = useState<StudySession[]>([]);
   const [goldLedger, setGoldLedger] = useState<GoldLedgerEntry[]>([]);
   const [notices, setNotices] = useState<GameNotice[]>([]);
+  // 全員共有のカスタム魚（クラウドの shared_custom_fish から取得）
+  const [sharedCustomFish, setSharedCustomFish] = useState<CustomFishDef[]>([]);
   const userRef = useRef(user);
   const fishRef = useRef(fishList);
+  const allFishMasterRef = useRef<FishMaster[]>(FISH_MASTER);
   useEffect(() => {
     userRef.current = user;
     fishRef.current = fishList;
@@ -339,6 +343,50 @@ export function GameProvider({ children }: { children: ReactNode }) {
       // ローカルDBの読み込みが終わったらすぐに表示
       // 自動同期は完全に無効。クラウドとの同期は「☁️ 同期」ボタン（syncNow）押下時のみ実行する
       setReady(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.user?.email]);
+
+  // ---------- 全員共有のカスタム魚を取得 ----------
+  // ログイン中に共有テーブルから取得して全ユーザーのガチャ・図鑑に反映する。
+  // さらに、この端末にローカルだけで持っていたカスタム魚を共有へ移行する
+  // （以前は個人持ちだったものを全員共有にするため）。
+  useEffect(() => {
+    if (!session?.user?.email) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const shared = await fetchSharedCustomFish();
+        if (cancelled) return;
+        const sharedTypes = new Set(shared.map((f) => f.type));
+        // ローカルにしか無いカスタム魚を共有へアップロード
+        const localOnly = (userRef.current.customFish ?? []).filter(
+          (f) => !sharedTypes.has(f.type)
+        );
+        for (const f of localOnly) {
+          try {
+            await postSharedCustomFish(f);
+          } catch (e) {
+            console.error("[CustomFish] migrate upload failed", e);
+          }
+        }
+        if (cancelled) return;
+        // 共有 + 移行分をマージして state に反映
+        const merged = [...shared];
+        const mergedTypes = new Set(merged.map((f) => f.type));
+        for (const f of localOnly) {
+          if (!mergedTypes.has(f.type)) {
+            merged.push(f);
+            mergedTypes.add(f.type);
+          }
+        }
+        setSharedCustomFish(merged);
+      } catch (e) {
+        console.error("[CustomFish] load failed", e);
+      }
     })();
     return () => {
       cancelled = true;
@@ -586,7 +634,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
     if (u.gold < info.price) return null;
     persistUser({ ...u, gold: u.gold - info.price });
     recordLedger(-info.price, info.label, u.gold - info.price);
-    return rollGachaWithWeights(info.weights);
+    // 共有カスタム魚を含む最新の一覧から抽選する
+    return rollGachaWithWeights(info.weights, allFishMasterRef.current);
   }, [persistUser, recordLedger]);
 
   // ---------- ショップ ----------
@@ -751,30 +800,56 @@ export function GameProvider({ children }: { children: ReactNode }) {
     [persistUser, words]
   );
 
-  // ---------- 管理者：カスタム魚 ----------
-  const allFishMaster = useMemo<FishMaster[]>(
-    () => [...FISH_MASTER, ...(user.customFish ?? [])],
-    [user.customFish]
-  );
+  // ---------- 管理者：カスタム魚（全員共有） ----------
+  // 組み込み魚 + 全員共有のカスタム魚 + （未移行の）ローカルカスタム魚を type で重複排除してマージ。
+  const allFishMaster = useMemo<FishMaster[]>(() => {
+    const map = new Map<string, FishMaster>();
+    for (const f of FISH_MASTER) map.set(f.type, f);
+    for (const f of sharedCustomFish) map.set(f.type, f);
+    for (const f of user.customFish ?? []) if (!map.has(f.type)) map.set(f.type, f);
+    return Array.from(map.values());
+  }, [sharedCustomFish, user.customFish]);
+
+  // ガチャ抽選（buyGachaFish）から最新の一覧を参照するためのref
+  useEffect(() => {
+    allFishMasterRef.current = allFishMaster;
+  }, [allFishMaster]);
 
   const addCustomFish = useCallback(
     (def: CustomFishDef) => {
+      // 全員共有へ即時反映（楽観的更新）
+      setSharedCustomFish((prev) =>
+        prev.some((f) => f.type === def.type) ? prev : [...prev, def]
+      );
+      // ローカルにも保持（オフライン表示・後方互換）
       const u = userRef.current;
       const existing = u.customFish ?? [];
-      if (existing.some((f) => f.type === def.type)) return;
-      persistUser({ ...u, customFish: [...existing, def] });
+      if (!existing.some((f) => f.type === def.type)) {
+        persistUser({ ...u, customFish: [...existing, def] });
+      }
+      // 共有テーブルへ登録（全ユーザーのガチャ・図鑑に出す）
+      void postSharedCustomFish(def).catch((e) => {
+        console.error("[CustomFish] post failed", e);
+        pushNotice("⚠️", "共有おさかなの登録に失敗しました（通信状況をご確認ください）");
+      });
     },
-    [persistUser]
+    [persistUser, pushNotice]
   );
 
   const removeCustomFish = useCallback(
     (fishType: string) => {
+      // 全員共有から削除
+      setSharedCustomFish((prev) => prev.filter((f) => f.type !== fishType));
       const u = userRef.current;
       persistUser({ ...u, customFish: (u.customFish ?? []).filter((f) => f.type !== fishType) });
       // 水槽内にいる同 type の魚も削除
       const toRemove = fishRef.current.filter((f) => f.type === fishType);
       for (const f of toRemove) void dbDeleteFish(f.fishId);
       if (toRemove.length > 0) setFishList((list) => list.filter((f) => f.type !== fishType));
+      // 共有テーブルからも削除（全ユーザーから消える）
+      void deleteSharedCustomFish(fishType).catch((e) =>
+        console.error("[CustomFish] delete failed", e)
+      );
     },
     [persistUser]
   );

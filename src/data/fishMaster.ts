@@ -423,8 +423,10 @@ export function getFishMaster(type: string): FishMaster | undefined {
 }
 
 // 任意の重みテーブルでガチャ排出（tiersごとに異なる重みを渡す）
+// allFish に共有カスタム魚を含めた一覧を渡すと、カスタム魚もガチャに排出される。
 export function rollGachaWithWeights(
-  weights: Record<Rarity, number>
+  weights: Record<Rarity, number>,
+  allFish: FishMaster[] = FISH_MASTER
 ): FishMaster {
   const total = Object.values(weights).reduce((s, w) => s + w, 0);
   let roll = Math.random() * total;
@@ -436,10 +438,10 @@ export function rollGachaWithWeights(
       break;
     }
   }
-  const pool = FISH_MASTER.filter((f) => f.rarity === rarity);
+  const pool = allFish.filter((f) => f.rarity === rarity);
   if (pool.length === 0) {
     // ロマンが0重みの激安ガチャ等でPoolが空になった場合のフォールバック
-    return FISH_MASTER[Math.floor(Math.random() * FISH_MASTER.length)];
+    return allFish[Math.floor(Math.random() * allFish.length)];
   }
   return pool[Math.floor(Math.random() * pool.length)];
 }
