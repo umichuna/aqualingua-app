@@ -300,6 +300,7 @@ export const FISH_MASTER: FishMaster[] = [
     palette: { body: "#607080", stripe: "#809098", fin: "#405060", eye: "#1B1B1B" },
     description: "深海に生きるダイオウグソクムシの仲間。巨大なダンゴムシのような姿が印象的。",
     imageId: "fish_011",
+    layer: "bottom",
   },
   {
     type: "パウダーブルーサージョンフィッシュ",

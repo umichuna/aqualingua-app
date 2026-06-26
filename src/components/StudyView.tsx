@@ -6,7 +6,7 @@
 // - 出題中: 英単語の自動読み上げ・🔊ボタン・ヒントボタン（自己採点）
 // - 正解するまで間違えた問題を繰り返すオプション
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MODE_BASE_GOLD, sessionGold } from "@/lib/gameLogic";
 import { playBgmForScene, sfx } from "@/lib/sound";
 import { cancelSpeech, releaseWakeLock, requestWakeLock, speak } from "@/lib/speech";
@@ -118,6 +118,10 @@ export default function StudyView() {
   const game = useGame();
   const { words, wordStats, user } = game;
   const GENRES = game.allGenres;
+  const weakCount = useMemo(
+    () => Object.values(wordStats).filter((s) => s.incorrectCount > 0).length,
+    [wordStats]
+  );
   const [mode, setMode] = useState<StudyMode | "free" | null>(null);
   const [config, setConfig] = useState<QuizConfig>({
     genres: new Set(),
@@ -448,6 +452,16 @@ export default function StudyView() {
           title="苦手単語を優先"
           desc="間違えた回数が多い単語から出題する"
         />
+        {weakCount > 0 && (
+          <div className="text-center text-xs text-coral font-bold">
+            ⚠️ 苦手な単語が {weakCount} 語たまっています
+          </div>
+        )}
+        {weakCount === 0 && Object.keys(wordStats).length > 0 && (
+          <div className="text-center text-xs text-glow font-bold">
+            ✅ 苦手な単語は 0 語です
+          </div>
+        )}
 
         {/* 「正解するまで繰り返す」は聞き流しでは不要なので非表示 */}
         {mode !== "listen" && (
