@@ -5,12 +5,20 @@
 // - 底生魚（layer:"bottom"）は下層に固定表示
 
 import { useEffect, useRef, useState } from "react";
-import { getFishMaster, RARITY_INFO, RARITY_STARS } from "@/data/fishMaster";
+import { getFishMaster, RARITY_INFO, RARITY_STARS, type FishDisplaySize } from "@/data/fishMaster";
 import { BOX_CAPACITY_INITIAL, MAX_AFFECTION } from "@/lib/gameLogic";
 import { sfx } from "@/lib/sound";
 import type { Fish } from "@/lib/types";
 import { useGame, type BaitKind } from "./GameProvider";
 import PixelFish from "./PixelFish";
+
+const SIZE_PX: Record<FishDisplaySize, number> = {
+  tiny: 24,
+  small: 36,
+  medium: 48,
+  large: 64,
+  xlarge: 88,
+};
 
 interface Pos {
   x: number;
@@ -201,7 +209,11 @@ export default function AquariumView() {
                 type={f.type}
                 facing={pos.facing}
                 sick={f.isSick}
-                size={f.growthStage === "幼魚" ? 32 : 48}
+                size={Math.round(
+                  (SIZE_PX[
+                    allFishMaster.find((m) => m.type === f.type)?.displaySize ?? "medium"
+                  ] || 48) * (f.growthStage === "幼魚" ? 0.7 : 1)
+                )}
                 imageUrl={allFishMaster.find((m) => m.type === f.type)?.imageUrl}
               />
               {f.isSick && (

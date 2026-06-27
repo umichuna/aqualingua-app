@@ -4,12 +4,19 @@
 // カスタム魚は IndexedDB (UserStatus.customFish) に保存される
 
 import { useState } from "react";
-import { FISH_MASTER, RARITY_INFO, RARITY_STARS } from "@/data/fishMaster";
+import { FISH_MASTER, RARITY_INFO, RARITY_STARS, type FishDisplaySize } from "@/data/fishMaster";
 import type { Rarity, CustomFishDef } from "@/lib/types";
 import { useGame } from "./GameProvider";
 import PixelFish from "./PixelFish";
 
 const RARITIES: Rarity[] = ["激安", "普通", "高級", "ロマン"];
+const DISPLAY_SIZES: { value: FishDisplaySize; label: string }[] = [
+  { value: "tiny", label: "超小（24px）" },
+  { value: "small", label: "小（36px）" },
+  { value: "medium", label: "中（48px）" },
+  { value: "large", label: "大（64px）" },
+  { value: "xlarge", label: "超大（88px）" },
+];
 
 const PALETTE_PRESETS: { label: string; palette: CustomFishDef["palette"] }[] = [
   { label: "青", palette: { body: "#4080C0", stripe: "#80B0E0", fin: "#306090", eye: "#1B1B1B" } },
@@ -22,11 +29,12 @@ const PALETTE_PRESETS: { label: string; palette: CustomFishDef["palette"] }[] = 
   { label: "銀", palette: { body: "#A0A0B8", stripe: "#C8C8D8", fin: "#808098", eye: "#1B1B1B" } },
 ];
 
-const EMPTY_FORM: { type: string; rarity: Rarity; description: string; layer: "middle" | "bottom"; paletteIdx: number; imageUrl: string } = {
+const EMPTY_FORM: { type: string; rarity: Rarity; description: string; layer: "middle" | "bottom"; displaySize: FishDisplaySize; paletteIdx: number; imageUrl: string } = {
   type: "",
   rarity: "普通",
   description: "",
   layer: "middle",
+  displaySize: "medium",
   paletteIdx: 0,
   imageUrl: "",
 };
@@ -90,6 +98,7 @@ export default function AdminView() {
       description: form.description.trim(),
       palette: PALETTE_PRESETS[form.paletteIdx].palette,
       layer: form.layer === "bottom" ? "bottom" : undefined,
+      displaySize: form.displaySize,
       imageUrl: form.imageUrl || undefined,
     };
     game.addCustomFish(def);
@@ -202,27 +211,17 @@ export default function AdminView() {
           </div>
 
           <div>
-            <div className="text-xs font-bold text-glow mb-1">カラー</div>
-            <div className="flex flex-wrap gap-1.5">
-              {PALETTE_PRESETS.map((p, i) => (
+            <div className="text-xs font-bold text-glow mb-1">表示サイズ</div>
+            <div className="grid grid-cols-2 gap-1.5">
+              {DISPLAY_SIZES.map((s) => (
                 <button
-                  key={i}
-                  onClick={() => setForm((f) => ({ ...f, paletteIdx: i }))}
-                  className="w-9 h-9 rounded-lg border-2 transition-all"
-                  style={{
-                    background: p.palette.body,
-                    borderColor: form.paletteIdx === i ? "var(--aqua-sand)" : "transparent",
-                  }}
-                  title={p.label}
-                />
+                  key={s.value}
+                  onClick={() => setForm((f) => ({ ...f, displaySize: s.value }))}
+                  className={`py-1.5 rounded-lg text-xs font-bold ${form.displaySize === s.value ? "bg-glow text-deep" : "bg-white/10 text-dim"}`}
+                >
+                  {s.label}
+                </button>
               ))}
-            </div>
-            <div className="mt-1.5 flex justify-center">
-              <div
-                className="w-12 h-12 rounded-full border-2 border-white/20"
-                style={{ background: PALETTE_PRESETS[form.paletteIdx].palette.body }}
-                title="カラープレビュー"
-              />
             </div>
           </div>
 

@@ -40,7 +40,7 @@ function rarityRateText(weights: Record<string, number>): string {
 
 export default function ShopView() {
   const game = useGame();
-  const { user, fishList } = game;
+  const { user, fishList, allFishMaster } = game;
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [gacha, setGacha] = useState<{
     phase: GachaPhase;
@@ -233,7 +233,11 @@ export default function ShopView() {
                   {RARITY_STARS[gacha.fish.rarity]}
                 </div>
                 <div className="flex justify-center animate-bounce" style={{ animationDuration: "2s" }}>
-                  <PixelFish type={gacha.fish.type} size={80} />
+                  <PixelFish
+                    type={gacha.fish.type}
+                    size={80}
+                    imageUrl={allFishMaster.find((m) => m.type === gacha.fish.type)?.imageUrl}
+                  />
                 </div>
                 <div className="font-bold text-lg text-foam mt-2">{gacha.fish.type}</div>
                 <div className="text-xs text-dim mt-1">{gacha.fish.description}</div>
@@ -261,7 +265,11 @@ export default function ShopView() {
             {gacha.phase === "naming" && (
               <div className="py-2">
                 <div className="flex justify-center mb-2">
-                  <PixelFish type={gacha.fish.type} size={56} />
+                  <PixelFish
+                    type={gacha.fish.type}
+                    size={56}
+                    imageUrl={allFishMaster.find((m) => m.type === gacha.fish.type)?.imageUrl}
+                  />
                 </div>
                 <div className="font-bold text-foam mb-3">名前をつけてあげよう</div>
                 <input

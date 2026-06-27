@@ -7,9 +7,16 @@
 import { useState } from "react";
 import { RARITY_INFO, RARITY_STARS } from "@/data/fishMaster";
 import { todayString } from "@/lib/gameLogic";
-import type { FishHistoryEntry } from "@/lib/types";
+import type { FishHistoryEntry, Rarity } from "@/lib/types";
 import { useGame } from "./GameProvider";
 import PixelFish from "./PixelFish";
+
+const RARITY_ORDER: Record<Rarity, number> = {
+  激安: 0,
+  普通: 1,
+  高級: 2,
+  ロマン: 3,
+};
 
 function formatDate(dateStr: string): string {
   const today = todayString();
@@ -109,38 +116,40 @@ export default function EncyclopediaView() {
         </span>
       </h2>
       <div className="flex-1 overflow-y-auto grid grid-cols-2 gap-2 content-start">
-        {allFishMaster.map((f) => {
-          const found = discovered.has(f.type);
-          return (
-            <div
-              key={f.type}
-              onClick={() => found && setSelectedType(f.type)}
-              className={`rounded-xl p-3 bg-mid text-center ${found ? "cursor-pointer active:bg-white/10 transition-colors" : ""}`}
-            >
-              <div className="flex justify-center py-1">
-                <PixelFish type={f.type} size={56} silhouette={!found} imageUrl={f.imageUrl} />
-              </div>
+        {[...allFishMaster]
+          .sort((a, b) => (RARITY_ORDER[a.rarity] ?? 0) - (RARITY_ORDER[b.rarity] ?? 0))
+          .map((f) => {
+            const found = discovered.has(f.type);
+            return (
               <div
-                className="inline-block text-[10px] px-2 py-0.5 rounded-full font-bold mb-1"
-                style={{
-                  background: found ? RARITY_INFO[f.rarity].color : "#ffffff22",
-                  color: found ? "var(--aqua-deep)" : "var(--aqua-dim)",
-                }}
+                key={f.type}
+                onClick={() => found && setSelectedType(f.type)}
+                className={`rounded-xl p-3 bg-mid text-center ${found ? "cursor-pointer active:bg-white/10 transition-colors" : ""}`}
               >
-                {found ? RARITY_STARS[f.rarity] : "？？？"}
+                <div className="flex justify-center py-1">
+                  <PixelFish type={f.type} size={56} silhouette={!found} imageUrl={f.imageUrl} />
+                </div>
+                <div
+                  className="inline-block text-[10px] px-2 py-0.5 rounded-full font-bold mb-1"
+                  style={{
+                    background: found ? RARITY_INFO[f.rarity].color : "#ffffff22",
+                    color: found ? "var(--aqua-deep)" : "var(--aqua-dim)",
+                  }}
+                >
+                  {found ? RARITY_STARS[f.rarity] : "？？？"}
+                </div>
+                <div className="text-sm font-bold text-foam">
+                  {found ? f.type : "？？？"}
+                </div>
+                <div className="text-[10px] text-dim mt-1 min-h-7">
+                  {found ? f.description : "まだ出会っていない…"}
+                </div>
+                {found && (
+                  <div className="text-[9px] text-glow mt-0.5">タップで記録を見る</div>
+                )}
               </div>
-              <div className="text-sm font-bold text-foam">
-                {found ? f.type : "？？？"}
-              </div>
-              <div className="text-[10px] text-dim mt-1 min-h-7">
-                {found ? f.description : "まだ出会っていない…"}
-              </div>
-              {found && (
-                <div className="text-[9px] text-glow mt-0.5">タップで記録を見る</div>
-              )}
-            </div>
-          );
-        })}
+            );
+          })}
       </div>
 
       {selectedType && (
