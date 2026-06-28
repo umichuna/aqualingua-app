@@ -43,6 +43,7 @@ import {
   getAllEncyclopedia,
   getAllFish,
   getAllFishHistory,
+  getAllFishOverrides,
   getAllGoldLedger,
   getAllStudySessions,
   getAllWordStats,
@@ -51,6 +52,7 @@ import {
   putFish,
   putFishHistoryEntry,
   putFishList,
+  putFishOverride,
   putGoldLedgerEntry,
   putStudySession,
   putUserStatus,
@@ -67,6 +69,7 @@ import type {
   Fish,
   FishHistoryEntry,
   FishLeaveReason,
+  FishOverride,
   GoldLedgerEntry,
   StudyMode,
   StudySession,
@@ -149,6 +152,7 @@ interface GameContextValue {
   addCustomFish: (def: CustomFishDef) => void;
   updateCustomFish: (def: CustomFishDef) => void;
   removeCustomFish: (fishType: string) => void;
+  updateBuiltinFish: (override: FishOverride) => void;
 
   // その他
   resetAllData: () => Promise<void>;
@@ -181,6 +185,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const [notices, setNotices] = useState<GameNotice[]>([]);
   // 全員共有のカスタム魚（クラウドの shared_custom_fish から取得）
   const [sharedCustomFish, setSharedCustomFish] = useState<CustomFishDef[]>([]);
+  // 組み込み魚のオーバーライド（編集用）
+  const [fishOverrides, setFishOverrides] = useState<FishOverride[]>([]);
   const [currentTankType, setCurrentTankType] = useState<WaterType>("saltwater");
   const userRef = useRef(user);
   const fishRef = useRef(fishList);
@@ -812,14 +818,21 @@ export function GameProvider({ children }: { children: ReactNode }) {
   );
 
   // ---------- 管理者：カスタム魚（全員共有） ----------
-  // 組み込み魚 + 全員共有のカスタム魚 + （未移行の）ローカルカスタム魚を type で重複排除してマージ。
+  // 組み込み魚（+オーバーライド） + 全員共有のカスタム魚 + （未移行の）ローカルカスタム魚を type で重複排除してマージ。
   const allFishMaster = useMemo<FishMaster[]>(() => {
     const map = new Map<string, FishMaster>();
-    for (const f of FISH_MASTER) map.set(f.type, f);
+    const overrideMap = new Map(fishOverrides.map((o) => [o.type, o]));
+    // 組み込み魚にオーバーライドをマージ
+    for (const f of FISH_MASTER) {
+      const override = overrideMap.get(f.type);
+      map.set(f.type, override ? { ...f, ...override } : f);
+    }
+    // 全員共有カスタム魚
     for (const f of sharedCustomFish) map.set(f.type, f);
+    // ローカル未移行のカスタム魚
     for (const f of user.customFish ?? []) if (!map.has(f.type)) map.set(f.type, f);
     return Array.from(map.values());
-  }, [sharedCustomFish, user.customFish]);
+  }, [fishOverrides, sharedCustomFish, user.customFish]);
 
   // ガチャ抽選（buyGachaFish）から最新の一覧を参照するためのref
   useEffect(() => {
@@ -884,6 +897,27 @@ export function GameProvider({ children }: { children: ReactNode }) {
     },
     [persistUser]
   );
+
+  // 組み込み魚のオーバーライド（編集用）
+  const updateBuiltinFish = useCallback(
+    (override: FishOverride) => {
+      setFishOverrides((prev) =>
+        prev.some((f) => f.type === override.type)
+          ? prev.map((f) => (f.type === override.type ? override : f))
+          : [...prev, override]
+      );
+      void putFishOverride(override).catch((e) => {
+        console.error("[FishOverride] update failed", e);
+        pushNotice("⚠️", "組み込みおさかなの編集に失敗しました");
+      });
+    },
+    [pushNotice]
+  );
+
+  // fishOverrides を DB から読み込み
+  useEffect(() => {
+    void getAllFishOverrides().then(setFishOverrides);
+  }, []);
 
   const releaseBoxFish = useCallback(
     (fishId: string) => {
@@ -1005,6 +1039,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         addCustomFish,
         updateCustomFish,
         removeCustomFish,
+        updateBuiltinFish,
         resetAllData,
         syncNow,
         pushNow,

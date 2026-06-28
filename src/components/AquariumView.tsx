@@ -13,11 +13,11 @@ import { useGame, type BaitKind } from "./GameProvider";
 import PixelFish from "./PixelFish";
 
 const SIZE_PX: Record<FishDisplaySize, number> = {
-  tiny: 24,
-  small: 36,
-  medium: 48,
-  large: 64,
-  xlarge: 88,
+  tiny: 48,
+  small: 72,
+  medium: 96,
+  large: 128,
+  xlarge: 176,
 };
 
 interface Pos {

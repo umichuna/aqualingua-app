@@ -6,6 +6,7 @@ import type {
   EncyclopediaEntry,
   Fish,
   FishHistoryEntry,
+  FishOverride,
   GoldLedgerEntry,
   StudySession,
   UserStatus,
@@ -14,7 +15,7 @@ import type {
 } from "./types";
 
 const DB_NAME = "AquaLinguaDB";
-const DB_VERSION = 4; // v4: companions ストア追加
+const DB_VERSION = 5; // v5: fishOverrides ストア追加（組み込み魚編集用）
 
 export const LOCAL_USER_ID = "local-user"; // MVP: 認証なしの固定ユーザーID
 
@@ -28,6 +29,7 @@ interface AppDBSchema extends DBSchema {
   goldLedger: { key: string; value: GoldLedgerEntry };
   fishHistory: { key: string; value: FishHistoryEntry };
   companions: { key: string; value: Fish };
+  fishOverrides: { key: string; value: FishOverride };
 }
 
 let dbPromise: Promise<IDBPDatabase<AppDBSchema>> | null = null;
@@ -52,6 +54,9 @@ export function getLocalDB(): Promise<IDBPDatabase<AppDBSchema>> {
         }
         if (oldVersion < 4) {
           db.createObjectStore("companions", { keyPath: "fishId" });
+        }
+        if (oldVersion < 5) {
+          db.createObjectStore("fishOverrides", { keyPath: "type" });
         }
       },
     });
@@ -367,4 +372,24 @@ export async function importAllData(data: BackupData): Promise<void> {
   for (const g of data.goldLedger ?? []) await db.put("goldLedger", g);
   for (const h of data.fishHistory ?? []) await db.put("fishHistory", h);
   for (const c of data.companions ?? []) await db.put("companions", c);
+}
+
+// ---------- FishOverrides（組み込み魚編集用） ----------
+export async function getAllFishOverrides(): Promise<FishOverride[]> {
+  return (await getLocalDB()).getAll("fishOverrides");
+}
+
+export async function getFishOverride(type: string): Promise<FishOverride | undefined> {
+  return (await getLocalDB()).get("fishOverrides", type);
+}
+
+export async function putFishOverride(override: FishOverride): Promise<void> {
+  await (await getLocalDB()).put("fishOverrides", {
+    ...override,
+    lastUpdated: override.lastUpdated ?? Date.now(),
+  });
+}
+
+export async function deleteFishOverride(type: string): Promise<void> {
+  await (await getLocalDB()).delete("fishOverrides", type);
 }

@@ -92,6 +92,29 @@ export interface CustomFishDef {
   displaySize?: "tiny" | "small" | "medium" | "large" | "xlarge"; // 表示サイズ
 }
 
+export type FishDisplaySize = "tiny" | "small" | "medium" | "large" | "xlarge";
+
+export interface FishPalette {
+  body: string;
+  stripe: string;
+  fin: string;
+  eye: string;
+}
+
+export interface FishOverride {
+  type: string; // 組み込み魚の type（キー）
+  rarity?: Rarity;
+  palette?: FishPalette;
+  description?: string;
+  imageId?: string;
+  imageUrl?: string;
+  companionBuff?: CompanionBuff;
+  layer?: "bottom" | "middle" | "top";
+  displaySize?: FishDisplaySize;
+  waterType?: WaterType;
+  lastUpdated?: number;
+}
+
 export interface UserStatus {
   userId: string;
   gold: number;

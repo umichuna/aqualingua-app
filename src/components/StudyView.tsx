@@ -245,6 +245,7 @@ export default function StudyView() {
     setScore(0);
     setPicked(null);
     setFlipped(false);
+    void playBgmForScene(null);
     setPhase("play");
     sfx.tap();
   };

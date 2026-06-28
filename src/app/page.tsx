@@ -5,7 +5,7 @@
 // 下部ナビ4タブ: ホーム / 水槽 / しごと / ショップ
 // ホームから: 記録・単語帳・図鑑・設定 にもアクセスできる
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { signIn, useSession } from "next-auth/react";
 import AdminView from "@/components/AdminView";
 import AquariumView from "@/components/AquariumView";
@@ -100,11 +100,21 @@ function HomeView({
 function AppShell() {
   const game = useGame();
   const { ready, user, notices } = game;
+
   const [screen, setScreen] = useState<"start" | "app">("start");
   const [tab, setTab] = useState<TabId>("home");
   const [showSettings, setShowSettings] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
+
+  // クライアント側でクエリパラメータをチェック
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("view") === "admin") {
+      setScreen("app");
+      setTab("admin");
+    }
+  }, []);
 
   // タブIDをBGMシーンにマッピング
   const tabToScene = (t: TabId): BgmScene => {

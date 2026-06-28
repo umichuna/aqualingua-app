@@ -5,17 +5,17 @@
 
 import { useState } from "react";
 import { FISH_MASTER, RARITY_INFO, RARITY_STARS, type FishDisplaySize } from "@/data/fishMaster";
-import type { Rarity, CustomFishDef } from "@/lib/types";
+import type { Rarity, CustomFishDef, FishOverride, WaterType } from "@/lib/types";
 import { useGame } from "./GameProvider";
 import PixelFish from "./PixelFish";
 
 const RARITIES: Rarity[] = ["激安", "普通", "高級", "ロマン"];
 const DISPLAY_SIZES: { value: FishDisplaySize; label: string }[] = [
-  { value: "tiny", label: "超小（24px）" },
-  { value: "small", label: "小（36px）" },
-  { value: "medium", label: "中（48px）" },
-  { value: "large", label: "大（64px）" },
-  { value: "xlarge", label: "超大（88px）" },
+  { value: "tiny", label: "超小（48px）" },
+  { value: "small", label: "小（72px）" },
+  { value: "medium", label: "中（96px）" },
+  { value: "large", label: "大（128px）" },
+  { value: "xlarge", label: "超大（176px）" },
 ];
 
 const PALETTE_PRESETS: { label: string; palette: CustomFishDef["palette"] }[] = [
@@ -74,6 +74,23 @@ export default function AdminView() {
   const [confirmDeleteFishType, setConfirmDeleteFishType] = useState<string | null>(null);
   const [editingType, setEditingType] = useState<string | null>(null);
 
+  const [showBuiltinForm, setShowBuiltinForm] = useState(false);
+  const [editingBuiltinType, setEditingBuiltinType] = useState<string | null>(null);
+  const [builtinError, setBuiltinError] = useState("");
+  const [builtinForm, setBuiltinForm] = useState<{
+    rarity: Rarity;
+    displaySize: FishDisplaySize;
+    waterType: WaterType;
+    description: string;
+    imageUrl: string;
+  }>({
+    rarity: "普通",
+    displaySize: "medium",
+    waterType: "saltwater",
+    description: "",
+    imageUrl: "",
+  });
+
   const handleRemoveGenre = (genre: string) => {
     const count = words.filter((w) => w.genre === genre).length;
     if (count > 0) {
@@ -116,6 +133,7 @@ export default function AdminView() {
 
   return (
     <div className="p-4 flex flex-col gap-4 h-full overflow-y-auto">
+      {/* AdminView v2 with builtin fish editing */}
       <h2 className="font-bold text-lg text-foam">🔧 管理者 — おさかな追加</h2>
 
       {/* カスタム魚一覧 */}
@@ -310,6 +328,172 @@ export default function AdminView() {
           </div>
         </div>
       )}
+
+      {/* デフォルトおさかな編集セクション */}
+      <div>
+        <div className="text-xs font-bold text-glow mb-2">✏️ デフォルトおさかな編集（{allFishMaster.length}種）</div>
+        <div className="text-xs text-dim mb-3">
+          デフォルト図鑑のおさかなの属性を変更できます
+        </div>
+
+        {!showBuiltinForm ? (
+          <div className="flex flex-col gap-2 max-h-96 overflow-y-auto">
+            {allFishMaster.map((fish) => (
+              <div key={fish.type} className="flex items-center gap-3 rounded-xl bg-mid p-3">
+                <PixelFish type={fish.type} size={40} imageUrl={fish.imageUrl} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      className="text-[10px] px-1.5 py-0.5 rounded-full font-bold"
+                      style={{ background: RARITY_INFO[fish.rarity].color, color: "var(--aqua-deep)" }}
+                    >
+                      {RARITY_STARS[fish.rarity]}
+                    </span>
+                    <span className="text-sm font-bold text-foam">{fish.type}</span>
+                  </div>
+                  <div className="text-[10px] text-dim mt-0.5 truncate">{fish.description}</div>
+                </div>
+                <button
+                  onClick={() => {
+                    setEditingBuiltinType(fish.type);
+                    setBuiltinForm({
+                      rarity: fish.rarity,
+                      displaySize: fish.displaySize ?? "medium",
+                      waterType: fish.waterType ?? "saltwater",
+                      description: fish.description,
+                      imageUrl: fish.imageUrl ?? "",
+                    });
+                    setShowBuiltinForm(true);
+                    setBuiltinError("");
+                  }}
+                  className="text-[10px] px-2 py-1 rounded-lg bg-glow text-deep font-bold shrink-0"
+                >
+                  ✏️ 編集
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-2xl bg-mid p-4 flex flex-col gap-3">
+            <div className="font-bold text-foam text-sm">
+              ✏️ {editingBuiltinType} を編集中
+            </div>
+
+            {builtinError && <p className="text-xs text-coral">{builtinError}</p>}
+
+            <div>
+              <div className="text-xs font-bold text-glow mb-1">レア度</div>
+              <div className="flex gap-1.5">
+                {RARITIES.map((r) => (
+                  <button
+                    key={r}
+                    onClick={() => setBuiltinForm((f) => ({ ...f, rarity: r }))}
+                    className="flex-1 py-1.5 rounded-lg text-xs font-bold transition-all"
+                    style={{
+                      background: builtinForm.rarity === r ? RARITY_INFO[r].color : "rgba(255,255,255,0.08)",
+                      color: builtinForm.rarity === r ? "var(--aqua-deep)" : "var(--aqua-dim)",
+                    }}
+                  >
+                    {RARITY_STARS[r]}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <div className="text-xs font-bold text-glow mb-1">水の種類</div>
+              <div className="flex gap-2">
+                {(["saltwater", "freshwater"] as const).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setBuiltinForm((f) => ({ ...f, waterType: t }))}
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-bold ${builtinForm.waterType === t ? "bg-sand text-deep" : "bg-white/10 text-dim"}`}
+                  >
+                    {t === "saltwater" ? "🌊 海水" : "🌿 淡水"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <div className="text-xs font-bold text-glow mb-1">表示サイズ</div>
+              <div className="grid grid-cols-2 gap-1.5">
+                {DISPLAY_SIZES.map((s) => (
+                  <button
+                    key={s.value}
+                    onClick={() => setBuiltinForm((f) => ({ ...f, displaySize: s.value }))}
+                    className={`py-1.5 rounded-lg text-xs font-bold ${builtinForm.displaySize === s.value ? "bg-glow text-deep" : "bg-white/10 text-dim"}`}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <div className="text-xs font-bold text-glow mb-1">説明</div>
+              <textarea
+                value={builtinForm.description}
+                onChange={(e) => setBuiltinForm((f) => ({ ...f, description: e.target.value }))}
+                maxLength={60}
+                rows={2}
+                className="w-full px-3 py-2 rounded-xl bg-black/30 text-foam outline-none text-sm resize-none"
+              />
+            </div>
+
+            <div>
+              <div className="text-xs font-bold text-glow mb-1">画像URL（任意）</div>
+              <input
+                value={builtinForm.imageUrl}
+                onChange={(e) => setBuiltinForm((f) => ({ ...f, imageUrl: e.target.value }))}
+                placeholder="https://..."
+                className="w-full px-3 py-2 rounded-xl bg-black/30 text-foam outline-none text-sm"
+              />
+              {builtinForm.imageUrl && (
+                <div className="mt-2 flex items-center gap-2">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={builtinForm.imageUrl} alt="プレビュー" className="w-12 h-12 rounded-lg object-contain bg-black/20" />
+                  <button
+                    onClick={() => setBuiltinForm((f) => ({ ...f, imageUrl: "" }))}
+                    className="text-xs text-coral underline"
+                  >
+                    削除
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setShowBuiltinForm(false); setBuiltinError(""); setEditingBuiltinType(null); }}
+                className="flex-1 py-2 text-sm font-bold bg-white/10 text-dim rounded-xl"
+              >
+                キャンセル
+              </button>
+              <button
+                onClick={() => {
+                  if (!editingBuiltinType) { setBuiltinError("エラーが発生しました"); return; }
+                  const override: FishOverride = {
+                    type: editingBuiltinType,
+                    rarity: builtinForm.rarity,
+                    displaySize: builtinForm.displaySize,
+                    waterType: builtinForm.waterType,
+                    description: builtinForm.description,
+                    imageUrl: builtinForm.imageUrl || undefined,
+                  };
+                  game.updateBuiltinFish(override);
+                  setShowBuiltinForm(false);
+                  setBuiltinError("");
+                  setEditingBuiltinType(null);
+                }}
+                className="flex-1 py-2 text-sm font-bold bg-glow text-deep rounded-xl"
+              >
+                更新する
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* ビルトイン魚の件数 */}
       <div className="text-xs text-dim text-center">
