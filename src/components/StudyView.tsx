@@ -148,6 +148,11 @@ export default function StudyView() {
   // セッション内の単語ごとの間違い回数（3回でに苦手登録）
   const sessionWrongRef = useRef<Record<string, number>>({});
 
+  // StudyView マウント時に BGM を停止
+  useEffect(() => {
+    void playBgmForScene(null);
+  }, []);
+
   // ---------- 絞り込み（複数選択対応） ----------
   const filterPool = useCallback((): Word[] => {
     return words.filter(
@@ -272,6 +277,7 @@ export default function StudyView() {
   const backToMenu = () => {
     cancelSpeech();
     releaseWakeLock();
+    void playBgmForScene(null);
     setMode(null);
     setPhase("setup");
   };

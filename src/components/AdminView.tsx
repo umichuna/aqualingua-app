@@ -63,8 +63,13 @@ function resizeToBase64(file: File): Promise<string> {
 
 export default function AdminView() {
   const game = useGame();
-  const { user, allFishMaster, words } = game;
+  const { user, allFishMaster, words, fishList } = game;
   const customFish = user.customFish ?? [];
+
+  // 見つかっている組み込み魚のみをフィルタ
+  const discoveredBuiltinFish = allFishMaster.filter((fish) =>
+    fishList.some((f) => f.type === fish.type)
+  );
 
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ ...EMPTY_FORM });
@@ -331,14 +336,14 @@ export default function AdminView() {
 
       {/* デフォルトおさかな編集セクション */}
       <div>
-        <div className="text-xs font-bold text-glow mb-2">✏️ デフォルトおさかな編集（{allFishMaster.length}種）</div>
+        <div className="text-xs font-bold text-glow mb-2">✏️ デフォルトおさかな編集（{discoveredBuiltinFish.length}種）</div>
         <div className="text-xs text-dim mb-3">
-          デフォルト図鑑のおさかなの属性を変更できます
+          見つかったおさかなの属性を変更できます
         </div>
 
         {!showBuiltinForm ? (
           <div className="flex flex-col gap-2 max-h-96 overflow-y-auto">
-            {allFishMaster.map((fish) => (
+            {discoveredBuiltinFish.map((fish) => (
               <div key={fish.type} className="flex items-center gap-3 rounded-xl bg-mid p-3">
                 <PixelFish type={fish.type} size={40} imageUrl={fish.imageUrl} />
                 <div className="flex-1 min-w-0">
