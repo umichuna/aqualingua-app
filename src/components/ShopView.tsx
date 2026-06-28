@@ -27,6 +27,7 @@ const SHOP_ITEMS = [
   { key: "medicine" as const, name: "おくすり", desc: "病気を治療する", price: SHOP_PRICES.medicine, icon: "💊" },
   { key: "tankExpansion" as const, name: "水槽拡張キット", desc: "飼育上限 +2", price: SHOP_PRICES.tankExpansion, icon: "🪸" },
   { key: "boxExpansion" as const, name: "ボックス拡張キット", desc: "ボックス +5匹", price: SHOP_PRICES.boxExpansion, icon: "📦" },
+  { key: "freshwaterTank" as const, name: "淡水水槽", desc: "淡水魚を飼育できる", price: SHOP_PRICES.freshwaterTank, icon: "🌿" },
 ];
 
 // ガチャのレア度確率を表示用テキストに変換
@@ -95,6 +96,10 @@ export default function ShopView() {
       flash(false, "水槽はこれ以上拡張できないよ");
       return;
     }
+    if (item.key === "freshwaterTank" && user.hasFreshwaterTank) {
+      flash(false, "すでに購入済みです");
+      return;
+    }
     if (game.buyItem(item.key)) {
       sfx.register();
       flash(true, `${item.name} を購入しました！`);
@@ -114,7 +119,9 @@ export default function ShopView() {
     if (item.key === "baitPremium5") return `所持 ${user.items.baitPremium}`;
     if (item.key === "medicine") return `所持 ${user.items.medicine}`;
     if (item.key === "tankExpansion") return `上限 ${user.tankCapacity}/${MAX_TANK_CAPACITY}`;
-    return `上限 ${user.boxCapacity ?? BOX_CAPACITY_INITIAL}匹`;
+    if (item.key === "boxExpansion") return `上限 ${user.boxCapacity ?? BOX_CAPACITY_INITIAL}匹`;
+    if (item.key === "freshwaterTank") return user.hasFreshwaterTank ? "購入済み" : "未購入";
+    return "";
   };
 
   const TIER_KEYS: GachaTier[] = ["cheap", "normal", "premium"];

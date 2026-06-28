@@ -72,6 +72,7 @@ export default function AdminView() {
   const [newGenreInput, setNewGenreInput] = useState("");
   const [confirmGenre, setConfirmGenre] = useState<string | null>(null);
   const [confirmDeleteFishType, setConfirmDeleteFishType] = useState<string | null>(null);
+  const [editingType, setEditingType] = useState<string | null>(null);
 
   const handleRemoveGenre = (genre: string) => {
     const count = words.filter((w) => w.genre === genre).length;
@@ -88,7 +89,8 @@ export default function AdminView() {
     const type = form.type.trim();
     if (!type) { setError("種類名を入力してください"); return; }
     if (!form.description.trim()) { setError("説明を入力してください"); return; }
-    if (allFishMaster.some((f) => f.type === type)) {
+    // 編集中でない場合のみ、重複チェック
+    if (!editingType && allFishMaster.some((f) => f.type === type)) {
       setError(`「${type}」はすでに存在します`);
       return;
     }
@@ -101,9 +103,14 @@ export default function AdminView() {
       displaySize: form.displaySize,
       imageUrl: form.imageUrl || undefined,
     };
-    game.addCustomFish(def);
+    if (editingType) {
+      game.updateCustomFish(def);
+    } else {
+      game.addCustomFish(def);
+    }
     setForm({ ...EMPTY_FORM });
     setShowForm(false);
+    setEditingType(null);
     setError("");
   };
 
@@ -133,10 +140,23 @@ export default function AdminView() {
                 </div>
                 <div className="flex flex-col gap-1 shrink-0">
                   <button
-                    onClick={() => game.addFishToTank(f, f.type)}
+                    onClick={() => {
+                      setEditingType(f.type);
+                      setForm({
+                        type: f.type,
+                        rarity: f.rarity,
+                        description: f.description,
+                        layer: f.layer === "bottom" ? "bottom" : "middle",
+                        displaySize: f.displaySize ?? "medium",
+                        paletteIdx: 0,
+                        imageUrl: f.imageUrl ?? "",
+                      });
+                      setShowForm(true);
+                      setError("");
+                    }}
                     className="text-[10px] px-2 py-1 rounded-lg bg-glow text-deep font-bold"
                   >
-                    水槽へ
+                    ✏️ 編集
                   </button>
                   <button
                     onClick={() => setConfirmDeleteFishType(f.type)}
@@ -161,7 +181,9 @@ export default function AdminView() {
         </button>
       ) : (
         <div className="rounded-2xl bg-mid p-4 flex flex-col gap-3">
-          <div className="font-bold text-foam text-sm">新しいおさかな</div>
+          <div className="font-bold text-foam text-sm">
+            {editingType ? `✏️ ${editingType} を編集中` : "新しいおさかな"}
+          </div>
 
           {error && <p className="text-xs text-coral">{error}</p>}
 
@@ -274,7 +296,7 @@ export default function AdminView() {
 
           <div className="flex gap-2">
             <button
-              onClick={() => { setShowForm(false); setError(""); setForm({ ...EMPTY_FORM }); }}
+              onClick={() => { setShowForm(false); setError(""); setForm({ ...EMPTY_FORM }); setEditingType(null); }}
               className="flex-1 py-2 text-sm font-bold bg-white/10 text-dim rounded-xl"
             >
               キャンセル
@@ -283,7 +305,7 @@ export default function AdminView() {
               onClick={submitAdd}
               className="flex-1 py-2 text-sm font-bold bg-glow text-deep rounded-xl"
             >
-              追加する
+              {editingType ? "更新する" : "追加する"}
             </button>
           </div>
         </div>

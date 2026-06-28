@@ -34,7 +34,12 @@ interface BaitDrop {
 
 export default function AquariumView() {
   const game = useGame();
-  const { fishList, user, allFishMaster } = game;
+  const { fishList, user, allFishMaster, currentTankType, setCurrentTankType } = game;
+
+  // 現在の水槽タイプに対応する魚だけを表示
+  const displayFish = fishList.filter(
+    (f) => (allFishMaster.find((m) => m.type === f.type)?.waterType ?? "saltwater") === currentTankType
+  );
   const tankRef = useRef<HTMLDivElement>(null);
   const [positions, setPositions] = useState<Record<string, Pos>>({});
   const [bait, setBait] = useState<BaitDrop | null>(null);
@@ -64,7 +69,7 @@ export default function AquariumView() {
     const timer = setInterval(() => {
       setPositions((prev) => {
         const next = { ...prev };
-        fishList.forEach((f, i) => {
+        displayFish.forEach((f, i) => {
           const master = getFishMaster(f.type);
           const isBottom = master?.layer === "bottom";
           const yMin = isBottom ? 65 : 8;
@@ -96,10 +101,10 @@ export default function AquariumView() {
     }, 1800);
     return () => clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fishList, eatingIds]);
+  }, [displayFish, eatingIds]);
 
   const dropBait = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (bait || fishList.length === 0) return;
+    if (bait || displayFish.length === 0) return;
     if (!game.feedAllFish(baitKind)) {
       game.pushNotice("🪱", "餌がない！ショップで買おう");
       return;
@@ -115,7 +120,7 @@ export default function AquariumView() {
     };
     setBait(b);
     baitRef.current = b;
-    setEatingIds(new Set(fishList.map((f) => f.fishId)));
+    setEatingIds(new Set(displayFish.map((f) => f.fishId)));
 
     let scale = 1;
     const shrink = setInterval(() => {
@@ -188,7 +193,7 @@ export default function AquariumView() {
         )}
 
         {/* 魚たち */}
-        {fishList.map((f, i) => {
+        {displayFish.map((f, i) => {
           const pos = positions[f.fishId] ?? defaultPos(f, i);
           const eating = eatingIds.has(f.fishId);
           return (
@@ -229,10 +234,10 @@ export default function AquariumView() {
         })}
 
         {/* 空の水槽メッセージ */}
-        {fishList.length === 0 && (
+        {displayFish.length === 0 && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-dim text-sm">
             <span className="text-3xl">🫧</span>
-            <span>まだ魚がいない…ショップのガチャでお迎えしよう</span>
+            <span>{currentTankType === "saltwater" ? "まだ魚がいない…ショップのガチャでお迎えしよう" : "🌿 まだ淡水魚がいない…ガチャで仲間にしよう"}</span>
           </div>
         )}
 
@@ -256,9 +261,31 @@ export default function AquariumView() {
           </button>
         </div>
 
+        {/* 水槽タイプ切り替えタブ */}
+        {user.hasFreshwaterTank && (
+          <div className="absolute top-2 left-1/2 -translate-x-1/2 flex gap-1.5">
+            <button
+              onClick={(e) => { e.stopPropagation(); setCurrentTankType("saltwater"); }}
+              className={`px-3 py-1.5 rounded-full font-bold text-xs transition-all ${
+                currentTankType === "saltwater" ? "bg-glow text-deep" : "bg-black/40 text-dim"
+              }`}
+            >
+              🌊 海水
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); setCurrentTankType("freshwater"); }}
+              className={`px-3 py-1.5 rounded-full font-bold text-xs transition-all ${
+                currentTankType === "freshwater" ? "bg-glow text-deep" : "bg-black/40 text-dim"
+              }`}
+            >
+              🌿 淡水
+            </button>
+          </div>
+        )}
+
         {/* 飼育数 */}
         <div className="absolute top-2 right-2 text-xs px-2 py-1 rounded-full bg-black/40 text-dim">
-          🐠 {fishList.length} / {user.tankCapacity}
+          🐠 {displayFish.length} / {user.tankCapacity}
         </div>
 
         {/* ボックス表示トグルボタン */}

@@ -73,6 +73,7 @@ import type {
   UserStatus,
   Word,
   WordStats,
+  WaterType,
 } from "@/lib/types";
 
 // しごとモードの表示名（通帳・記録の表示に使用）
@@ -116,6 +117,8 @@ interface GameContextValue {
   addManualSession: (date: string, label: string, count: number) => void;
 
   // 水槽
+  currentTankType: import("@/lib/types").WaterType;
+  setCurrentTankType: (type: import("@/lib/types").WaterType) => void;
   feedAllFish: (kind: BaitKind) => boolean;
   useMedicine: (fishId: string) => boolean;
   moveTankFishToBox: (fishId: string) => void;
@@ -144,6 +147,7 @@ interface GameContextValue {
   // 管理者
   allFishMaster: FishMaster[];
   addCustomFish: (def: CustomFishDef) => void;
+  updateCustomFish: (def: CustomFishDef) => void;
   removeCustomFish: (fishType: string) => void;
 
   // その他
@@ -177,6 +181,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const [notices, setNotices] = useState<GameNotice[]>([]);
   // 全員共有のカスタム魚（クラウドの shared_custom_fish から取得）
   const [sharedCustomFish, setSharedCustomFish] = useState<CustomFishDef[]>([]);
+  const [currentTankType, setCurrentTankType] = useState<WaterType>("saltwater");
   const userRef = useRef(user);
   const fishRef = useRef(fishList);
   const allFishMasterRef = useRef<FishMaster[]>(FISH_MASTER);
@@ -677,6 +682,12 @@ export function GameProvider({ children }: { children: ReactNode }) {
           boxCapacity = boxCapacity + 5;
           label = "ボックス拡張キット";
           break;
+        case "freshwaterTank":
+          if (u.hasFreshwaterTank) return false;
+          label = "淡水水槽";
+          persistUser({ ...u, gold: u.gold - price, hasFreshwaterTank: true });
+          recordLedger(-price, label, u.gold - price);
+          return true;
         default:
           return false;
       }
@@ -836,6 +847,26 @@ export function GameProvider({ children }: { children: ReactNode }) {
     [persistUser, pushNotice]
   );
 
+  const updateCustomFish = useCallback(
+    (def: CustomFishDef) => {
+      // 全員共有を更新
+      setSharedCustomFish((prev) =>
+        prev.map((f) => (f.type === def.type ? def : f))
+      );
+      // ローカルも更新
+      const u = userRef.current;
+      persistUser({ ...u, customFish: (u.customFish ?? []).map((f) => (f.type === def.type ? def : f)) });
+      // クラウド更新（一度削除してから再登録）
+      void deleteSharedCustomFish(def.type)
+        .then(() => postSharedCustomFish(def))
+        .catch((e) => {
+          console.error("[CustomFish] update failed", e);
+          pushNotice("⚠️", "共有おさかなの更新に失敗しました（通信状況をご確認ください）");
+        });
+    },
+    [persistUser, pushNotice]
+  );
+
   const removeCustomFish = useCallback(
     (fishType: string) => {
       // 全員共有から削除
@@ -972,10 +1003,13 @@ export function GameProvider({ children }: { children: ReactNode }) {
         removeCustomGenre,
         allFishMaster,
         addCustomFish,
+        updateCustomFish,
         removeCustomFish,
         resetAllData,
         syncNow,
         pushNow,
+        currentTankType,
+        setCurrentTankType,
       }}
     >
       {children}

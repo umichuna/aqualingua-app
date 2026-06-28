@@ -156,6 +156,7 @@ export const SHOP_PRICES = {
   medicine: 300, // おくすり
   tankExpansion: 1200, // 水槽拡張キット（初回価格。実価格は tankExpansionPrice() で計算）
   boxExpansion: 800, // ボックス拡張キット（初回価格。実価格は boxExpansionPrice() で計算）
+  freshwaterTank: 3000, // 淡水水槽
 } as const;
 
 export const MAX_TANK_CAPACITY = 15;

@@ -2,7 +2,7 @@
 // レア度・基準価格は UIプロトタイプ v0.2 の RARITY 定義（仕様書§4.2と一致）を流用
 // imageId は public/fish/{imageId}.png を参照。日本語URLのスマホ非互換を避けるため fish_NNN 形式に統一。
 
-import type { CompanionBuff, Rarity } from "@/lib/types";
+import type { CompanionBuff, Rarity, WaterType } from "@/lib/types";
 
 export type FishDisplaySize = "tiny" | "small" | "medium" | "large" | "xlarge";
 
@@ -44,6 +44,7 @@ export interface FishMaster {
   companionBuff?: CompanionBuff; // 相棒にしたときの効果
   layer?: "bottom" | "middle" | "top"; // 水槽内の表示層（bottom=底生）
   displaySize?: FishDisplaySize; // 表示サイズ（デフォルト medium）
+  waterType?: WaterType; // 水槽タイプ（デフォルト saltwater）
 }
 
 export const FISH_MASTER: FishMaster[] = [
@@ -56,6 +57,7 @@ export const FISH_MASTER: FishMaster[] = [
     imageId: "fish_032",
     layer: "bottom",
     displaySize: "medium",
+    waterType: "saltwater",
   },
   {
     type: "イワシ",
@@ -64,6 +66,7 @@ export const FISH_MASTER: FishMaster[] = [
     description: "大群で海を泳ぐ、銀色に輝く小魚。まとまると大きな生き物のように見える。",
     imageId: "fish_003",
     displaySize: "tiny",
+    waterType: "saltwater",
   },
   {
     type: "サバ",
@@ -72,6 +75,7 @@ export const FISH_MASTER: FishMaster[] = [
     description: "背中の青い縞模様が美しい、身近な海の魚。",
     imageId: "fish_018",
     displaySize: "small",
+    waterType: "saltwater",
   },
   // ---- 普通 ----
   {
@@ -81,6 +85,7 @@ export const FISH_MASTER: FishMaster[] = [
     description: "岩の穴から顔を出す、ちょっとこわい見た目の魚。",
     imageId: "fish_004",
     displaySize: "large",
+    waterType: "saltwater",
   },
   {
     type: "ハシナガチョウチョウウオ",
@@ -89,6 +94,7 @@ export const FISH_MASTER: FishMaster[] = [
     description: "細長い口でサンゴのすき間をつつく、おしゃれな魚。",
     imageId: "fish_038",
     displaySize: "small",
+    waterType: "saltwater",
   },
   {
     type: "カレイ",
@@ -98,6 +104,7 @@ export const FISH_MASTER: FishMaster[] = [
     imageId: "fish_016",
     layer: "bottom",
     displaySize: "medium",
+    waterType: "saltwater",
   },
   {
     type: "コウイカ",
@@ -106,6 +113,7 @@ export const FISH_MASTER: FishMaster[] = [
     description: "体の模様を自在に変える、海のカメレオン。",
     imageId: "fish_017",
     displaySize: "medium",
+    waterType: "saltwater",
   },
   {
     type: "タツノオトシゴ",
@@ -115,6 +123,7 @@ export const FISH_MASTER: FishMaster[] = [
     imageId: "fish_026",
     companionBuff: { type: "affection_boost", value: 1, description: "餌やりの好感度+1" },
     displaySize: "tiny",
+    waterType: "saltwater",
   },
   {
     type: "ツノダシ",
@@ -123,6 +132,7 @@ export const FISH_MASTER: FishMaster[] = [
     description: "黒と白の縞に黄色いしっぽが目を引く、三角形の体の魚。",
     imageId: "fish_030",
     displaySize: "small",
+    waterType: "saltwater",
   },
   {
     type: "ハリセンボン",
@@ -131,6 +141,7 @@ export const FISH_MASTER: FishMaster[] = [
     description: "危険を感じるとふくらんでトゲを立てる、まん丸な魚。",
     imageId: "fish_042",
     displaySize: "small",
+    waterType: "saltwater",
   },
   {
     type: "カサゴ",
@@ -140,6 +151,7 @@ export const FISH_MASTER: FishMaster[] = [
     imageId: "fish_014",
     layer: "bottom",
     displaySize: "small",
+    waterType: "saltwater",
   },
   {
     type: "タツノオトシゴ2",
@@ -148,6 +160,7 @@ export const FISH_MASTER: FishMaster[] = [
     description: "オレンジ色が美しい、タツノオトシゴの仲間。",
     imageId: "fish_027",
     displaySize: "tiny",
+    waterType: "saltwater",
   },
   {
     type: "ナブカ",
@@ -157,6 +170,7 @@ export const FISH_MASTER: FishMaster[] = [
     imageId: "fish_031",
     companionBuff: { type: "disease_resistance", value: 0.1, description: "病気耐性+10%" },
     displaySize: "small",
+    waterType: "saltwater",
   },
   {
     type: "マダイ",
@@ -165,6 +179,7 @@ export const FISH_MASTER: FishMaster[] = [
     description: "めでたい席に欠かせない、日本人が愛する赤い魚。",
     imageId: "fish_044",
     displaySize: "medium",
+    waterType: "saltwater",
   },
   {
     type: "ウナギ",
@@ -173,6 +188,7 @@ export const FISH_MASTER: FishMaster[] = [
     description: "くねくねと泳ぐ細長い体。うな重にもなる、日本の夏の味。",
     imageId: "fish_005",
     displaySize: "medium",
+    waterType: "saltwater",
   },
   {
     type: "エイ",
@@ -181,6 +197,7 @@ export const FISH_MASTER: FishMaster[] = [
     description: "平たい体で海底をひらひら泳ぐ、優雅な生き物。",
     imageId: "fish_009",
     displaySize: "large",
+    waterType: "saltwater",
   },
   {
     type: "ウミヘビ",
@@ -189,6 +206,7 @@ export const FISH_MASTER: FishMaster[] = [
     description: "海の中を泳ぐヘビ。毒を持つものも多いが、動きはとても優雅。",
     imageId: "fish_008",
     displaySize: "medium",
+    waterType: "saltwater",
   },
   {
     type: "チンアナゴ",
@@ -198,6 +216,7 @@ export const FISH_MASTER: FishMaster[] = [
     imageId: "fish_029",
     layer: "bottom",
     displaySize: "tiny",
+    waterType: "saltwater",
   },
   {
     type: "ニシキベラ",
@@ -206,6 +225,7 @@ export const FISH_MASTER: FishMaster[] = [
     description: "緑とピンクのツートンカラーが鮮やかな、サンゴ礁のおしゃれさん。",
     imageId: "fish_035",
     displaySize: "small",
+    waterType: "saltwater",
   },
   {
     type: "タコ",
@@ -214,6 +234,7 @@ export const FISH_MASTER: FishMaster[] = [
     description: "8本の足で器用に動き、体の色まで変えられる海の知恵者。",
     imageId: "fish_025",
     displaySize: "medium",
+    waterType: "saltwater",
   },
   {
     type: "イカ",
@@ -222,6 +243,7 @@ export const FISH_MASTER: FishMaster[] = [
     description: "透明な体でするすると泳ぐ、10本足の海の忍者。",
     imageId: "fish_001",
     displaySize: "small",
+    waterType: "saltwater",
   },
   {
     type: "バイカラードティーバック",
@@ -230,6 +252,7 @@ export const FISH_MASTER: FishMaster[] = [
     description: "上半身が紫、下半身が黄色の二色に分かれた、鮮やかな小魚。",
     imageId: "fish_036",
     displaySize: "tiny",
+    waterType: "saltwater",
   },
   // ---- 高級 ----
   {
@@ -240,6 +263,7 @@ export const FISH_MASTER: FishMaster[] = [
     imageId: "fish_033",
     companionBuff: { type: "decay_reduction", value: 0.3, description: "放置による好感度低下-30%" },
     displaySize: "small",
+    waterType: "saltwater",
   },
   {
     type: "ハナミノカサゴ",
@@ -249,6 +273,7 @@ export const FISH_MASTER: FishMaster[] = [
     imageId: "fish_041",
     companionBuff: { type: "disease_resistance", value: 0.3, description: "病気耐性+30%（毒トゲが守る）" },
     displaySize: "small",
+    waterType: "saltwater",
   },
   {
     type: "オオモンハゲブダイ",
@@ -257,6 +282,7 @@ export const FISH_MASTER: FishMaster[] = [
     description: "サンゴをかじって砂に変えてしまう、パワフルな魚。",
     imageId: "fish_013",
     displaySize: "medium",
+    waterType: "saltwater",
   },
   {
     type: "ニシキテグリ",
@@ -266,6 +292,7 @@ export const FISH_MASTER: FishMaster[] = [
     imageId: "fish_034",
     companionBuff: { type: "affection_boost", value: 3, description: "餌やりの好感度+3" },
     displaySize: "tiny",
+    waterType: "saltwater",
   },
   {
     type: "カブトガニ",
@@ -276,6 +303,7 @@ export const FISH_MASTER: FishMaster[] = [
     companionBuff: { type: "disease_resistance", value: 0.5, description: "病気耐性+50%（古代の生命力）" },
     layer: "bottom",
     displaySize: "medium",
+    waterType: "saltwater",
   },
   {
     type: "ハナヒゲウツボ",
@@ -285,6 +313,7 @@ export const FISH_MASTER: FishMaster[] = [
     imageId: "fish_040",
     companionBuff: { type: "heal_speed", value: 2, description: "病気回復期間×2倍速" },
     displaySize: "large",
+    waterType: "saltwater",
   },
   {
     type: "ウミガメ",
@@ -294,6 +323,7 @@ export const FISH_MASTER: FishMaster[] = [
     imageId: "fish_007",
     companionBuff: { type: "decay_reduction", value: 0.4, description: "放置による好感度低下-40%（長命の象徴）" },
     displaySize: "large",
+    waterType: "saltwater",
   },
   {
     type: "チョウチンアンコウ",
@@ -303,6 +333,7 @@ export const FISH_MASTER: FishMaster[] = [
     imageId: "fish_028",
     companionBuff: { type: "heal_speed", value: 2, description: "回復速度×2（深海の治癒力）" },
     displaySize: "small",
+    waterType: "saltwater",
   },
   {
     type: "オオグソクムシ",
@@ -312,6 +343,7 @@ export const FISH_MASTER: FishMaster[] = [
     imageId: "fish_011",
     layer: "bottom",
     displaySize: "small",
+    waterType: "saltwater",
   },
   {
     type: "パウダーブルーサージョンフィッシュ",
@@ -320,6 +352,7 @@ export const FISH_MASTER: FishMaster[] = [
     description: "粉雪のような水色の体に黒いライン。インド洋のサンゴ礁に輝く美魚。",
     imageId: "fish_037",
     displaySize: "medium",
+    waterType: "saltwater",
   },
   // ---- ロマン ----
   {
@@ -330,6 +363,7 @@ export const FISH_MASTER: FishMaster[] = [
     imageId: "fish_022",
     companionBuff: { type: "disease_resistance", value: 0.6, description: "病気耐性+60%" },
     displaySize: "large",
+    waterType: "saltwater",
   },
   {
     type: "ホホジロザメ",
@@ -339,6 +373,7 @@ export const FISH_MASTER: FishMaster[] = [
     imageId: "fish_043",
     companionBuff: { type: "disease_resistance", value: 0.8, description: "病気耐性+80%（最強の免疫）" },
     displaySize: "xlarge",
+    waterType: "saltwater",
   },
   {
     type: "オウムガイ",
@@ -348,6 +383,7 @@ export const FISH_MASTER: FishMaster[] = [
     imageId: "fish_010",
     companionBuff: { type: "decay_reduction", value: 0.5, description: "放置による好感度低下-50%（殻が守る）" },
     displaySize: "small",
+    waterType: "saltwater",
   },
   {
     type: "ジュゴン",
@@ -357,6 +393,7 @@ export const FISH_MASTER: FishMaster[] = [
     imageId: "fish_021",
     companionBuff: { type: "heal_speed", value: 1, description: "病気が1日で治る（癒しの力）" },
     displaySize: "xlarge",
+    waterType: "saltwater",
   },
   {
     type: "リーフィーシードラゴン",
@@ -366,6 +403,7 @@ export const FISH_MASTER: FishMaster[] = [
     imageId: "fish_047",
     companionBuff: { type: "affection_boost", value: 5, description: "餌やりの好感度+5" },
     displaySize: "medium",
+    waterType: "saltwater",
   },
   {
     type: "マンタ",
@@ -375,6 +413,7 @@ export const FISH_MASTER: FishMaster[] = [
     imageId: "fish_045",
     companionBuff: { type: "decay_reduction", value: 0.5, description: "放置による好感度低下-50%" },
     displaySize: "xlarge",
+    waterType: "saltwater",
   },
   {
     type: "ジンベエザメ",
@@ -384,6 +423,7 @@ export const FISH_MASTER: FishMaster[] = [
     imageId: "fish_024",
     companionBuff: { type: "tank_expansion", value: 1, description: "水槽収容数+1" },
     displaySize: "xlarge",
+    waterType: "saltwater",
   },
   {
     type: "マンボウ",
@@ -392,6 +432,7 @@ export const FISH_MASTER: FishMaster[] = [
     description: "体重1トンを超えることもある、世界最重量の硬骨魚。ひれで器用に泳ぐ。",
     imageId: "fish_046",
     displaySize: "xlarge",
+    waterType: "saltwater",
   },
   {
     type: "シャチ",
@@ -401,6 +442,7 @@ export const FISH_MASTER: FishMaster[] = [
     imageId: "fish_020",
     companionBuff: { type: "disease_resistance", value: 0.7, description: "病気耐性+70%" },
     displaySize: "xlarge",
+    waterType: "saltwater",
   },
   {
     type: "シーラカンス",
@@ -409,6 +451,7 @@ export const FISH_MASTER: FishMaster[] = [
     description: "4億年前から生き続ける生きた化石。幻の深海魚として世界中が驚いた。",
     imageId: "fish_019",
     displaySize: "large",
+    waterType: "saltwater",
   },
   {
     type: "イッカク",
@@ -417,6 +460,7 @@ export const FISH_MASTER: FishMaster[] = [
     description: "頭から長い角が伸びる、ユニコーンの海版。北極海に生きる幻の海獣。",
     imageId: "fish_002",
     displaySize: "xlarge",
+    waterType: "saltwater",
   },
   {
     type: "シロイルカ",
@@ -425,6 +469,7 @@ export const FISH_MASTER: FishMaster[] = [
     description: "真っ白な体と丸い額が印象的な、「海のカナリア」とも呼ばれる歌うクジラ。",
     imageId: "fish_023",
     displaySize: "xlarge",
+    waterType: "saltwater",
   },
   {
     type: "オオメジロザメ",
@@ -433,6 +478,7 @@ export const FISH_MASTER: FishMaster[] = [
     description: "淡水にも進出できる珍しいサメ。川の奥深くまで遡上することもある大型種。",
     imageId: "fish_012",
     displaySize: "large",
+    waterType: "saltwater",
   },
   {
     type: "三葉虫",
@@ -441,6 +487,7 @@ export const FISH_MASTER: FishMaster[] = [
     description: "古生代の海に繁栄した、節足動物の先祖。5億年前の海を泳いだ生き物。",
     imageId: "fish_048",
     displaySize: "small",
+    waterType: "saltwater",
   },
 ];
 

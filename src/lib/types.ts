@@ -38,6 +38,7 @@ export interface WordStats {
 
 export type Rarity = "激安" | "普通" | "高級" | "ロマン";
 export type GrowthStage = "幼魚" | "成魚";
+export type WaterType = "saltwater" | "freshwater";
 
 // 相棒バフの種類
 export type CompanionBuffType =
@@ -110,6 +111,7 @@ export interface UserStatus {
   freeMemo?: string; // フリーしごと画面の永続メモ
   customFish?: CustomFishDef[]; // 管理者が追加したカスタム魚
   deletedWordIds?: string[]; // 削除した単語ID（同期でのゾンビ復活防止）
+  hasFreshwaterTank?: boolean; // 淡水水槽を購入済みか（デフォルト false）
 }
 
 export type StudyMode = "self" | "choice" | "listen";
