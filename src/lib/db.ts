@@ -3,6 +3,8 @@
 
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type {
+  BlankQuestion,
+  BlankQuestionStats,
   EncyclopediaEntry,
   Fish,
   FishHistoryEntry,
@@ -15,7 +17,7 @@ import type {
 } from "./types";
 
 const DB_NAME = "AquaLinguaDB";
-const DB_VERSION = 5; // v5: fishOverrides ストア追加（組み込み魚編集用）
+const DB_VERSION = 6; // v6: exampleSentences / exampleSentenceStats ストア追加
 
 export const LOCAL_USER_ID = "local-user"; // MVP: 認証なしの固定ユーザーID
 
@@ -30,6 +32,8 @@ interface AppDBSchema extends DBSchema {
   fishHistory: { key: string; value: FishHistoryEntry };
   companions: { key: string; value: Fish };
   fishOverrides: { key: string; value: FishOverride };
+  blankQuestions: { key: string; value: BlankQuestion };
+  blankQuestionStats: { key: string; value: BlankQuestionStats };
 }
 
 let dbPromise: Promise<IDBPDatabase<AppDBSchema>> | null = null;
@@ -57,6 +61,10 @@ export function getLocalDB(): Promise<IDBPDatabase<AppDBSchema>> {
         }
         if (oldVersion < 5) {
           db.createObjectStore("fishOverrides", { keyPath: "type" });
+        }
+        if (oldVersion < 6) {
+          db.createObjectStore("blankQuestions", { keyPath: "id" });
+          db.createObjectStore("blankQuestionStats", { keyPath: "id" });
         }
       },
     });
@@ -392,4 +400,40 @@ export async function putFishOverride(override: FishOverride): Promise<void> {
 
 export async function deleteFishOverride(type: string): Promise<void> {
   await (await getLocalDB()).delete("fishOverrides", type);
+}
+
+// ---------- BlankQuestions（穴抜け問題集） ----------
+export async function getAllBlankQuestions(): Promise<BlankQuestion[]> {
+  return (await getLocalDB()).getAll("blankQuestions");
+}
+
+export async function putBlankQuestion(q: BlankQuestion): Promise<void> {
+  await (await getLocalDB()).put("blankQuestions", {
+    ...q,
+    lastUpdated: Date.now(),
+  });
+}
+
+export async function putBlankQuestions(qs: BlankQuestion[]): Promise<void> {
+  const db = await getLocalDB();
+  const tx = db.transaction("blankQuestions", "readwrite");
+  const now = Date.now();
+  await Promise.all(qs.map((q) => tx.store.put({ ...q, lastUpdated: now })));
+  await tx.done;
+}
+
+export async function deleteBlankQuestion(id: string): Promise<void> {
+  await (await getLocalDB()).delete("blankQuestions", id);
+}
+
+// ---------- BlankQuestionStats（穴抜け問題苦手統計） ----------
+export async function getAllBlankQuestionStats(): Promise<BlankQuestionStats[]> {
+  return (await getLocalDB()).getAll("blankQuestionStats");
+}
+
+export async function putBlankQuestionStats(stats: BlankQuestionStats): Promise<void> {
+  await (await getLocalDB()).put("blankQuestionStats", {
+    ...stats,
+    lastUpdated: Date.now(),
+  });
 }

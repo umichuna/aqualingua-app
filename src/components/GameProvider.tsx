@@ -38,8 +38,11 @@ import {
   clearAllData,
   createInitialUserStatus,
   deleteFish as dbDeleteFish,
+  deleteBlankQuestion,
   deleteWord as dbDeleteWord,
   discoverFishType,
+  getAllBlankQuestions,
+  getAllBlankQuestionStats,
   getAllEncyclopedia,
   getAllFish,
   getAllFishHistory,
@@ -49,6 +52,9 @@ import {
   getAllWordStats,
   getAllWords,
   getUserStatus,
+  putBlankQuestion,
+  putBlankQuestions,
+  putBlankQuestionStats,
   putFish,
   putFishHistoryEntry,
   putFishList,
@@ -64,6 +70,8 @@ import { sfx } from "@/lib/sound";
 import { pullFromCloud, pushToCloud } from "@/lib/sync";
 import { deleteSharedCustomFish, fetchSharedCustomFish, postSharedCustomFish } from "@/lib/customFish";
 import type {
+  BlankQuestion,
+  BlankQuestionStats,
   CustomFishDef,
   EncyclopediaEntry,
   Fish,
@@ -73,6 +81,7 @@ import type {
   GoldLedgerEntry,
   StudyMode,
   StudySession,
+  Tank,
   UserStatus,
   Word,
   WordStats,
@@ -120,8 +129,11 @@ interface GameContextValue {
   addManualSession: (date: string, label: string, count: number) => void;
 
   // 水槽
-  currentTankType: import("@/lib/types").WaterType;
-  setCurrentTankType: (type: import("@/lib/types").WaterType) => void;
+  tanks: Tank[];
+  currentTankId: string;
+  setCurrentTankId: (id: string) => void;
+  moveFishToTank: (fishId: string, targetTankId: string) => void;
+  buyTank: (type: WaterType) => void;
   feedAllFish: (kind: BaitKind) => boolean;
   useMedicine: (fishId: string) => boolean;
   moveTankFishToBox: (fishId: string) => void;
@@ -153,6 +165,15 @@ interface GameContextValue {
   updateCustomFish: (def: CustomFishDef) => void;
   removeCustomFish: (fishType: string) => void;
   updateBuiltinFish: (override: FishOverride) => void;
+  buyTankSlot: (type: import("@/lib/types").WaterType) => void;
+
+  // 穴抜け問題
+  blankQuestions: BlankQuestion[];
+  blankQuestionStats: Record<string, BlankQuestionStats>;
+  addBlankQuestion: (q: Omit<BlankQuestion, "id" | "createdAt" | "lastUpdated">) => void;
+  importBlankQuestions: (qs: Omit<BlankQuestion, "id" | "createdAt" | "lastUpdated">[]) => void;
+  removeBlankQuestion: (id: string) => void;
+  recordBlankAnswer: (id: string, correct: boolean) => void;
 
   // その他
   resetAllData: () => Promise<void>;
@@ -187,7 +208,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const [sharedCustomFish, setSharedCustomFish] = useState<CustomFishDef[]>([]);
   // 組み込み魚のオーバーライド（編集用）
   const [fishOverrides, setFishOverrides] = useState<FishOverride[]>([]);
-  const [currentTankType, setCurrentTankType] = useState<WaterType>("saltwater");
+  const [blankQuestions, setBlankQuestions] = useState<BlankQuestion[]>([]);
+  const [blankQuestionStats, setBlankQuestionStats] = useState<Record<string, BlankQuestionStats>>({});
+  const [currentTankId, setCurrentTankId] = useState<string>("sw-1");
+  const currentTankIdRef = useRef(currentTankId);
+  useEffect(() => { currentTankIdRef.current = currentTankId; }, [currentTankId]);
   const userRef = useRef(user);
   const fishRef = useRef(fishList);
   const allFishMasterRef = useRef<FishMaster[]>(FISH_MASTER);
@@ -195,6 +220,16 @@ export function GameProvider({ children }: { children: ReactNode }) {
     userRef.current = user;
     fishRef.current = fishList;
   }, [user, fishList]);
+
+  const tanks = useMemo<Tank[]>(() => {
+    if (user.tanks?.length) return user.tanks;
+    const swCount = user.saltwaterTankCount ?? 1;
+    const fwCount = user.freshwaterTankCount ?? (user.hasFreshwaterTank ? 1 : 0);
+    const result: Tank[] = [];
+    for (let i = 1; i <= swCount; i++) result.push({ id: `sw-${i}`, type: "saltwater", name: `海水 ${i}` });
+    for (let i = 1; i <= fwCount; i++) result.push({ id: `fw-${i}`, type: "freshwater", name: `淡水 ${i}` });
+    return result;
+  }, [user.tanks, user.saltwaterTankCount, user.freshwaterTankCount, user.hasFreshwaterTank]);
 
   const pushNotice = useCallback((icon: string, text: string) => {
     const id = noticeSeq++;
@@ -578,6 +613,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         isSick: false,
         sickStartTime: null,
         lastUpdated: now,
+        tankId: currentTankIdRef.current,
       };
       const next = [...fishRef.current, fish];
       setFishList(next);
@@ -910,14 +946,88 @@ export function GameProvider({ children }: { children: ReactNode }) {
         console.error("[FishOverride] update failed", e);
         pushNotice("⚠️", "組み込みおさかなの編集に失敗しました");
       });
+      // 既存の水槽魚にも全フィールドを反映
+      const currentFish = fishRef.current;
+      const affected = currentFish.filter((f) => f.type === override.type);
+      if (affected.length > 0) {
+        const updated = currentFish.map((f) => {
+          if (f.type !== override.type) return f;
+          return {
+            ...f,
+            ...(override.rarity !== undefined && { rarity: override.rarity }),
+          };
+        });
+        persistFishList(updated);
+      }
     },
-    [pushNotice]
+    [pushNotice, persistFishList]
   );
 
   // fishOverrides を DB から読み込み
   useEffect(() => {
     void getAllFishOverrides().then(setFishOverrides);
   }, []);
+
+  // 穴抜け問題を DB から読み込み
+  useEffect(() => {
+    void getAllBlankQuestions().then(setBlankQuestions);
+    void getAllBlankQuestionStats().then((list) =>
+      setBlankQuestionStats(Object.fromEntries(list.map((s) => [s.id, s])))
+    );
+  }, []);
+
+  const buyTank = useCallback(
+    (type: WaterType) => {
+      const u = userRef.current;
+      const currentTanks = u.tanks ?? (() => {
+        const swCount = u.saltwaterTankCount ?? 1;
+        const fwCount = u.freshwaterTankCount ?? (u.hasFreshwaterTank ? 1 : 0);
+        const r: Tank[] = [];
+        for (let i = 1; i <= swCount; i++) r.push({ id: `sw-${i}`, type: "saltwater", name: `海水 ${i}` });
+        for (let i = 1; i <= fwCount; i++) r.push({ id: `fw-${i}`, type: "freshwater", name: `淡水 ${i}` });
+        return r;
+      })();
+      const sameTanks = currentTanks.filter(t => t.type === type);
+      if (sameTanks.length >= 3) return; // 上限 3 槽
+      const price = SHOP_PRICES.freshwaterTank; // 海水・淡水共通 3000G
+      if (u.gold < price) return;
+      const idx = sameTanks.length + 1;
+      const prefix = type === "saltwater" ? "sw" : "fw";
+      const tankName = type === "saltwater" ? `海水 ${idx}` : `淡水 ${idx}`;
+      const newTank: Tank = { id: `${prefix}-${idx}`, type, name: tankName };
+      persistUser({ ...u, gold: u.gold - price, tanks: [...currentTanks, newTank] });
+      recordLedger(-price, `${tankName}水槽追加`, u.gold - price);
+    },
+    [persistUser, recordLedger]
+  );
+
+  const moveFishToTank = useCallback(
+    (fishId: string, targetTankId: string) => {
+      const fish = fishRef.current.find(f => f.fishId === fishId);
+      if (!fish) return;
+      const updated: Fish = { ...fish, tankId: targetTankId, lastUpdated: Date.now() };
+      setFishList(list => list.map(f => f.fishId === fishId ? updated : f));
+      void putFish(updated);
+      schedulePush();
+    },
+    [schedulePush]
+  );
+
+  // 旧 buyTankSlot — 互換のためにエイリアスを残す（ShopView 移行後は削除可）
+  const buyTankSlot = useCallback(
+    (type: WaterType) => {
+      const u = userRef.current;
+      const price = SHOP_PRICES.freshwaterTank;
+      if (u.gold < price) return;
+      if (type === "saltwater") {
+        persistUser({ ...u, gold: u.gold - price, saltwaterTankCount: (u.saltwaterTankCount ?? 1) + 1 });
+      } else {
+        persistUser({ ...u, gold: u.gold - price, freshwaterTankCount: (u.freshwaterTankCount ?? 0) + 1 });
+      }
+      recordLedger(-price, `${type === "saltwater" ? "海水" : "淡水"}水槽追加`, u.gold - price);
+    },
+    [persistUser, recordLedger]
+  );
 
   const releaseBoxFish = useCallback(
     (fishId: string) => {
@@ -941,6 +1051,54 @@ export function GameProvider({ children }: { children: ReactNode }) {
       pushNotice("🌊", `${fish.name} を海へ帰した`);
     },
     [persistUser, pushNotice]
+  );
+
+  // ---------- 穴抜け問題 ----------
+  const addBlankQuestion = useCallback(
+    (q: Omit<BlankQuestion, "id" | "createdAt" | "lastUpdated">) => {
+      const now = Date.now();
+      const newQ: BlankQuestion = { ...q, id: crypto.randomUUID(), createdAt: now, lastUpdated: now };
+      setBlankQuestions((prev) => [...prev, newQ]);
+      void putBlankQuestion(newQ);
+    },
+    []
+  );
+
+  const importBlankQuestions = useCallback(
+    (qs: Omit<BlankQuestion, "id" | "createdAt" | "lastUpdated">[]) => {
+      const now = Date.now();
+      const newQs: BlankQuestion[] = qs.map((q) => ({ ...q, id: crypto.randomUUID(), createdAt: now, lastUpdated: now }));
+      setBlankQuestions((prev) => [...prev, ...newQs]);
+      void putBlankQuestions(newQs);
+    },
+    []
+  );
+
+  const removeBlankQuestion = useCallback(
+    (id: string) => {
+      setBlankQuestions((prev) => prev.filter((q) => q.id !== id));
+      setBlankQuestionStats((prev) => { const next = { ...prev }; delete next[id]; return next; });
+      void deleteBlankQuestion(id);
+    },
+    []
+  );
+
+  const recordBlankAnswer = useCallback(
+    (id: string, correct: boolean) => {
+      setBlankQuestionStats((prev) => {
+        const existing = prev[id];
+        const now = Date.now();
+        const updated: BlankQuestionStats = {
+          id,
+          incorrectCount: correct ? (existing?.incorrectCount ?? 0) : (existing?.incorrectCount ?? 0) + 1,
+          lastReviewedAt: now,
+          lastUpdated: now,
+        };
+        void putBlankQuestionStats(updated);
+        return { ...prev, [id]: updated };
+      });
+    },
+    []
   );
 
   // ---------- その他 ----------
@@ -1040,11 +1198,21 @@ export function GameProvider({ children }: { children: ReactNode }) {
         updateCustomFish,
         removeCustomFish,
         updateBuiltinFish,
+        buyTankSlot,
+        tanks,
+        currentTankId,
+        setCurrentTankId,
+        moveFishToTank,
+        buyTank,
+        blankQuestions,
+        blankQuestionStats,
+        addBlankQuestion,
+        importBlankQuestions,
+        removeBlankQuestion,
+        recordBlankAnswer,
         resetAllData,
         syncNow,
         pushNow,
-        currentTankType,
-        setCurrentTankType,
       }}
     >
       {children}

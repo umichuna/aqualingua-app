@@ -4,7 +4,7 @@
 
 import type { CompanionBuff, Rarity, WaterType } from "@/lib/types";
 
-export type FishDisplaySize = "tiny" | "small" | "medium" | "large" | "xlarge";
+export type FishDisplaySize = "tiny" | "xsmall" | "small" | "medium" | "large" | "xlarge";
 
 export interface RarityInfo {
   color: string;
@@ -35,7 +35,8 @@ export interface FishPalette {
 }
 
 export interface FishMaster {
-  type: string; // 種類名（図鑑のキー）
+  type: string; // 種類名（図鑑のキー、変更不可）
+  displayName?: string; // 表示名（未設定なら type をそのまま表示）
   rarity: Rarity;
   palette: FishPalette;
   description: string; // 図鑑の説明文

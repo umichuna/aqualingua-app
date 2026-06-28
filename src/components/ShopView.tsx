@@ -27,8 +27,9 @@ const SHOP_ITEMS = [
   { key: "medicine" as const, name: "おくすり", desc: "病気を治療する", price: SHOP_PRICES.medicine, icon: "💊" },
   { key: "tankExpansion" as const, name: "水槽拡張キット", desc: "飼育上限 +2", price: SHOP_PRICES.tankExpansion, icon: "🪸" },
   { key: "boxExpansion" as const, name: "ボックス拡張キット", desc: "ボックス +5匹", price: SHOP_PRICES.boxExpansion, icon: "📦" },
-  { key: "freshwaterTank" as const, name: "淡水水槽", desc: "淡水魚を飼育できる", price: SHOP_PRICES.freshwaterTank, icon: "🌿" },
 ];
+
+const MAX_TANK_TYPE_COUNT = 3;
 
 // ガチャのレア度確率を表示用テキストに変換
 function rarityRateText(weights: Record<string, number>): string {
@@ -96,16 +97,27 @@ export default function ShopView() {
       flash(false, "水槽はこれ以上拡張できないよ");
       return;
     }
-    if (item.key === "freshwaterTank" && user.hasFreshwaterTank) {
-      flash(false, "すでに購入済みです");
-      return;
-    }
     if (game.buyItem(item.key)) {
       sfx.register();
       flash(true, `${item.name} を購入しました！`);
     } else {
       flash(false, "ゴールドが足りません");
     }
+  };
+
+  const buyTankAction = (type: "saltwater" | "freshwater") => {
+    const count = type === "saltwater" ? swCount : fwCount;
+    if (count >= MAX_TANK_TYPE_COUNT) {
+      flash(false, `${type === "saltwater" ? "海水" : "淡水"}水槽は最大${MAX_TANK_TYPE_COUNT}槽までだよ`);
+      return;
+    }
+    if (user.gold < SHOP_PRICES.freshwaterTank) {
+      flash(false, "ゴールドが足りません");
+      return;
+    }
+    game.buyTank(type);
+    sfx.register();
+    flash(true, `${type === "saltwater" ? "🌊 海水" : "🌿 淡水"}水槽を追加しました！`);
   };
 
   const getItemPrice = (item: (typeof SHOP_ITEMS)[number]): number => {
@@ -120,9 +132,12 @@ export default function ShopView() {
     if (item.key === "medicine") return `所持 ${user.items.medicine}`;
     if (item.key === "tankExpansion") return `上限 ${user.tankCapacity}/${MAX_TANK_CAPACITY}`;
     if (item.key === "boxExpansion") return `上限 ${user.boxCapacity ?? BOX_CAPACITY_INITIAL}匹`;
-    if (item.key === "freshwaterTank") return user.hasFreshwaterTank ? "購入済み" : "未購入";
     return "";
   };
+
+  const tanks = game.tanks;
+  const swCount = tanks ? tanks.filter(t => t.type === "saltwater").length : (user.saltwaterTankCount ?? 1);
+  const fwCount = tanks ? tanks.filter(t => t.type === "freshwater").length : (user.freshwaterTankCount ?? (user.hasFreshwaterTank ? 1 : 0));
 
   const TIER_KEYS: GachaTier[] = ["cheap", "normal", "premium"];
 
@@ -162,6 +177,34 @@ export default function ShopView() {
                 }`}
               >
                 {info.price}G
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* 水槽追加 */}
+      <div className="space-y-2">
+        <div className="text-xs font-bold text-glow">🐠 水槽を追加（各最大{MAX_TANK_TYPE_COUNT}槽・{SHOP_PRICES.freshwaterTank}G）</div>
+        {(["saltwater", "freshwater"] as const).map((type) => {
+          const count = type === "saltwater" ? swCount : fwCount;
+          const isFull = count >= MAX_TANK_TYPE_COUNT;
+          const afford = user.gold >= SHOP_PRICES.freshwaterTank;
+          return (
+            <div key={type} className="flex items-center gap-3 rounded-xl p-3 bg-mid">
+              <span className="text-2xl">{type === "saltwater" ? "🌊" : "🌿"}</span>
+              <div className="flex-1">
+                <div className="font-bold text-sm text-foam">{type === "saltwater" ? "海水水槽" : "淡水水槽"}</div>
+                <div className="text-xs text-dim">現在 {count}/{MAX_TANK_TYPE_COUNT} 槽</div>
+              </div>
+              <button
+                onClick={() => buyTankAction(type)}
+                disabled={isFull}
+                className={`text-xs px-3 py-1.5 rounded-lg font-bold active:scale-95 transition-transform ${
+                  isFull ? "bg-white/10 text-dim" : afford ? "bg-glow text-deep" : "bg-white/10 text-dim"
+                }`}
+              >
+                {isFull ? "上限" : `${SHOP_PRICES.freshwaterTank}G`}
               </button>
             </div>
           );

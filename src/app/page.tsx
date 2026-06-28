@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { signIn, useSession } from "next-auth/react";
 import AdminView from "@/components/AdminView";
 import AquariumView from "@/components/AquariumView";
+import BlankQuestionView from "@/components/BlankQuestionView";
 import EncyclopediaView from "@/components/EncyclopediaView";
 import { GameProvider, useGame } from "@/components/GameProvider";
 import { Onboarding, SettingsModal } from "@/components/Modals";
@@ -30,7 +31,7 @@ const NAV_TABS = [
 ] as const;
 
 // ナビ外のビュー（ホームから開く）
-type TabId = (typeof NAV_TABS)[number]["id"] | "record" | "words" | "zukan" | "admin";
+type TabId = (typeof NAV_TABS)[number]["id"] | "record" | "words" | "zukan" | "admin" | "blank";
 
 // ホーム画面のボタン一覧
 const HOME_BUTTONS: { id: TabId | "settings" | "tutorial"; label: string; icon: string; desc: string }[] = [
@@ -39,6 +40,7 @@ const HOME_BUTTONS: { id: TabId | "settings" | "tutorial"; label: string; icon: 
   { id: "record", label: "記録", icon: "📊", desc: "しごと記録と通帳" },
   { id: "words", label: "単語帳", icon: "📚", desc: "単語の管理・追加" },
   { id: "zukan", label: "図鑑", icon: "📕", desc: "発見したおさかな" },
+  { id: "blank", label: "穴抜け", icon: "✏️", desc: "穴抜け問題を解く" },
   { id: "shop", label: "ショップ", icon: "🛒", desc: "ガチャ・アイテム" },
   { id: "tutorial", label: "あそびかた", icon: "📖", desc: "チュートリアルを見る" },
   { id: "settings", label: "設定", icon: "⚙️", desc: "セーブ・音・初期化" },
@@ -122,7 +124,7 @@ function AppShell() {
     if (t === "aquarium") return "study"; // 水槽は study BGM（海底からの手紙）
     if (t === "study") return null; // しごとタブは無音
     if (t === "shop") return "shop";
-    return null; // record/words/zukan は無音
+    return null; // record/words/zukan/blank は無音
   };
 
   // タブ移動 + BGM切り替えをまとめて行うヘルパー
@@ -195,6 +197,7 @@ function AppShell() {
         {tab === "words" && <WordManager />}
         {tab === "zukan" && <EncyclopediaView />}
         {tab === "shop" && <ShopView />}
+        {tab === "blank" && <BlankQuestionView />}
         {tab === "admin" && <AdminView />}
       </main>
 

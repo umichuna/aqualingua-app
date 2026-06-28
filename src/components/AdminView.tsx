@@ -11,11 +11,12 @@ import PixelFish from "./PixelFish";
 
 const RARITIES: Rarity[] = ["激安", "普通", "高級", "ロマン"];
 const DISPLAY_SIZES: { value: FishDisplaySize; label: string }[] = [
-  { value: "tiny", label: "超小（48px）" },
-  { value: "small", label: "小（72px）" },
-  { value: "medium", label: "中（96px）" },
-  { value: "large", label: "大（128px）" },
-  { value: "xlarge", label: "超大（176px）" },
+  { value: "tiny", label: "最小（24px）" },
+  { value: "xsmall", label: "超小（36px）" },
+  { value: "small", label: "小（48px）" },
+  { value: "medium", label: "中（72px）" },
+  { value: "large", label: "大（96px）" },
+  { value: "xlarge", label: "超大（128px）" },
 ];
 
 const PALETTE_PRESETS: { label: string; palette: CustomFishDef["palette"] }[] = [
@@ -83,12 +84,14 @@ export default function AdminView() {
   const [editingBuiltinType, setEditingBuiltinType] = useState<string | null>(null);
   const [builtinError, setBuiltinError] = useState("");
   const [builtinForm, setBuiltinForm] = useState<{
+    displayName: string;
     rarity: Rarity;
     displaySize: FishDisplaySize;
     waterType: WaterType;
     description: string;
     imageUrl: string;
   }>({
+    displayName: "",
     rarity: "普通",
     displaySize: "medium",
     waterType: "saltwater",
@@ -354,7 +357,7 @@ export default function AdminView() {
                     >
                       {RARITY_STARS[fish.rarity]}
                     </span>
-                    <span className="text-sm font-bold text-foam">{fish.type}</span>
+                    <span className="text-sm font-bold text-foam">{fish.displayName ?? fish.type}</span>
                   </div>
                   <div className="text-[10px] text-dim mt-0.5 truncate">{fish.description}</div>
                 </div>
@@ -362,6 +365,7 @@ export default function AdminView() {
                   onClick={() => {
                     setEditingBuiltinType(fish.type);
                     setBuiltinForm({
+                      displayName: fish.displayName ?? "",
                       rarity: fish.rarity,
                       displaySize: fish.displaySize ?? "medium",
                       waterType: fish.waterType ?? "saltwater",
@@ -385,6 +389,17 @@ export default function AdminView() {
             </div>
 
             {builtinError && <p className="text-xs text-coral">{builtinError}</p>}
+
+            <div>
+              <div className="text-xs font-bold text-glow mb-1">表示名（空欄でデフォルト名を使用）</div>
+              <input
+                value={builtinForm.displayName}
+                onChange={(e) => setBuiltinForm((f) => ({ ...f, displayName: e.target.value }))}
+                placeholder={editingBuiltinType ?? ""}
+                maxLength={20}
+                className="w-full px-3 py-2 rounded-xl bg-black/30 text-foam outline-none text-sm"
+              />
+            </div>
 
             <div>
               <div className="text-xs font-bold text-glow mb-1">レア度</div>
@@ -447,13 +462,21 @@ export default function AdminView() {
             </div>
 
             <div>
-              <div className="text-xs font-bold text-glow mb-1">画像URL（任意）</div>
-              <input
-                value={builtinForm.imageUrl}
-                onChange={(e) => setBuiltinForm((f) => ({ ...f, imageUrl: e.target.value }))}
-                placeholder="https://..."
-                className="w-full px-3 py-2 rounded-xl bg-black/30 text-foam outline-none text-sm"
-              />
+              <div className="text-xs font-bold text-glow mb-1">画像（PNG/JPG）</div>
+              <label className="flex items-center gap-2 cursor-pointer px-3 py-2 rounded-xl bg-black/30 text-dim text-sm">
+                📷 画像を選択
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const b64 = await resizeToBase64(file);
+                    setBuiltinForm((f) => ({ ...f, imageUrl: b64 }));
+                  }}
+                />
+              </label>
               {builtinForm.imageUrl && (
                 <div className="mt-2 flex items-center gap-2">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -480,6 +503,7 @@ export default function AdminView() {
                   if (!editingBuiltinType) { setBuiltinError("エラーが発生しました"); return; }
                   const override: FishOverride = {
                     type: editingBuiltinType,
+                    displayName: builtinForm.displayName.trim() || undefined,
                     rarity: builtinForm.rarity,
                     displaySize: builtinForm.displaySize,
                     waterType: builtinForm.waterType,

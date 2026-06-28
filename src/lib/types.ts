@@ -40,6 +40,12 @@ export type Rarity = "激安" | "普通" | "高級" | "ロマン";
 export type GrowthStage = "幼魚" | "成魚";
 export type WaterType = "saltwater" | "freshwater";
 
+export interface Tank {
+  id: string;      // "sw-1", "fw-1" など
+  type: WaterType;
+  name: string;    // "海水 1", "淡水 1" など
+}
+
 // 相棒バフの種類
 export type CompanionBuffType =
   | "disease_resistance"  // 病気になりにくい（好感度0でも発症確率を下げる）
@@ -67,6 +73,7 @@ export interface Fish {
   isSick: boolean;
   sickStartTime: number | null;
   lastUpdated: number;
+  tankId?: string; // 所属水槽ID（未設定は水種別最初の水槽にフォールバック）
 }
 
 export interface EncyclopediaEntry {
@@ -89,10 +96,10 @@ export interface CustomFishDef {
   palette: { body: string; stripe: string; fin: string; eye: string };
   layer?: "bottom" | "middle" | "top";
   imageUrl?: string; // base64画像（canvas縮小後のJPEG）
-  displaySize?: "tiny" | "small" | "medium" | "large" | "xlarge"; // 表示サイズ
+  displaySize?: FishDisplaySize; // 表示サイズ
 }
 
-export type FishDisplaySize = "tiny" | "small" | "medium" | "large" | "xlarge";
+export type FishDisplaySize = "tiny" | "xsmall" | "small" | "medium" | "large" | "xlarge";
 
 export interface FishPalette {
   body: string;
@@ -102,7 +109,8 @@ export interface FishPalette {
 }
 
 export interface FishOverride {
-  type: string; // 組み込み魚の type（キー）
+  type: string; // 組み込み魚の type（キー、変更不可）
+  displayName?: string; // 表示名を上書き（未設定なら type をそのまま表示）
   rarity?: Rarity;
   palette?: FishPalette;
   description?: string;
@@ -134,10 +142,32 @@ export interface UserStatus {
   freeMemo?: string; // フリーしごと画面の永続メモ
   customFish?: CustomFishDef[]; // 管理者が追加したカスタム魚
   deletedWordIds?: string[]; // 削除した単語ID（同期でのゾンビ復活防止）
-  hasFreshwaterTank?: boolean; // 淡水水槽を購入済みか（デフォルト false）
+  hasFreshwaterTank?: boolean; // 後方互換（廃止予定）
+  saltwaterTankCount?: number; // 後方互換（廃止予定）
+  freshwaterTankCount?: number; // 後方互換（廃止予定）
+  tanks?: Tank[]; // 所持水槽リスト（新方式）
 }
 
 export type StudyMode = "self" | "choice" | "listen";
+
+// 穴抜け問題（〈〉プレースホルダーを選択肢で埋める）
+export interface BlankQuestion {
+  id: string;
+  sentence: string;              // 穴抜け英文（例: I 〈〉 〈〉 student）
+  answer: string;                // 正解（全〈〉を埋める語句。複数空欄は半角スペース区切り）
+  wrongChoices: [string, string, string]; // 誤答3つ
+  japaneseText: string;          // 日本語訳
+  explanation: string;           // 解説
+  createdAt: number;
+  lastUpdated: number;
+}
+
+export interface BlankQuestionStats {
+  id: string;
+  incorrectCount: number;
+  lastReviewedAt: number;
+  lastUpdated: number;
+}
 
 // しごとセッションの記録（記録画面の統計・カレンダーに使用）
 export interface StudySession {

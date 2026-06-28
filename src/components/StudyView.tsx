@@ -1038,6 +1038,21 @@ function ListenPlay({
     };
   }, []);
 
+  // 無音ループ再生でオーディオセッションを保持し、speechSynthesis が
+  // 他アプリの音声フォーカスを奪わないようにする（Android Chrome で効果あり）
+  useEffect(() => {
+    const silent = new Audio(
+      "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA="
+    );
+    silent.loop = true;
+    silent.volume = 0;
+    void silent.play().catch(() => {});
+    return () => {
+      silent.pause();
+      silent.src = "";
+    };
+  }, []);
+
   // Media Session API: OS/ブラウザのメディアコントロール（イヤホンボタン等）に対応
   useEffect(() => {
     if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;

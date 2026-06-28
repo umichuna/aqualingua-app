@@ -4,7 +4,7 @@
 // - ランダムウォーク・餌やり・状態遷移（仕様書§3）
 // - 底生魚（layer:"bottom"）は下層に固定表示
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getFishMaster, RARITY_INFO, RARITY_STARS, type FishDisplaySize } from "@/data/fishMaster";
 import { BOX_CAPACITY_INITIAL, MAX_AFFECTION } from "@/lib/gameLogic";
 import { sfx } from "@/lib/sound";
@@ -13,11 +13,12 @@ import { useGame, type BaitKind } from "./GameProvider";
 import PixelFish from "./PixelFish";
 
 const SIZE_PX: Record<FishDisplaySize, number> = {
-  tiny: 48,
-  small: 72,
-  medium: 96,
-  large: 128,
-  xlarge: 176,
+  tiny: 24,
+  xsmall: 36,
+  small: 48,
+  medium: 72,
+  large: 96,
+  xlarge: 128,
 };
 
 interface Pos {
@@ -34,11 +35,17 @@ interface BaitDrop {
 
 export default function AquariumView() {
   const game = useGame();
-  const { fishList, user, allFishMaster, currentTankType, setCurrentTankType } = game;
+  const { fishList, user, allFishMaster, tanks, currentTankId, setCurrentTankId } = game;
 
-  // 現在の水槽タイプに対応する魚だけを表示
-  const displayFish = fishList.filter(
-    (f) => (allFishMaster.find((m) => m.type === f.type)?.waterType ?? "saltwater") === currentTankType
+  // 現在の水槽IDに対応する魚だけを表示（tankId未設定の旧データは水種別の最初の水槽にフォールバック）
+  const displayFish = useMemo(
+    () => fishList.filter((f) => {
+      if (f.tankId) return f.tankId === currentTankId;
+      const waterType = allFishMaster.find((m) => m.type === f.type)?.waterType ?? "saltwater";
+      const firstTankOfType = tanks.find((t) => t.type === waterType);
+      return (firstTankOfType?.id ?? "sw-1") === currentTankId;
+    }),
+    [fishList, allFishMaster, currentTankId, tanks]
   );
   const tankRef = useRef<HTMLDivElement>(null);
   const [positions, setPositions] = useState<Record<string, Pos>>({});
@@ -237,7 +244,7 @@ export default function AquariumView() {
         {displayFish.length === 0 && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-dim text-sm">
             <span className="text-3xl">🫧</span>
-            <span>{currentTankType === "saltwater" ? "まだ魚がいない…ショップのガチャでお迎えしよう" : "🌿 まだ淡水魚がいない…ガチャで仲間にしよう"}</span>
+            <span>まだ魚がいない…ショップのガチャでお迎えしよう</span>
           </div>
         )}
 
@@ -261,25 +268,20 @@ export default function AquariumView() {
           </button>
         </div>
 
-        {/* 水槽タイプ切り替えタブ */}
-        {user.hasFreshwaterTank && (
-          <div className="absolute top-2 left-1/2 -translate-x-1/2 flex gap-1.5">
-            <button
-              onClick={(e) => { e.stopPropagation(); setCurrentTankType("saltwater"); }}
-              className={`px-3 py-1.5 rounded-full font-bold text-xs transition-all ${
-                currentTankType === "saltwater" ? "bg-glow text-deep" : "bg-black/40 text-dim"
-              }`}
-            >
-              🌊 海水
-            </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); setCurrentTankType("freshwater"); }}
-              className={`px-3 py-1.5 rounded-full font-bold text-xs transition-all ${
-                currentTankType === "freshwater" ? "bg-glow text-deep" : "bg-black/40 text-dim"
-              }`}
-            >
-              🌿 淡水
-            </button>
+        {/* 水槽タブ（2槽以上持っている場合に表示） */}
+        {tanks.length > 1 && (
+          <div className="absolute top-10 left-1/2 -translate-x-1/2 flex gap-1.5 overflow-x-auto max-w-[80%]">
+            {tanks.map((tank) => (
+              <button
+                key={tank.id}
+                onClick={(e) => { e.stopPropagation(); setCurrentTankId(tank.id); }}
+                className={`px-3 py-1.5 rounded-full font-bold text-xs transition-all whitespace-nowrap ${
+                  currentTankId === tank.id ? "bg-glow text-deep" : "bg-black/40 text-dim"
+                }`}
+              >
+                {tank.type === "saltwater" ? "🌊" : "🌿"} {tank.name}
+              </button>
+            ))}
           </div>
         )}
 
@@ -359,6 +361,27 @@ export default function AquariumView() {
               />
             </div>
           </div>
+          {/* 引越しボタン（2槽以上ある場合） */}
+          {tanks.length > 1 && (
+            <div className="mt-2">
+              <div className="text-xs text-dim mb-1">引越し先</div>
+              <div className="flex gap-1.5 flex-wrap">
+                {tanks.filter((t) => t.id !== currentTankId).map((tank) => (
+                  <button
+                    key={tank.id}
+                    onClick={() => {
+                      game.moveFishToTank(sel.fishId, tank.id);
+                      setCurrentTankId(tank.id);
+                      setSelected(null);
+                    }}
+                    className="text-xs px-2 py-1 rounded-lg bg-glow text-deep font-bold"
+                  >
+                    {tank.type === "saltwater" ? "🌊" : "🌿"} {tank.name}へ
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
