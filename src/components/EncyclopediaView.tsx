@@ -151,6 +151,7 @@ export default function EncyclopediaView() {
   const discovered = new Set(encyclopedia.map((e) => e.fishType));
 
   const [selectedType, setSelectedType] = useState<string | null>(null);
+  const [secretUnlocked, setSecretUnlocked] = useState(false);
 
   // 編集モーダル
   const [editTarget, setEditTarget] = useState<{ type: string; isCustom: boolean } | null>(null);
@@ -279,12 +280,25 @@ export default function EncyclopediaView() {
             {discovered.size} / {allFishMaster.length} 種 発見
           </span>
         </h2>
-        <button
-          onClick={() => { setCustomForm({ ...EMPTY_CUSTOM_FORM }); setCustomError(""); setShowAddCustom(true); }}
-          className="text-xs px-3 py-1.5 rounded-xl bg-glow text-deep font-bold"
-        >
-          ＋ カスタム魚
-        </button>
+        <div className="flex gap-2 items-center">
+          <button
+            onClick={() => {
+              if (secretUnlocked) { setSecretUnlocked(false); return; }
+              const pw = window.prompt("パスワードを入力してください");
+              if (pw === "shi-chankawaii0521LOVE") setSecretUnlocked(true);
+            }}
+            className="text-base leading-none"
+            title={secretUnlocked ? "ロック解除中（タップで解錠）" : "管理者モード"}
+          >
+            {secretUnlocked ? "🔓" : "🔒"}
+          </button>
+          <button
+            onClick={() => { setCustomForm({ ...EMPTY_CUSTOM_FORM }); setCustomError(""); setShowAddCustom(true); }}
+            className="text-xs px-3 py-1.5 rounded-xl bg-glow text-deep font-bold"
+          >
+            ＋ カスタム魚
+          </button>
+        </div>
       </div>
 
       {/* 魚グリッド */}
@@ -294,7 +308,7 @@ export default function EncyclopediaView() {
           .map((f) => {
             const found = discovered.has(f.type);
             const isCustom = !BUILTIN_TYPES.has(f.type);
-            const canEdit = isCustom || found;
+            const canEdit = isCustom || found || secretUnlocked;
 
             return (
               <div
@@ -730,23 +744,6 @@ export default function EncyclopediaView() {
                   placeholder="例: 海の底をゆっくり泳ぐ不思議な生き物。"
                   className="w-full px-3 py-2 rounded-xl bg-black/30 text-foam outline-none text-sm resize-none"
                 />
-              </div>
-
-              {/* カラー */}
-              <div>
-                <div className="text-xs font-bold text-glow mb-1">カラー</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {PALETTE_PRESETS.map((p, i) => (
-                    <button
-                      key={p.label}
-                      onClick={() => setCustomForm((f) => ({ ...f, paletteIdx: i }))}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-bold ${customForm.paletteIdx === i ? "ring-2 ring-glow" : ""}`}
-                      style={{ background: p.palette.body, color: "#fff" }}
-                    >
-                      {p.label}
-                    </button>
-                  ))}
-                </div>
               </div>
 
               {/* 画像 */}

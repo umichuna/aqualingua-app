@@ -332,17 +332,20 @@ export default function BlankQuestionView() {
       </div>
       {csvError && <p className="text-xs text-center text-glow">{csvError}</p>}
 
-      {/* 問題数セレクター */}
-      <div className="flex gap-1.5">
-        {([5, 10, 20, "all"] as const).map((n) => (
-          <button
-            key={n}
-            onClick={() => setBlankCount(n)}
-            className={`flex-1 text-xs py-1.5 rounded-xl font-bold ${blankCount === n ? "bg-glow text-deep" : "bg-white/10 text-dim"}`}
-          >
-            {n === "all" ? "全問" : `${n}問`}
-          </button>
-        ))}
+      {/* 問題数入力 */}
+      <div>
+        <div className="text-xs font-bold text-glow mb-1.5">出題数（最大 {blankQuestions.length} 問）</div>
+        <input
+          type="number"
+          min={1}
+          max={blankQuestions.length}
+          value={blankCount === "all" ? blankQuestions.length : blankCount}
+          onChange={(e) => {
+            const n = Math.max(1, Math.floor(Number(e.target.value)));
+            setBlankCount(n >= blankQuestions.length ? "all" : n);
+          }}
+          className="w-full px-3 py-2.5 rounded-xl bg-mid text-foam outline-none text-center font-bold"
+        />
       </div>
 
       {/* 絞り込み＋出題ボタン */}

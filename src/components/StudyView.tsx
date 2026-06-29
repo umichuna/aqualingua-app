@@ -12,7 +12,7 @@ import { playBgmForScene, sfx } from "@/lib/sound";
 import { cancelSpeech, releaseWakeLock, requestWakeLock, speak } from "@/lib/speech";
 import { type BlankQuestion, type StudyMode, type Word, type WordGenre, type WordLevel, type WordType } from "@/lib/types";
 import { useGame } from "./GameProvider";
-import { QuizPlay } from "./BlankQuestionView";
+import BlankQuestionView, { QuizPlay } from "./BlankQuestionView";
 
 const LEVELS: WordLevel[] = ["1", "2", "3", "4", "5"];
 const WORD_TYPES: WordType[] = ["単語", "述語", "会話文"];
@@ -127,6 +127,7 @@ export default function StudyView() {
   const [blankCount, setBlankCount] = useState<number | "all">(10);
   const [blankWeakOnly, setBlankWeakOnly] = useState(false);
   const [blankQuizQs, setBlankQuizQs] = useState<BlankQuestion[]>([]);
+  const [blankSubView, setBlankSubView] = useState<"select" | "manage" | "setup">("select");
   const [config, setConfig] = useState<QuizConfig>({
     genres: new Set(),
     levels: new Set(),
@@ -284,6 +285,7 @@ export default function StudyView() {
     void playBgmForScene(null);
     setMode(null);
     setPhase("setup");
+    setBlankSubView("select");
   };
 
   // ============ 穴抜けクイズ開始 ============
@@ -368,8 +370,58 @@ export default function StudyView() {
     return <FreeWork onQuit={backToMenu} />;
   }
 
-  // ============ 穴抜けクイズ セットアップ ============
-  if (mode === "blank" && phase === "setup") {
+  // ============ 穴抜けクイズ: 選択画面 ============
+  if (mode === "blank" && phase === "setup" && blankSubView === "select") {
+    return (
+      <div className="p-4 space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="font-bold text-lg text-foam">穴抜けクイズ</h2>
+          <button onClick={backToMenu} className="text-xs px-3 py-1 rounded-lg bg-white/10 text-dim">
+            ← 戻る
+          </button>
+        </div>
+        <button
+          onClick={() => setBlankSubView("manage")}
+          className="w-full flex items-center gap-3 p-4 rounded-2xl text-left bg-mid active:scale-95 transition-transform"
+        >
+          <span className="text-2xl">📝</span>
+          <div>
+            <div className="font-bold text-foam">問題登録</div>
+            <div className="text-xs text-dim">穴抜け問題の追加・確認・CSV取り込み</div>
+          </div>
+        </button>
+        <button
+          onClick={() => setBlankSubView("setup")}
+          className="w-full flex items-center gap-3 p-4 rounded-2xl text-left bg-mid active:scale-95 transition-transform"
+        >
+          <span className="text-2xl">▶️</span>
+          <div>
+            <div className="font-bold text-foam">出題設定</div>
+            <div className="text-xs text-dim">問題数・絞り込みを選んで出題する（{MODE_BASE_GOLD["blank"]}G/問）</div>
+          </div>
+        </button>
+      </div>
+    );
+  }
+
+  // ============ 穴抜けクイズ: 問題登録 ============
+  if (mode === "blank" && phase === "setup" && blankSubView === "manage") {
+    return (
+      <div className="h-full flex flex-col">
+        <div className="flex items-center gap-2 px-4 pt-4 pb-2">
+          <button onClick={() => setBlankSubView("select")} className="text-xs px-3 py-1 rounded-lg bg-white/10 text-dim">
+            ← 戻る
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          <BlankQuestionView />
+        </div>
+      </div>
+    );
+  }
+
+  // ============ 穴抜けクイズ: 出題設定 ============
+  if (mode === "blank" && phase === "setup" && blankSubView === "setup") {
     const blankWeakIds = new Set(
       Object.entries(blankQuestionStats)
         .filter(([, s]) => s.incorrectCount > 0)
@@ -383,24 +435,24 @@ export default function StudyView() {
       <div className="p-4 space-y-4 pb-8">
         <div className="flex items-center justify-between">
           <h2 className="font-bold text-lg text-foam">穴抜けクイズ設定</h2>
-          <button onClick={backToMenu} className="text-xs px-3 py-1 rounded-lg bg-white/10 text-dim">
+          <button onClick={() => setBlankSubView("select")} className="text-xs px-3 py-1 rounded-lg bg-white/10 text-dim">
             ← 戻る
           </button>
         </div>
 
         <div>
-          <div className="text-xs font-bold text-glow mb-1.5">問題数</div>
-          <div className="grid grid-cols-4 gap-1.5">
-            {([5, 10, 20, "all"] as const).map((n) => (
-              <button
-                key={n}
-                onClick={() => setBlankCount(n)}
-                className={`py-2 rounded-xl text-xs font-bold ${blankCount === n ? "bg-glow text-deep" : "bg-white/10 text-dim"}`}
-              >
-                {n === "all" ? "全問" : `${n}問`}
-              </button>
-            ))}
-          </div>
+          <div className="text-xs font-bold text-glow mb-1.5">出題数（最大 {blankQuestions.length} 問）</div>
+          <input
+            type="number"
+            min={1}
+            max={blankQuestions.length}
+            value={blankCount === "all" ? blankQuestions.length : blankCount}
+            onChange={(e) => {
+              const n = Math.max(1, Math.floor(Number(e.target.value)));
+              setBlankCount(n >= blankQuestions.length ? "all" : n);
+            }}
+            className="w-full px-3 py-2.5 rounded-xl bg-mid text-foam outline-none text-center font-bold"
+          />
         </div>
 
         <div
@@ -428,7 +480,7 @@ export default function StudyView() {
           }`}
         >
           {available === 0
-            ? "問題がありません（穴抜けタブから追加してね）"
+            ? "問題がありません（問題登録から追加してね）"
             : `はじめる（${effectiveBlankCount}問・+${estimatedBlankGold}G）`}
         </button>
       </div>
@@ -1214,6 +1266,16 @@ function ListenPlay({
     navigator.mediaSession.playbackState = playing ? "playing" : "paused";
   }, [playing]);
 
+  // スクリーンロック時に speechSynthesis が停止するのを防ぐ（5秒ごとに resume）
+  useEffect(() => {
+    const resumeInterval = setInterval(() => {
+      if (typeof window !== "undefined" && window.speechSynthesis?.paused) {
+        window.speechSynthesis.resume();
+      }
+    }, 5000);
+    return () => clearInterval(resumeInterval);
+  }, []);
+
   // 自動再生ループ: 英語 → 日本語 → 英語 → 日本語
   useEffect(() => {
     let stopped = false;
@@ -1227,6 +1289,8 @@ function ListenPlay({
         const w = pool[indexRef.current];
         const meaning = w.meanings.length > 0 ? w.meanings.join("、") : null;
         const speakPair = async () => {
+          // 各発話前に resume して停止を防ぐ
+          if (typeof window !== "undefined") window.speechSynthesis?.resume();
           if (direction === "ja2en") {
             if (meaning) await speak(meaning, "ja-JP", rateRef.current);
             if (stopped || !playingRef.current || skipRef.current) return;

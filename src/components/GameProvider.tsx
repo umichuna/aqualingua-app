@@ -69,6 +69,7 @@ import {
 import { sfx } from "@/lib/sound";
 import { pullFromCloud, pushToCloud } from "@/lib/sync";
 import { deleteSharedCustomFish, fetchSharedCustomFish, postSharedCustomFish } from "@/lib/customFish";
+import { fetchSharedFishOverrides, postSharedFishOverride } from "@/lib/fishOverrides";
 import type {
   BlankQuestion,
   BlankQuestionStats,
@@ -943,9 +944,13 @@ export function GameProvider({ children }: { children: ReactNode }) {
           ? prev.map((f) => (f.type === override.type ? override : f))
           : [...prev, override]
       );
-      void putFishOverride(override).catch((e) => {
-        console.error("[FishOverride] update failed", e);
+      const overrideWithTs = { ...override, lastUpdated: Date.now() };
+      void putFishOverride(overrideWithTs).catch((e) => {
+        console.error("[FishOverride] local update failed", e);
         pushNotice("⚠️", "組み込みおさかなの編集に失敗しました");
+      });
+      void postSharedFishOverride(overrideWithTs).catch((e) => {
+        console.error("[FishOverride] cloud update failed", e);
       });
       // 既存の水槽魚にも全フィールドを反映
       const currentFish = fishRef.current;
@@ -964,10 +969,39 @@ export function GameProvider({ children }: { children: ReactNode }) {
     [pushNotice, persistFishList]
   );
 
-  // fishOverrides を DB から読み込み
+  // fishOverrides を DB から読み込み、クラウドの最新データとマージ
   useEffect(() => {
     void getAllFishOverrides().then(setFishOverrides);
   }, []);
+
+  useEffect(() => {
+    if (!session?.user?.email) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const shared = await fetchSharedFishOverrides();
+        if (cancelled) return;
+        setFishOverrides((local) => {
+          const merged = [...local];
+          for (const remote of shared) {
+            const idx = merged.findIndex((o) => o.type === remote.type);
+            const localUpdated = idx >= 0 ? (merged[idx].lastUpdated ?? 0) : 0;
+            const remoteUpdated = remote.lastUpdated ?? 0;
+            if (idx < 0) {
+              merged.push(remote);
+            } else if (remoteUpdated > localUpdated) {
+              merged[idx] = remote;
+            }
+          }
+          return merged;
+        });
+      } catch (e) {
+        console.error("[FishOverrides] cloud load failed", e);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.user?.email]);
 
   // 穴抜け問題を DB から読み込み
   useEffect(() => {

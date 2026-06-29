@@ -40,7 +40,6 @@ const HOME_BUTTONS: { id: TabId | "settings" | "tutorial"; label: string; icon: 
   { id: "record", label: "記録", icon: "📊", desc: "しごと記録と通帳" },
   { id: "words", label: "単語帳", icon: "📚", desc: "単語の管理・追加" },
   { id: "zukan", label: "図鑑", icon: "📕", desc: "発見したおさかな" },
-  { id: "blank", label: "穴抜け", icon: "✏️", desc: "穴抜け問題を解く" },
   { id: "shop", label: "ショップ", icon: "🛒", desc: "ガチャ・アイテム" },
   { id: "tutorial", label: "あそびかた", icon: "📖", desc: "チュートリアルを見る" },
   { id: "settings", label: "設定", icon: "⚙️", desc: "セーブ・音・初期化" },
@@ -108,6 +107,7 @@ function AppShell() {
   const [showSettings, setShowSettings] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
+  const [showFirstTimeCheck, setShowFirstTimeCheck] = useState(false);
 
   // クライアント側でクエリパラメータをチェック
   useEffect(() => {
@@ -137,7 +137,7 @@ function AppShell() {
     setScreen("app");
     void playBgmForScene("home");
     if (!user.onboardingDone) {
-      setShowOnboarding(true);
+      setShowFirstTimeCheck(true);
     }
   };
 
@@ -233,6 +233,28 @@ function AppShell() {
       </div>
 
       {/* モーダル */}
+      {showFirstTimeCheck && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6">
+          <div className="w-full max-w-xs bg-sea rounded-2xl p-6 text-center space-y-4 font-pixel" style={{ border: "2px solid var(--aqua-glow)" }}>
+            <div className="text-3xl">🌊</div>
+            <p className="font-bold text-foam text-sm">このアプリは初めて使いますか？</p>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => { setShowFirstTimeCheck(false); setShowOnboarding(true); }}
+                className="w-full py-2.5 rounded-xl font-bold bg-glow text-deep text-sm active:scale-95 transition-transform"
+              >
+                はい（チュートリアルへ）
+              </button>
+              <button
+                onClick={() => { setShowFirstTimeCheck(false); finishOnboarding(); }}
+                className="w-full py-2.5 rounded-xl font-bold bg-white/10 text-dim text-sm active:scale-95 transition-transform"
+              >
+                いいえ（スキップ）
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {showOnboarding && <Onboarding onDone={finishOnboarding} />}
       {showTutorial && (
         <Onboarding viewOnly onDone={() => setShowTutorial(false)} />
