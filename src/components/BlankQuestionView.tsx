@@ -37,8 +37,8 @@ function renderSentence(sentence: string, answer?: string) {
   ));
 }
 
-// ---- クイズ画面 ----
-function QuizPlay({
+// ---- クイズ画面（StudyView からも import して使う） ----
+export function QuizPlay({
   questions,
   stats,
   onRecord,
@@ -148,6 +148,7 @@ export default function BlankQuestionView() {
   const [result, setResult] = useState<{ score: number; total: number } | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [weakOnly, setWeakOnly] = useState(false);
+  const [blankCount, setBlankCount] = useState<number | "all">(10);
   const [form, setForm] = useState({
     sentence: "",
     japaneseText: "",
@@ -172,7 +173,8 @@ export default function BlankQuestionView() {
   const startQuiz = () => {
     const pool = weakOnly ? blankQuestions.filter((q) => weakIds.has(q.id)) : blankQuestions;
     if (pool.length === 0) return;
-    setQuizQuestions(shuffle(pool));
+    const shuffled = shuffle(pool);
+    setQuizQuestions(blankCount === "all" ? shuffled : shuffled.slice(0, blankCount));
     setPhase("play");
   };
 
@@ -330,6 +332,19 @@ export default function BlankQuestionView() {
       </div>
       {csvError && <p className="text-xs text-center text-glow">{csvError}</p>}
 
+      {/* 問題数セレクター */}
+      <div className="flex gap-1.5">
+        {([5, 10, 20, "all"] as const).map((n) => (
+          <button
+            key={n}
+            onClick={() => setBlankCount(n)}
+            className={`flex-1 text-xs py-1.5 rounded-xl font-bold ${blankCount === n ? "bg-glow text-deep" : "bg-white/10 text-dim"}`}
+          >
+            {n === "all" ? "全問" : `${n}問`}
+          </button>
+        ))}
+      </div>
+
       {/* 絞り込み＋出題ボタン */}
       <div className="flex items-center gap-2">
         <button
@@ -343,7 +358,7 @@ export default function BlankQuestionView() {
           disabled={displayList.length === 0}
           className="ml-auto text-xs px-4 py-1.5 rounded-xl bg-sand text-deep font-bold disabled:opacity-40"
         >
-          ▶ 出題（{displayList.length}問）
+          ▶ 出題（{blankCount === "all" ? displayList.length : Math.min(blankCount, displayList.length)}問）
         </button>
       </div>
 

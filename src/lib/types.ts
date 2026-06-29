@@ -148,7 +148,7 @@ export interface UserStatus {
   tanks?: Tank[]; // 所持水槽リスト（新方式）
 }
 
-export type StudyMode = "self" | "choice" | "listen";
+export type StudyMode = "self" | "choice" | "listen" | "blank";
 
 // 穴抜け問題（〈〉プレースホルダーを選択肢で埋める）
 export interface BlankQuestion {

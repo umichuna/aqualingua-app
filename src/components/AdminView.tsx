@@ -1,103 +1,14 @@
 "use client";
 
-// 管理者画面 — コードなしでおさかな図鑑を追加できる
-// カスタム魚は IndexedDB (UserStatus.customFish) に保存される
-
 import { useState } from "react";
-import { FISH_MASTER, RARITY_INFO, RARITY_STARS, type FishDisplaySize } from "@/data/fishMaster";
-import type { Rarity, CustomFishDef, FishOverride, WaterType } from "@/lib/types";
 import { useGame } from "./GameProvider";
-import PixelFish from "./PixelFish";
-
-const RARITIES: Rarity[] = ["激安", "普通", "高級", "ロマン"];
-const DISPLAY_SIZES: { value: FishDisplaySize; label: string }[] = [
-  { value: "tiny", label: "最小（24px）" },
-  { value: "xsmall", label: "超小（36px）" },
-  { value: "small", label: "小（48px）" },
-  { value: "medium", label: "中（72px）" },
-  { value: "large", label: "大（96px）" },
-  { value: "xlarge", label: "超大（128px）" },
-];
-
-const PALETTE_PRESETS: { label: string; palette: CustomFishDef["palette"] }[] = [
-  { label: "青", palette: { body: "#4080C0", stripe: "#80B0E0", fin: "#306090", eye: "#1B1B1B" } },
-  { label: "赤", palette: { body: "#E05050", stripe: "#FF9090", fin: "#C03030", eye: "#1B1B1B" } },
-  { label: "緑", palette: { body: "#40A060", stripe: "#70C080", fin: "#308050", eye: "#1B1B1B" } },
-  { label: "黄", palette: { body: "#D0B040", stripe: "#E8C870", fin: "#A09030", eye: "#1B1B1B" } },
-  { label: "紫", palette: { body: "#8050A0", stripe: "#A070C0", fin: "#603080", eye: "#1B1B1B" } },
-  { label: "ピンク", palette: { body: "#C06080", stripe: "#E09090", fin: "#A04060", eye: "#1B1B1B" } },
-  { label: "橙", palette: { body: "#D07030", stripe: "#E09060", fin: "#B05020", eye: "#1B1B1B" } },
-  { label: "銀", palette: { body: "#A0A0B8", stripe: "#C8C8D8", fin: "#808098", eye: "#1B1B1B" } },
-];
-
-const EMPTY_FORM: { type: string; rarity: Rarity; description: string; layer: "middle" | "bottom"; displaySize: FishDisplaySize; paletteIdx: number; imageUrl: string } = {
-  type: "",
-  rarity: "普通",
-  description: "",
-  layer: "middle",
-  displaySize: "medium",
-  paletteIdx: 0,
-  imageUrl: "",
-};
-
-function resizeToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        const MAX = 256;
-        const scale = Math.min(MAX / img.width, MAX / img.height, 1);
-        const canvas = document.createElement("canvas");
-        canvas.width = Math.round(img.width * scale);
-        canvas.height = Math.round(img.height * scale);
-        canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL("image/png"));
-      };
-      img.onerror = reject;
-      img.src = e.target!.result as string;
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
 
 export default function AdminView() {
   const game = useGame();
-  const { user, allFishMaster, words, fishList } = game;
-  const customFish = user.customFish ?? [];
+  const { words } = game;
 
-  // 見つかっている組み込み魚のみをフィルタ
-  const discoveredBuiltinFish = allFishMaster.filter((fish) =>
-    fishList.some((f) => f.type === fish.type)
-  );
-
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ ...EMPTY_FORM });
-  const [error, setError] = useState("");
   const [newGenreInput, setNewGenreInput] = useState("");
   const [confirmGenre, setConfirmGenre] = useState<string | null>(null);
-  const [confirmDeleteFishType, setConfirmDeleteFishType] = useState<string | null>(null);
-  const [editingType, setEditingType] = useState<string | null>(null);
-
-  const [showBuiltinForm, setShowBuiltinForm] = useState(false);
-  const [editingBuiltinType, setEditingBuiltinType] = useState<string | null>(null);
-  const [builtinError, setBuiltinError] = useState("");
-  const [builtinForm, setBuiltinForm] = useState<{
-    displayName: string;
-    rarity: Rarity;
-    displaySize: FishDisplaySize;
-    waterType: WaterType;
-    description: string;
-    imageUrl: string;
-  }>({
-    displayName: "",
-    rarity: "普通",
-    displaySize: "medium",
-    waterType: "saltwater",
-    description: "",
-    imageUrl: "",
-  });
 
   const handleRemoveGenre = (genre: string) => {
     const count = words.filter((w) => w.genre === genre).length;
@@ -108,435 +19,15 @@ export default function AdminView() {
     }
   };
 
-  const builtinTypes = new Set(FISH_MASTER.map((f) => f.type));
-
-  const submitAdd = () => {
-    const type = form.type.trim();
-    if (!type) { setError("種類名を入力してください"); return; }
-    if (!form.description.trim()) { setError("説明を入力してください"); return; }
-    // 編集中でない場合のみ、重複チェック
-    if (!editingType && allFishMaster.some((f) => f.type === type)) {
-      setError(`「${type}」はすでに存在します`);
-      return;
-    }
-    const def: CustomFishDef = {
-      type,
-      rarity: form.rarity,
-      description: form.description.trim(),
-      palette: PALETTE_PRESETS[form.paletteIdx].palette,
-      layer: form.layer === "bottom" ? "bottom" : undefined,
-      displaySize: form.displaySize,
-      imageUrl: form.imageUrl || undefined,
-    };
-    if (editingType) {
-      game.updateCustomFish(def);
-    } else {
-      game.addCustomFish(def);
-    }
-    setForm({ ...EMPTY_FORM });
-    setShowForm(false);
-    setEditingType(null);
-    setError("");
-  };
-
   return (
     <div className="p-4 flex flex-col gap-4 h-full overflow-y-auto">
-      {/* AdminView v2 with builtin fish editing */}
-      <h2 className="font-bold text-lg text-foam">🔧 管理者 — おさかな追加</h2>
+      <h2 className="font-bold text-lg text-foam">🔧 管理者 — ジャンル管理</h2>
 
-      {/* カスタム魚一覧 */}
-      {customFish.length > 0 && (
-        <div>
-          <div className="text-xs font-bold text-glow mb-2">追加したおさかな（{customFish.length}種）</div>
-          <div className="flex flex-col gap-2">
-            {customFish.map((f) => (
-              <div key={f.type} className="flex items-center gap-3 rounded-xl bg-mid p-3">
-                <PixelFish type={f.type} size={40} imageUrl={f.imageUrl} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span
-                      className="text-[10px] px-1.5 py-0.5 rounded-full font-bold"
-                      style={{ background: RARITY_INFO[f.rarity].color, color: "var(--aqua-deep)" }}
-                    >
-                      {RARITY_STARS[f.rarity]}
-                    </span>
-                    <span className="text-sm font-bold text-foam">{f.type}</span>
-                  </div>
-                  <div className="text-[10px] text-dim mt-0.5 truncate">{f.description}</div>
-                </div>
-                <div className="flex flex-col gap-1 shrink-0">
-                  <button
-                    onClick={() => {
-                      setEditingType(f.type);
-                      setForm({
-                        type: f.type,
-                        rarity: f.rarity,
-                        description: f.description,
-                        layer: f.layer === "bottom" ? "bottom" : "middle",
-                        displaySize: f.displaySize ?? "medium",
-                        paletteIdx: 0,
-                        imageUrl: f.imageUrl ?? "",
-                      });
-                      setShowForm(true);
-                      setError("");
-                    }}
-                    className="text-[10px] px-2 py-1 rounded-lg bg-glow text-deep font-bold"
-                  >
-                    ✏️ 編集
-                  </button>
-                  <button
-                    onClick={() => setConfirmDeleteFishType(f.type)}
-                    className="text-[10px] px-2 py-1 rounded-lg bg-white/10 text-dim"
-                  >
-                    削除
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* 追加フォーム */}
-      {!showForm ? (
-        <button
-          onClick={() => setShowForm(true)}
-          className="w-full py-3 rounded-2xl font-bold bg-glow text-deep"
-        >
-          ＋ おさかなを追加
-        </button>
-      ) : (
-        <div className="rounded-2xl bg-mid p-4 flex flex-col gap-3">
-          <div className="font-bold text-foam text-sm">
-            {editingType ? `✏️ ${editingType} を編集中` : "新しいおさかな"}
-          </div>
-
-          {error && <p className="text-xs text-coral">{error}</p>}
-
-          <div>
-            <div className="text-xs font-bold text-glow mb-1">種類名（図鑑のキー）</div>
-            <input
-              value={form.type}
-              onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}
-              maxLength={12}
-              placeholder="例: タツノオトシゴ"
-              className="w-full px-3 py-2 rounded-xl bg-black/30 text-foam outline-none text-sm"
-            />
-          </div>
-
-          <div>
-            <div className="text-xs font-bold text-glow mb-1">レア度</div>
-            <div className="flex gap-1.5">
-              {RARITIES.map((r) => (
-                <button
-                  key={r}
-                  onClick={() => setForm((f) => ({ ...f, rarity: r }))}
-                  className="flex-1 py-1.5 rounded-lg text-xs font-bold transition-all"
-                  style={{
-                    background: form.rarity === r ? RARITY_INFO[r].color : "rgba(255,255,255,0.08)",
-                    color: form.rarity === r ? "var(--aqua-deep)" : "var(--aqua-dim)",
-                  }}
-                >
-                  {RARITY_STARS[r]}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <div className="text-xs font-bold text-glow mb-1">表示層</div>
-            <div className="flex gap-2">
-              {(["middle", "bottom"] as const).map((l) => (
-                <button
-                  key={l}
-                  onClick={() => setForm((f) => ({ ...f, layer: l }))}
-                  className={`flex-1 py-1.5 rounded-lg text-xs font-bold ${form.layer === l ? "bg-sand text-deep" : "bg-white/10 text-dim"}`}
-                >
-                  {l === "middle" ? "🌊 水中" : "🪸 底生"}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <div className="text-xs font-bold text-glow mb-1">表示サイズ</div>
-            <div className="grid grid-cols-2 gap-1.5">
-              {DISPLAY_SIZES.map((s) => (
-                <button
-                  key={s.value}
-                  onClick={() => setForm((f) => ({ ...f, displaySize: s.value }))}
-                  className={`py-1.5 rounded-lg text-xs font-bold ${form.displaySize === s.value ? "bg-glow text-deep" : "bg-white/10 text-dim"}`}
-                >
-                  {s.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <div className="text-xs font-bold text-glow mb-1">説明（図鑑に表示）</div>
-            <textarea
-              value={form.description}
-              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-              maxLength={60}
-              rows={2}
-              placeholder="例: 海の底をゆっくり泳ぐ不思議な生き物。"
-              className="w-full px-3 py-2 rounded-xl bg-black/30 text-foam outline-none text-sm resize-none"
-            />
-          </div>
-
-          <div>
-            <div className="text-xs font-bold text-glow mb-1">画像（任意）<span className="font-normal text-dim ml-1">透明背景のPNGで自然に見えます</span></div>
-            {form.imageUrl ? (
-              <div className="flex items-center gap-3">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={form.imageUrl} alt="プレビュー" className="w-16 h-16 rounded-xl object-contain bg-black/20" />
-                <button
-                  onClick={() => setForm((f) => ({ ...f, imageUrl: "" }))}
-                  className="text-xs text-coral underline"
-                >
-                  削除
-                </button>
-              </div>
-            ) : (
-              <label className="flex items-center gap-2 cursor-pointer w-full px-3 py-2 rounded-xl bg-black/30 text-dim text-sm">
-                <span>📷 画像を選ぶ</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    try {
-                      const url = await resizeToBase64(file);
-                      setForm((f) => ({ ...f, imageUrl: url }));
-                    } catch {
-                      setError("画像の読み込みに失敗しました");
-                    }
-                  }}
-                />
-              </label>
-            )}
-          </div>
-
-          <div className="flex gap-2">
-            <button
-              onClick={() => { setShowForm(false); setError(""); setForm({ ...EMPTY_FORM }); setEditingType(null); }}
-              className="flex-1 py-2 text-sm font-bold bg-white/10 text-dim rounded-xl"
-            >
-              キャンセル
-            </button>
-            <button
-              onClick={submitAdd}
-              className="flex-1 py-2 text-sm font-bold bg-glow text-deep rounded-xl"
-            >
-              {editingType ? "更新する" : "追加する"}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* デフォルトおさかな編集セクション */}
       <div>
-        <div className="text-xs font-bold text-glow mb-2">✏️ デフォルトおさかな編集（{discoveredBuiltinFish.length}種）</div>
         <div className="text-xs text-dim mb-3">
-          見つかったおさかなの属性を変更できます
-        </div>
-
-        {!showBuiltinForm ? (
-          <div className="flex flex-col gap-2 max-h-96 overflow-y-auto">
-            {discoveredBuiltinFish.map((fish) => (
-              <div key={fish.type} className="flex items-center gap-3 rounded-xl bg-mid p-3">
-                <PixelFish type={fish.type} size={40} imageUrl={fish.imageUrl} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span
-                      className="text-[10px] px-1.5 py-0.5 rounded-full font-bold"
-                      style={{ background: RARITY_INFO[fish.rarity].color, color: "var(--aqua-deep)" }}
-                    >
-                      {RARITY_STARS[fish.rarity]}
-                    </span>
-                    <span className="text-sm font-bold text-foam">{fish.displayName ?? fish.type}</span>
-                  </div>
-                  <div className="text-[10px] text-dim mt-0.5 truncate">{fish.description}</div>
-                </div>
-                <button
-                  onClick={() => {
-                    setEditingBuiltinType(fish.type);
-                    setBuiltinForm({
-                      displayName: fish.displayName ?? "",
-                      rarity: fish.rarity,
-                      displaySize: fish.displaySize ?? "medium",
-                      waterType: fish.waterType ?? "saltwater",
-                      description: fish.description,
-                      imageUrl: fish.imageUrl ?? "",
-                    });
-                    setShowBuiltinForm(true);
-                    setBuiltinError("");
-                  }}
-                  className="text-[10px] px-2 py-1 rounded-lg bg-glow text-deep font-bold shrink-0"
-                >
-                  ✏️ 編集
-                </button>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="rounded-2xl bg-mid p-4 flex flex-col gap-3">
-            <div className="font-bold text-foam text-sm">
-              ✏️ {editingBuiltinType} を編集中
-            </div>
-
-            {builtinError && <p className="text-xs text-coral">{builtinError}</p>}
-
-            <div>
-              <div className="text-xs font-bold text-glow mb-1">表示名（空欄でデフォルト名を使用）</div>
-              <input
-                value={builtinForm.displayName}
-                onChange={(e) => setBuiltinForm((f) => ({ ...f, displayName: e.target.value }))}
-                placeholder={editingBuiltinType ?? ""}
-                maxLength={20}
-                className="w-full px-3 py-2 rounded-xl bg-black/30 text-foam outline-none text-sm"
-              />
-            </div>
-
-            <div>
-              <div className="text-xs font-bold text-glow mb-1">レア度</div>
-              <div className="flex gap-1.5">
-                {RARITIES.map((r) => (
-                  <button
-                    key={r}
-                    onClick={() => setBuiltinForm((f) => ({ ...f, rarity: r }))}
-                    className="flex-1 py-1.5 rounded-lg text-xs font-bold transition-all"
-                    style={{
-                      background: builtinForm.rarity === r ? RARITY_INFO[r].color : "rgba(255,255,255,0.08)",
-                      color: builtinForm.rarity === r ? "var(--aqua-deep)" : "var(--aqua-dim)",
-                    }}
-                  >
-                    {RARITY_STARS[r]}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <div className="text-xs font-bold text-glow mb-1">水の種類</div>
-              <div className="flex gap-2">
-                {(["saltwater", "freshwater"] as const).map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => setBuiltinForm((f) => ({ ...f, waterType: t }))}
-                    className={`flex-1 py-1.5 rounded-lg text-xs font-bold ${builtinForm.waterType === t ? "bg-sand text-deep" : "bg-white/10 text-dim"}`}
-                  >
-                    {t === "saltwater" ? "🌊 海水" : "🌿 淡水"}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <div className="text-xs font-bold text-glow mb-1">表示サイズ</div>
-              <div className="grid grid-cols-2 gap-1.5">
-                {DISPLAY_SIZES.map((s) => (
-                  <button
-                    key={s.value}
-                    onClick={() => setBuiltinForm((f) => ({ ...f, displaySize: s.value }))}
-                    className={`py-1.5 rounded-lg text-xs font-bold ${builtinForm.displaySize === s.value ? "bg-glow text-deep" : "bg-white/10 text-dim"}`}
-                  >
-                    {s.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <div className="text-xs font-bold text-glow mb-1">説明</div>
-              <textarea
-                value={builtinForm.description}
-                onChange={(e) => setBuiltinForm((f) => ({ ...f, description: e.target.value }))}
-                maxLength={60}
-                rows={2}
-                className="w-full px-3 py-2 rounded-xl bg-black/30 text-foam outline-none text-sm resize-none"
-              />
-            </div>
-
-            <div>
-              <div className="text-xs font-bold text-glow mb-1">画像（PNG/JPG）</div>
-              <label className="flex items-center gap-2 cursor-pointer px-3 py-2 rounded-xl bg-black/30 text-dim text-sm">
-                📷 画像を選択
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    const b64 = await resizeToBase64(file);
-                    setBuiltinForm((f) => ({ ...f, imageUrl: b64 }));
-                  }}
-                />
-              </label>
-              {builtinForm.imageUrl && (
-                <div className="mt-2 flex items-center gap-2">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={builtinForm.imageUrl} alt="プレビュー" className="w-12 h-12 rounded-lg object-contain bg-black/20" />
-                  <button
-                    onClick={() => setBuiltinForm((f) => ({ ...f, imageUrl: "" }))}
-                    className="text-xs text-coral underline"
-                  >
-                    削除
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <div className="flex gap-2">
-              <button
-                onClick={() => { setShowBuiltinForm(false); setBuiltinError(""); setEditingBuiltinType(null); }}
-                className="flex-1 py-2 text-sm font-bold bg-white/10 text-dim rounded-xl"
-              >
-                キャンセル
-              </button>
-              <button
-                onClick={() => {
-                  if (!editingBuiltinType) { setBuiltinError("エラーが発生しました"); return; }
-                  const override: FishOverride = {
-                    type: editingBuiltinType,
-                    displayName: builtinForm.displayName.trim() || undefined,
-                    rarity: builtinForm.rarity,
-                    displaySize: builtinForm.displaySize,
-                    waterType: builtinForm.waterType,
-                    description: builtinForm.description,
-                    imageUrl: builtinForm.imageUrl || undefined,
-                  };
-                  game.updateBuiltinFish(override);
-                  setShowBuiltinForm(false);
-                  setBuiltinError("");
-                  setEditingBuiltinType(null);
-                }}
-                className="flex-1 py-2 text-sm font-bold bg-glow text-deep rounded-xl"
-              >
-                更新する
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* ビルトイン魚の件数 */}
-      <div className="text-xs text-dim text-center">
-        デフォルト図鑑: {builtinTypes.size}種 ／ カスタム: {customFish.length}種
-      </div>
-
-      {/* ジャンル管理 */}
-      <div>
-        <h3 className="font-bold text-base text-foam mb-2">📁 ジャンル管理</h3>
-        <div className="text-xs text-dim mb-2">
           ジャンルは単語データから自動検出されます。ここでは手動追加・削除ができます。
         </div>
 
-        {/* ジャンル追加フォーム */}
         <div className="flex gap-2 mb-3">
           <input
             value={newGenreInput}
@@ -562,9 +53,8 @@ export default function AdminView() {
           </button>
         </div>
 
-        {/* 全ジャンル一覧（削除可能） */}
         {game.allGenres.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mb-2">
+          <div className="flex flex-wrap gap-1.5">
             {game.allGenres.map((g) => {
               const wordCount = words.filter((w) => w.genre === g).length;
               return (
@@ -576,7 +66,6 @@ export default function AdminView() {
                   <button
                     onClick={() => handleRemoveGenre(g)}
                     className="text-coral text-xs font-bold leading-none"
-                    title={`「${g}」を削除`}
                   >
                     ×
                   </button>
@@ -586,67 +75,36 @@ export default function AdminView() {
           </div>
         )}
         {game.allGenres.length === 0 && (
-          <div className="text-xs text-dim">
-            ジャンルがありません
-          </div>
-        )}
-
-        {/* カスタム魚削除確認ダイアログ */}
-        {confirmDeleteFishType !== null && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-            <div className="bg-deep rounded-2xl p-5 max-w-xs w-full flex flex-col gap-4">
-              <p className="text-foam text-sm font-bold">
-                「{confirmDeleteFishType}」を削除すると、水槽内の同じ種類の魚もすべて消えます。よろしいですか？
-              </p>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setConfirmDeleteFishType(null)}
-                  className="flex-1 py-2 rounded-xl bg-white/10 text-dim text-sm font-bold"
-                >
-                  キャンセル
-                </button>
-                <button
-                  onClick={() => {
-                    game.removeCustomFish(confirmDeleteFishType);
-                    setConfirmDeleteFishType(null);
-                  }}
-                  className="flex-1 py-2 rounded-xl bg-coral text-white text-sm font-bold"
-                >
-                  削除する
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* 確認ダイアログ */}
-        {confirmGenre !== null && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-            <div className="bg-deep rounded-2xl p-5 max-w-xs w-full flex flex-col gap-4">
-              <p className="text-foam text-sm font-bold">
-                「{confirmGenre}」を削除すると、このジャンルを持つ単語{words.filter((w) => w.genre === confirmGenre).length}件のジャンルも空白になります。よろしいですか？
-              </p>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setConfirmGenre(null)}
-                  className="flex-1 py-2 rounded-xl bg-white/10 text-dim text-sm font-bold"
-                >
-                  キャンセル
-                </button>
-                <button
-                  onClick={() => {
-                    game.removeCustomGenre(confirmGenre, true);
-                    setConfirmGenre(null);
-                  }}
-                  className="flex-1 py-2 rounded-xl bg-coral text-white text-sm font-bold"
-                >
-                  削除する
-                </button>
-              </div>
-            </div>
-          </div>
+          <div className="text-xs text-dim">ジャンルがありません</div>
         )}
       </div>
+
+      {confirmGenre !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-deep rounded-2xl p-5 max-w-xs w-full flex flex-col gap-4">
+            <p className="text-foam text-sm font-bold">
+              「{confirmGenre}」を削除すると、このジャンルを持つ単語{words.filter((w) => w.genre === confirmGenre).length}件のジャンルも空白になります。よろしいですか？
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setConfirmGenre(null)}
+                className="flex-1 py-2 rounded-xl bg-white/10 text-dim text-sm font-bold"
+              >
+                キャンセル
+              </button>
+              <button
+                onClick={() => {
+                  game.removeCustomGenre(confirmGenre, true);
+                  setConfirmGenre(null);
+                }}
+                className="flex-1 py-2 rounded-xl bg-coral text-white text-sm font-bold"
+              >
+                削除する
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

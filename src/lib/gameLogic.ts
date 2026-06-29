@@ -8,6 +8,7 @@ export const MODE_BASE_GOLD: Record<StudyMode, number> = {
   self: 10, // 自己採点 10G/問
   choice: 5, // 選択肢クイズ 5G/問
   listen: 2, // 聞き流し 2G/問
+  blank: 5,  // 穴抜けクイズ 5G/問
 };
 
 // セッション報酬 = 問題数 × 1問あたり金額

@@ -10,8 +10,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MODE_BASE_GOLD, sessionGold } from "@/lib/gameLogic";
 import { playBgmForScene, sfx } from "@/lib/sound";
 import { cancelSpeech, releaseWakeLock, requestWakeLock, speak } from "@/lib/speech";
-import { type StudyMode, type Word, type WordGenre, type WordLevel, type WordType } from "@/lib/types";
+import { type BlankQuestion, type StudyMode, type Word, type WordGenre, type WordLevel, type WordType } from "@/lib/types";
 import { useGame } from "./GameProvider";
+import { QuizPlay } from "./BlankQuestionView";
 
 const LEVELS: WordLevel[] = ["1", "2", "3", "4", "5"];
 const WORD_TYPES: WordType[] = ["単語", "述語", "会話文"];
@@ -116,13 +117,16 @@ function Toggle({
 
 export default function StudyView() {
   const game = useGame();
-  const { words, wordStats, user } = game;
+  const { words, wordStats, user, blankQuestions, blankQuestionStats, recordBlankAnswer } = game;
   const GENRES = game.allGenres;
   const weakCount = useMemo(
     () => Object.values(wordStats).filter((s) => s.incorrectCount > 0).length,
     [wordStats]
   );
   const [mode, setMode] = useState<StudyMode | "free" | null>(null);
+  const [blankCount, setBlankCount] = useState<number | "all">(10);
+  const [blankWeakOnly, setBlankWeakOnly] = useState(false);
+  const [blankQuizQs, setBlankQuizQs] = useState<BlankQuestion[]>([]);
   const [config, setConfig] = useState<QuizConfig>({
     genres: new Set(),
     levels: new Set(),
@@ -282,12 +286,36 @@ export default function StudyView() {
     setPhase("setup");
   };
 
+  // ============ 穴抜けクイズ開始 ============
+  const startBlankQuiz = () => {
+    const blankWeakIds = new Set(
+      Object.entries(blankQuestionStats)
+        .filter(([, s]) => s.incorrectCount > 0)
+        .map(([id]) => id)
+    );
+    const pool = blankWeakOnly
+      ? blankQuestions.filter((q) => blankWeakIds.has(q.id))
+      : blankQuestions;
+    if (pool.length === 0) {
+      game.pushNotice("⚠️", "穴抜け問題がありません。「穴抜け」タブから追加してね");
+      return;
+    }
+    const shuffled = shuffle(pool);
+    const qs = blankCount === "all" ? shuffled : shuffled.slice(0, blankCount);
+    setBlankQuizQs(qs);
+    setOriginalCount(qs.length);
+    setScore(0);
+    setPhase("play");
+    sfx.tap();
+  };
+
   // ============ モード選択 ============
   if (!mode) {
     const MODES: { id: StudyMode; label: string; desc: string; icon: string }[] = [
       { id: "self", label: "自己採点", desc: "意味を思い浮かべて自分で○✕", icon: "✍️" },
       { id: "choice", label: "選択肢クイズ", desc: "4択から正しい答えを選ぶ", icon: "🎯" },
       { id: "listen", label: "聞き流し", desc: "音声でスライドショー再生", icon: "🎧" },
+      { id: "blank", label: "穴抜けクイズ", desc: "〈〉に入る語句を4択で選ぶ", icon: "✏️" },
     ];
     return (
       <div className="p-4 space-y-3">
@@ -338,6 +366,98 @@ export default function StudyView() {
   // ============ フリーしごと ============
   if (mode === "free") {
     return <FreeWork onQuit={backToMenu} />;
+  }
+
+  // ============ 穴抜けクイズ セットアップ ============
+  if (mode === "blank" && phase === "setup") {
+    const blankWeakIds = new Set(
+      Object.entries(blankQuestionStats)
+        .filter(([, s]) => s.incorrectCount > 0)
+        .map(([id]) => id)
+    );
+    const pool = blankWeakOnly ? blankQuestions.filter((q) => blankWeakIds.has(q.id)) : blankQuestions;
+    const available = pool.length;
+    const effectiveBlankCount = blankCount === "all" ? available : Math.min(blankCount, available);
+    const estimatedBlankGold = effectiveBlankCount * MODE_BASE_GOLD["blank"];
+    return (
+      <div className="p-4 space-y-4 pb-8">
+        <div className="flex items-center justify-between">
+          <h2 className="font-bold text-lg text-foam">穴抜けクイズ設定</h2>
+          <button onClick={backToMenu} className="text-xs px-3 py-1 rounded-lg bg-white/10 text-dim">
+            ← 戻る
+          </button>
+        </div>
+
+        <div>
+          <div className="text-xs font-bold text-glow mb-1.5">問題数</div>
+          <div className="grid grid-cols-4 gap-1.5">
+            {([5, 10, 20, "all"] as const).map((n) => (
+              <button
+                key={n}
+                onClick={() => setBlankCount(n)}
+                className={`py-2 rounded-xl text-xs font-bold ${blankCount === n ? "bg-glow text-deep" : "bg-white/10 text-dim"}`}
+              >
+                {n === "all" ? "全問" : `${n}問`}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div
+          onClick={() => setBlankWeakOnly(!blankWeakOnly)}
+          className="flex items-center justify-between p-3 rounded-xl bg-mid cursor-pointer active:bg-white/10"
+        >
+          <div>
+            <div className="text-sm font-bold text-foam">苦手問題のみ</div>
+            <div className="text-xs text-dim">間違えた問題だけ出題する（{blankWeakIds.size}問）</div>
+          </div>
+          <div className={`w-10 h-6 rounded-full transition-colors ${blankWeakOnly ? "bg-glow" : "bg-white/20"}`}>
+            <div className={`w-4 h-4 bg-white rounded-full mt-1 transition-transform ${blankWeakOnly ? "translate-x-5" : "translate-x-1"}`} />
+          </div>
+        </div>
+
+        <div className="rounded-xl p-3 text-center font-bold bg-mid text-foam">
+          対象: {available}問
+        </div>
+
+        <button
+          onClick={startBlankQuiz}
+          disabled={available === 0}
+          className={`w-full py-3 rounded-2xl font-bold active:scale-95 transition-transform ${
+            available === 0 ? "bg-white/10 text-dim" : "bg-glow text-deep"
+          }`}
+        >
+          {available === 0
+            ? "問題がありません（穴抜けタブから追加してね）"
+            : `はじめる（${effectiveBlankCount}問・+${estimatedBlankGold}G）`}
+        </button>
+      </div>
+    );
+  }
+
+  // ============ 穴抜けクイズ プレイ ============
+  if (mode === "blank" && phase === "play") {
+    return (
+      <QuizPlay
+        questions={blankQuizQs}
+        stats={blankQuestionStats}
+        onRecord={recordBlankAnswer}
+        onFinish={(finalScore, total) => {
+          const res = game.completeStudy("blank", total, finalScore);
+          setEarnedGold(res.gold);
+          setScore(finalScore);
+          setOriginalCount(total);
+          const extras: string[] = [];
+          if (res.leveledUp) extras.push(`🎖️ 職業レベルが Lv.${user.jobLevel + 1} に上がった！`);
+          for (const t of res.newTitles) extras.push(`👑 称号「${t}」を獲得！`);
+          setResultExtra(extras);
+          setPhase("done");
+          sfx.complete();
+          if (res.leveledUp || res.newTitles.length > 0) sfx.levelUp();
+          void playBgmForScene("home");
+        }}
+      />
+    );
   }
 
   // ============ 出題設定 ============

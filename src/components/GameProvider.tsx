@@ -93,6 +93,7 @@ export const MODE_LABEL: Record<StudyMode, string> = {
   self: "自己採点",
   choice: "選択肢クイズ",
   listen: "聞き流し",
+  blank: "穴抜けクイズ",
 };
 
 export type BaitKind = "basic" | "premium";

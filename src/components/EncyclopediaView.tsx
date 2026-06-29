@@ -302,18 +302,33 @@ export default function EncyclopediaView() {
                 onClick={() => found && setSelectedType(f.type)}
                 className={`relative rounded-xl p-3 bg-mid text-center ${found ? "cursor-pointer active:bg-white/10 transition-colors" : ""}`}
               >
-                {/* 編集ボタン */}
+                {/* 編集・削除ボタン */}
                 {canEdit && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (isCustom) openEditCustom(f.type);
-                      else openEditBuiltin(f.type);
-                    }}
-                    className="absolute top-1.5 right-1.5 text-[10px] bg-black/40 px-1.5 py-0.5 rounded-lg text-foam leading-tight active:bg-black/70"
-                  >
-                    ✏️
-                  </button>
+                  <div className="absolute top-1.5 right-1.5 flex gap-1">
+                    {isCustom && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (window.confirm(`「${f.type}」を削除しますか？`)) {
+                            game.removeCustomFish(f.type);
+                          }
+                        }}
+                        className="text-[10px] bg-black/40 px-1.5 py-0.5 rounded-lg text-coral leading-tight active:bg-black/70"
+                      >
+                        🗑
+                      </button>
+                    )}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (isCustom) openEditCustom(f.type);
+                        else openEditBuiltin(f.type);
+                      }}
+                      className="text-[10px] bg-black/40 px-1.5 py-0.5 rounded-lg text-foam leading-tight active:bg-black/70"
+                    >
+                      ✏️
+                    </button>
+                  </div>
                 )}
 
                 <div className="flex justify-center py-1">
@@ -329,10 +344,10 @@ export default function EncyclopediaView() {
                   {found ? RARITY_STARS[f.rarity] : "？？？"}
                 </div>
                 <div className="text-sm font-bold text-foam">
-                  {found ? (f.displayName ?? f.type) : isCustom ? f.type : "？？？"}
+                  {found ? (f.displayName ?? f.type) : "？？？"}
                 </div>
                 <div className="text-[10px] text-dim mt-1 min-h-7">
-                  {found ? f.description : isCustom ? f.description : "まだ出会っていない…"}
+                  {found ? f.description : "まだ出会っていない…"}
                 </div>
                 {found && (
                   <div className="text-[9px] text-glow mt-0.5">タップで記録を見る</div>
