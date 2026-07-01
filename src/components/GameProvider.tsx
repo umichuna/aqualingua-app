@@ -58,6 +58,7 @@ import {
   putFish,
   putFishHistoryEntry,
   putFishList,
+  deleteFishOverride,
   putFishOverride,
   putGoldLedgerEntry,
   putStudySession,
@@ -69,7 +70,7 @@ import {
 import { sfx } from "@/lib/sound";
 import { pullFromCloud, pushToCloud } from "@/lib/sync";
 import { deleteSharedCustomFish, fetchSharedCustomFish, postSharedCustomFish } from "@/lib/customFish";
-import { fetchSharedFishOverrides, postSharedFishOverride } from "@/lib/fishOverrides";
+import { deleteSharedFishOverride, fetchSharedFishOverrides, postSharedFishOverride } from "@/lib/fishOverrides";
 import type {
   BlankQuestion,
   BlankQuestionStats,
@@ -167,6 +168,7 @@ interface GameContextValue {
   updateCustomFish: (def: CustomFishDef) => void;
   removeCustomFish: (fishType: string) => void;
   updateBuiltinFish: (override: FishOverride) => void;
+  removeBuiltinFishOverride: (fishType: string) => void;
   buyTankSlot: (type: import("@/lib/types").WaterType) => void;
 
   // 穴抜け問題
@@ -977,6 +979,20 @@ export function GameProvider({ children }: { children: ReactNode }) {
     [pushNotice, persistFishList]
   );
 
+  // 組み込み魚のオーバーライドを削除（デフォルト外観にリセット）
+  const removeBuiltinFishOverride = useCallback(
+    (fishType: string) => {
+      setFishOverrides((prev) => prev.filter((o) => o.type !== fishType));
+      void deleteFishOverride(fishType);
+      void deleteSharedFishOverride(fishType).catch((e) => {
+        console.error("[FishOverride] cloud delete failed", e);
+        pushNotice("⚠️", "おさかな編集のリセットに失敗しました（通信エラー）");
+      });
+      pushNotice("🔄", `${fishType}の編集をリセットしました`);
+    },
+    [pushNotice]
+  );
+
   // fishOverrides を DB から読み込み、クラウドの最新データとマージ
   useEffect(() => {
     void getAllFishOverrides().then(setFishOverrides);
@@ -1241,6 +1257,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         updateCustomFish,
         removeCustomFish,
         updateBuiltinFish,
+        removeBuiltinFishOverride,
         buyTankSlot,
         tanks,
         currentTankId,

@@ -148,6 +148,7 @@ export default function StudyView({ onPhaseChange }: { onPhaseChange?: (inPlay: 
   const [score, setScore] = useState(0); // 初回正解数
   const [earnedGold, setEarnedGold] = useState(0);
   const [resultExtra, setResultExtra] = useState<string[]>([]);
+  const [quitConfirm, setQuitConfirm] = useState<{ count: number; score: number; mode: StudyMode | "free" } | null>(null);
   // 繰り返し出題で2回目以降かどうかを判定（初回正解だけスコアに数える）
   const attemptedRef = useRef<Set<string>>(new Set());
   // セッション内の単語ごとの間違い回数（3回でに苦手登録）
@@ -291,6 +292,16 @@ export default function StudyView({ onPhaseChange }: { onPhaseChange?: (inPlay: 
     setMode(null);
     setPhase("setup");
     setBlankSubView("select");
+    setQuitConfirm(null);
+  };
+
+  // play 中に「← やめる」を押したときは確認モーダルを出す。setup/done 中はそのまま戻る
+  const requestQuit = (countDone: number, scoreDone: number) => {
+    if (phase === "play" && mode !== null) {
+      setQuitConfirm({ count: countDone, score: scoreDone, mode });
+    } else {
+      backToMenu();
+    }
   };
 
   // ============ 穴抜けクイズ開始 ============
@@ -706,6 +717,7 @@ export default function StudyView({ onPhaseChange }: { onPhaseChange?: (inPlay: 
   // ============ プレイ画面 ============
   if (mode === "choice") {
     return (
+      <>
       <ChoicePlay
         questions={choiceQs}
         qIndex={qIndex}
@@ -750,63 +762,110 @@ export default function StudyView({ onPhaseChange }: { onPhaseChange?: (inPlay: 
             }
           }, correct ? 900 : 1400);
         }}
-        onQuit={backToMenu}
+        onQuit={() => requestQuit(qIndex, score)}
       />
+      <QuitConfirmOverlay quitConfirm={quitConfirm} onConfirm={() => finishQuiz(quitConfirm!.mode as StudyMode, quitConfirm!.count, quitConfirm!.score)} onCancel={() => setQuitConfirm(null)} />
+    </>
     );
   }
 
   if (mode === "self") {
     return (
-      <SelfPlay
-        words={quizWords}
-        qIndex={qIndex}
-        flipped={flipped}
-        setFlipped={setFlipped}
-        direction={config.direction}
-        onJudge={(ok) => {
-          const w = quizWords[qIndex];
-          const firstTry = !attemptedRef.current.has(w.id);
-          attemptedRef.current.add(w.id);
-          if (ok) sfx.correct();
-          else sfx.wrong();
-          if (ok) {
-            if (firstTry) {
-              setScore((s) => s + 1);
-              game.resetWordWeak(w.id); // 1発正解で苦手リセット（セッションをまたいでもOK）
+      <>
+        <SelfPlay
+          words={quizWords}
+          qIndex={qIndex}
+          flipped={flipped}
+          setFlipped={setFlipped}
+          direction={config.direction}
+          onJudge={(ok) => {
+            const w = quizWords[qIndex];
+            const firstTry = !attemptedRef.current.has(w.id);
+            attemptedRef.current.add(w.id);
+            if (ok) sfx.correct();
+            else sfx.wrong();
+            if (ok) {
+              if (firstTry) {
+                setScore((s) => s + 1);
+                game.resetWordWeak(w.id); // 1発正解で苦手リセット（セッションをまたいでもOK）
+              }
+              game.recordAnswer(w.id, true);
+            } else {
+              const cnt = (sessionWrongRef.current[w.id] ?? 0) + 1;
+              sessionWrongRef.current[w.id] = cnt;
+              if (cnt === 3) {
+                game.recordAnswer(w.id, false); // セッション内3回目で苦手登録
+              }
             }
-            game.recordAnswer(w.id, true);
-          } else {
-            const cnt = (sessionWrongRef.current[w.id] ?? 0) + 1;
-            sessionWrongRef.current[w.id] = cnt;
-            if (cnt === 3) {
-              game.recordAnswer(w.id, false); // セッション内3回目で苦手登録
+            let queue = quizWords;
+            if (!ok && config.repeatUntilCorrect) {
+              queue = [...quizWords, w];
+              setQuizWords(queue);
             }
-          }
-          let queue = quizWords;
-          if (!ok && config.repeatUntilCorrect) {
-            queue = [...quizWords, w];
-            setQuizWords(queue);
-          }
-          const newScore = score + (ok && firstTry ? 1 : 0);
-          if (qIndex + 1 < queue.length) {
-            setQIndex((i) => i + 1);
-            setFlipped(false);
-          } else {
-            finishQuiz("self", newScore);
-          }
-        }}
-        onQuit={backToMenu}
-      />
+            const newScore = score + (ok && firstTry ? 1 : 0);
+            if (qIndex + 1 < queue.length) {
+              setQIndex((i) => i + 1);
+              setFlipped(false);
+            } else {
+              finishQuiz("self", newScore);
+            }
+          }}
+          onQuit={() => requestQuit(qIndex, score)}
+        />
+        <QuitConfirmOverlay quitConfirm={quitConfirm} onConfirm={() => finishQuiz(quitConfirm!.mode as StudyMode, quitConfirm!.count, quitConfirm!.score)} onCancel={() => setQuitConfirm(null)} />
+      </>
     );
   }
 
   return (
-    <ListenPlay
-      words={quizWords}
-      direction={config.direction}
-      onFinish={(playedCount) => finishQuiz("listen", playedCount, playedCount)}
-      onQuit={backToMenu}
-    />
+    <>
+      <ListenPlay
+        words={quizWords}
+        direction={config.direction}
+        onFinish={(playedCount) => finishQuiz("listen", playedCount, playedCount)}
+        onQuit={(n) => requestQuit(n, n)}
+      />
+      <QuitConfirmOverlay quitConfirm={quitConfirm} onConfirm={() => finishQuiz(quitConfirm!.mode as StudyMode, quitConfirm!.count, quitConfirm!.score)} onCancel={() => setQuitConfirm(null)} />
+    </>
+  );
+}
+
+// ---------- 中断確認オーバーレイ ----------
+function QuitConfirmOverlay({
+  quitConfirm,
+  onConfirm,
+  onCancel,
+}: {
+  quitConfirm: { count: number; score: number; mode: StudyMode | "free" } | null;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  if (!quitConfirm) return null;
+  const gold = quitConfirm.mode !== "free" ? quitConfirm.count * (MODE_BASE_GOLD[quitConfirm.mode as StudyMode] ?? 0) : 0;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6">
+      <div className="w-full max-w-xs bg-sea rounded-2xl p-6 space-y-4 font-pixel" style={{ border: "2px solid var(--aqua-glow)" }}>
+        <p className="text-foam font-bold text-sm text-center">学習を中断しますか？</p>
+        <p className="text-dim text-xs text-center">
+          {quitConfirm.count}問終了時点で中断します。<br />
+          <span className="text-sand font-bold">+{gold}G</span> 獲得されます。
+        </p>
+        <div className="flex gap-2">
+          <button
+            onClick={onCancel}
+            className="flex-1 py-2.5 rounded-xl font-bold bg-white/10 text-dim text-sm"
+          >
+            続ける
+          </button>
+          <button
+            onClick={onConfirm}
+            className="flex-1 py-2.5 rounded-xl font-bold bg-glow text-deep text-sm"
+          >
+            中断する
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1188,7 +1247,7 @@ function ListenPlay({
   words: Word[];
   direction: Direction;
   onFinish: (playedCount: number) => void;
-  onQuit: () => void;
+  onQuit: (playedCount: number) => void;
 }) {
   const [index, setIndex] = useState(0);
   const [playedCount, setPlayedCount] = useState(0);
@@ -1238,6 +1297,10 @@ function ListenPlay({
       cancelSpeech();
       setPlaying(false);
     });
+    navigator.mediaSession.setActionHandler("stop", () => {
+      cancelSpeech();
+      setPlaying(false);
+    });
     navigator.mediaSession.setActionHandler("nexttrack", () => {
       cancelSpeech();
       const next = (indexRef.current + 1) % currentWordsRef.current.length;
@@ -1248,6 +1311,7 @@ function ListenPlay({
     return () => {
       navigator.mediaSession.setActionHandler("play", null);
       navigator.mediaSession.setActionHandler("pause", null);
+      navigator.mediaSession.setActionHandler("stop", null);
       navigator.mediaSession.setActionHandler("nexttrack", null);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1270,26 +1334,6 @@ function ListenPlay({
     if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
     navigator.mediaSession.playbackState = playing ? "playing" : "paused";
   }, [playing]);
-
-  // MediaSession actionHandler でロック画面の再生コントロールを有効化（OS がメディアプレーヤーとして認識する）
-  useEffect(() => {
-    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
-    navigator.mediaSession.setActionHandler("play", () => setPlaying(true));
-    navigator.mediaSession.setActionHandler("pause", () => setPlaying(false));
-    navigator.mediaSession.setActionHandler("stop", () => {
-      setPlaying(false);
-      cancelSpeech();
-    });
-    return () => {
-      try {
-        navigator.mediaSession.setActionHandler("play", null);
-        navigator.mediaSession.setActionHandler("pause", null);
-        navigator.mediaSession.setActionHandler("stop", null);
-      } catch {
-        // 一部ブラウザで null セット非対応の場合を無視
-      }
-    };
-  }, []);
 
   // スクリーンロック時に speechSynthesis が停止するのを防ぐ（5秒ごとに resume）
   useEffect(() => {
@@ -1356,7 +1400,7 @@ function ListenPlay({
   return (
     <div className="p-4 flex flex-col gap-4 h-full">
       <div className="flex justify-between text-xs text-dim">
-        <button onClick={onQuit} className="underline">← やめる</button>
+        <button onClick={() => { cancelSpeech(); onQuit(playedRef.current); }} className="underline">← やめる</button>
         <span>聞いた数: {playedCount}問</span>
       </div>
       <div className="rounded-2xl p-6 text-center bg-mid flex-1 flex flex-col items-center justify-center gap-2">

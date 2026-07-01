@@ -533,6 +533,17 @@ export default function EncyclopediaView() {
                   更新する
                 </button>
               </div>
+              <button
+                onClick={() => {
+                  if (window.confirm(`「${editTarget.type}」の編集内容をリセットしますか？\nデフォルトの見た目に戻ります。`)) {
+                    game.removeBuiltinFishOverride(editTarget.type);
+                    setEditTarget(null);
+                  }
+                }}
+                className="w-full py-2 rounded-xl bg-coral/20 text-coral text-sm font-bold"
+              >
+                🗑 編集リセット（デフォルトに戻す）
+              </button>
             </div>
           </div>
         </div>
