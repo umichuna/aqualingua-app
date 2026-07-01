@@ -744,16 +744,24 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
   // ---------- 単語 ----------
   const saveWord = useCallback((word: Word) => {
+    const now = Date.now();
+    // createdAt は初回のみセット。編集時は既存値を保持して登録日順ソートを正しく機能させる
     setWords((ws) => {
       const i = ws.findIndex((w) => w.id === word.id);
+      const existing = i >= 0 ? ws[i] : undefined;
+      const wordToSave: Word = {
+        ...word,
+        createdAt: word.createdAt ?? existing?.createdAt ?? now,
+        lastUpdated: now,
+      };
       if (i >= 0) {
         const next = [...ws];
-        next[i] = word;
+        next[i] = wordToSave;
         return next;
       }
-      return [...ws, word];
+      return [...ws, wordToSave];
     });
-    void putWord(word);
+    void putWord({ ...word, createdAt: word.createdAt ?? now, lastUpdated: now });
     schedulePush();
   }, [schedulePush]);
 

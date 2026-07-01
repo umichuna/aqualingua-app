@@ -143,12 +143,7 @@ export default function BlankQuestionView() {
   const game = useGame();
   const { blankQuestions, blankQuestionStats } = game;
 
-  const [phase, setPhase] = useState<"list" | "play" | "done">("list");
-  const [quizQuestions, setQuizQuestions] = useState<BlankQuestion[]>([]);
-  const [result, setResult] = useState<{ score: number; total: number } | null>(null);
   const [showAdd, setShowAdd] = useState(false);
-  const [weakOnly, setWeakOnly] = useState(false);
-  const [blankCount, setBlankCount] = useState<number | "all">(10);
   const [form, setForm] = useState({
     sentence: "",
     japaneseText: "",
@@ -160,23 +155,6 @@ export default function BlankQuestionView() {
   });
   const [formError, setFormError] = useState("");
   const [csvError, setCsvError] = useState("");
-
-  const weakIds = useMemo(
-    () => new Set(Object.entries(blankQuestionStats).filter(([, s]) => s.incorrectCount > 0).map(([id]) => id)),
-    [blankQuestionStats]
-  );
-
-  const displayList = weakOnly
-    ? blankQuestions.filter((q) => weakIds.has(q.id))
-    : blankQuestions;
-
-  const startQuiz = () => {
-    const pool = weakOnly ? blankQuestions.filter((q) => weakIds.has(q.id)) : blankQuestions;
-    if (pool.length === 0) return;
-    const shuffled = shuffle(pool);
-    setQuizQuestions(blankCount === "all" ? shuffled : shuffled.slice(0, blankCount));
-    setPhase("play");
-  };
 
   const submitAdd = () => {
     const { sentence, japaneseText, answer, wrong1, wrong2, wrong3 } = form;
@@ -237,34 +215,6 @@ export default function BlankQuestionView() {
     };
     reader.readAsText(file, "utf-8");
   };
-
-  // ---- 出題中 ----
-  if (phase === "play") {
-    return (
-      <QuizPlay
-        questions={quizQuestions}
-        stats={blankQuestionStats}
-        onRecord={game.recordBlankAnswer}
-        onFinish={(score, total) => { setResult({ score, total }); setPhase("done"); }}
-      />
-    );
-  }
-
-  // ---- 結果 ----
-  if (phase === "done" && result) {
-    return (
-      <div className="p-4 flex flex-col items-center justify-center h-full gap-4">
-        <div className="text-5xl">🎉</div>
-        <div className="font-bold text-xl text-foam">{result.score} / {result.total} 正解！</div>
-        <button
-          onClick={() => { setPhase("list"); setResult(null); }}
-          className="px-6 py-3 rounded-xl font-bold bg-glow text-deep active:scale-95"
-        >
-          一覧に戻る
-        </button>
-      </div>
-    );
-  }
 
   // ---- 一覧 ----
   return (
@@ -332,47 +282,14 @@ export default function BlankQuestionView() {
       </div>
       {csvError && <p className="text-xs text-center text-glow">{csvError}</p>}
 
-      {/* 問題数入力 */}
-      <div>
-        <div className="text-xs font-bold text-glow mb-1.5">出題数（最大 {blankQuestions.length} 問）</div>
-        <input
-          type="number"
-          min={1}
-          max={blankQuestions.length}
-          value={blankCount === "all" ? blankQuestions.length : blankCount}
-          onChange={(e) => {
-            const n = Math.max(1, Math.floor(Number(e.target.value)));
-            setBlankCount(n >= blankQuestions.length ? "all" : n);
-          }}
-          className="w-full px-3 py-2.5 rounded-xl bg-mid text-foam outline-none text-center font-bold"
-        />
-      </div>
-
-      {/* 絞り込み＋出題ボタン */}
-      <div className="flex items-center gap-2">
-        <button
-          onClick={() => setWeakOnly(!weakOnly)}
-          className={`text-xs px-3 py-1.5 rounded-full font-bold ${weakOnly ? "bg-coral text-deep" : "bg-white/10 text-dim"}`}
-        >
-          ⚠️ 苦手のみ（{weakIds.size}問）
-        </button>
-        <button
-          onClick={startQuiz}
-          disabled={displayList.length === 0}
-          className="ml-auto text-xs px-4 py-1.5 rounded-xl bg-sand text-deep font-bold disabled:opacity-40"
-        >
-          ▶ 出題（{blankCount === "all" ? displayList.length : Math.min(blankCount, displayList.length)}問）
-        </button>
-      </div>
-
       {/* 問題一覧 */}
       <div className="flex-1 overflow-y-auto flex flex-col gap-2">
-        {displayList.length === 0 && (
+        {blankQuestions.length === 0 && (
           <p className="text-xs text-dim text-center mt-8">
             問題がまだありません。「＋ 追加」か CSV で登録してね
           </p>
         )}
-        {displayList.map((q) => {
+        {blankQuestions.map((q) => {
           const s = blankQuestionStats[q.id];
           return (
             <div key={q.id} className="rounded-xl bg-mid p-3 flex items-start gap-2">

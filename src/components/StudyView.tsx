@@ -115,7 +115,7 @@ function Toggle({
   );
 }
 
-export default function StudyView() {
+export default function StudyView({ onPhaseChange }: { onPhaseChange?: (inPlay: boolean) => void } = {}) {
   const game = useGame();
   const { words, wordStats, user, blankQuestions, blankQuestionStats, recordBlankAnswer } = game;
   const GENRES = game.allGenres;
@@ -157,6 +157,11 @@ export default function StudyView() {
   useEffect(() => {
     void playBgmForScene(null);
   }, []);
+
+  // phase が play になったとき/終わったときに親 (page.tsx) へ通知
+  useEffect(() => {
+    onPhaseChange?.(phase === "play");
+  }, [phase, onPhaseChange]);
 
   // ---------- 絞り込み（複数選択対応） ----------
   const filterPool = useCallback((): Word[] => {
@@ -1265,6 +1270,26 @@ function ListenPlay({
     if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
     navigator.mediaSession.playbackState = playing ? "playing" : "paused";
   }, [playing]);
+
+  // MediaSession actionHandler でロック画面の再生コントロールを有効化（OS がメディアプレーヤーとして認識する）
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+    navigator.mediaSession.setActionHandler("play", () => setPlaying(true));
+    navigator.mediaSession.setActionHandler("pause", () => setPlaying(false));
+    navigator.mediaSession.setActionHandler("stop", () => {
+      setPlaying(false);
+      cancelSpeech();
+    });
+    return () => {
+      try {
+        navigator.mediaSession.setActionHandler("play", null);
+        navigator.mediaSession.setActionHandler("pause", null);
+        navigator.mediaSession.setActionHandler("stop", null);
+      } catch {
+        // 一部ブラウザで null セット非対応の場合を無視
+      }
+    };
+  }, []);
 
   // スクリーンロック時に speechSynthesis が停止するのを防ぐ（5秒ごとに resume）
   useEffect(() => {

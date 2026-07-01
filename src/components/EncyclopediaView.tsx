@@ -40,7 +40,8 @@ const EMPTY_CUSTOM_FORM = {
   type: "",
   rarity: "普通" as Rarity,
   description: "",
-  layer: "middle" as "middle" | "bottom",
+  layer: "middle" as "bottom" | "middle" | "top",
+  waterType: "saltwater" as WaterType,
   displaySize: "medium" as FishDisplaySize,
   paletteIdx: 0,
   imageUrl: "",
@@ -152,6 +153,9 @@ export default function EncyclopediaView() {
 
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [secretUnlocked, setSecretUnlocked] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [passwordInput, setPasswordInput] = useState("");
+  const [passwordError, setPasswordError] = useState(false);
 
   // 編集モーダル
   const [editTarget, setEditTarget] = useState<{ type: string; isCustom: boolean } | null>(null);
@@ -162,6 +166,7 @@ export default function EncyclopediaView() {
     rarity: Rarity;
     displaySize: FishDisplaySize;
     waterType: WaterType;
+    layer: "bottom" | "middle" | "top";
     description: string;
     imageUrl: string;
   }>({
@@ -169,6 +174,7 @@ export default function EncyclopediaView() {
     rarity: "普通",
     displaySize: "medium",
     waterType: "saltwater",
+    layer: "middle",
     description: "",
     imageUrl: "",
   });
@@ -186,6 +192,7 @@ export default function EncyclopediaView() {
       rarity: fish.rarity,
       displaySize: fish.displaySize ?? "medium",
       waterType: fish.waterType ?? "saltwater",
+      layer: (fish.layer as "bottom" | "middle" | "top") ?? "middle",
       description: fish.description,
       imageUrl: fish.imageUrl ?? "",
     });
@@ -201,7 +208,8 @@ export default function EncyclopediaView() {
       type: fish.type,
       rarity: fish.rarity,
       description: fish.description,
-      layer: (fish as CustomFishDef).layer === "bottom" ? "bottom" : "middle",
+      layer: (fish as CustomFishDef).layer ?? "middle",
+      waterType: (fish as CustomFishDef).waterType ?? fish.waterType ?? "saltwater",
       displaySize: fish.displaySize ?? "medium",
       paletteIdx: 0,
       imageUrl: fish.imageUrl ?? "",
@@ -218,6 +226,7 @@ export default function EncyclopediaView() {
       rarity: builtinForm.rarity,
       displaySize: builtinForm.displaySize,
       waterType: builtinForm.waterType,
+      layer: builtinForm.layer,
       description: builtinForm.description,
       imageUrl: builtinForm.imageUrl || undefined,
     };
@@ -232,7 +241,8 @@ export default function EncyclopediaView() {
       rarity: customForm.rarity,
       description: customForm.description.trim(),
       palette: PALETTE_PRESETS[customForm.paletteIdx].palette,
-      layer: customForm.layer === "bottom" ? "bottom" : undefined,
+      layer: customForm.layer,
+      waterType: customForm.waterType,
       displaySize: customForm.displaySize,
       imageUrl: customForm.imageUrl || undefined,
     };
@@ -253,7 +263,8 @@ export default function EncyclopediaView() {
       rarity: customForm.rarity,
       description: customForm.description.trim(),
       palette: PALETTE_PRESETS[customForm.paletteIdx].palette,
-      layer: customForm.layer === "bottom" ? "bottom" : undefined,
+      layer: customForm.layer,
+      waterType: customForm.waterType,
       displaySize: customForm.displaySize,
       imageUrl: customForm.imageUrl || undefined,
     };
@@ -284,8 +295,9 @@ export default function EncyclopediaView() {
           <button
             onClick={() => {
               if (secretUnlocked) { setSecretUnlocked(false); return; }
-              const pw = window.prompt("パスワードを入力してください");
-              if (pw === "shi-chankawaii0521LOVE") setSecretUnlocked(true);
+              setPasswordInput("");
+              setPasswordError(false);
+              setShowPasswordModal(true);
             }}
             className="text-base leading-none"
             title={secretUnlocked ? "ロック解除中（タップで解錠）" : "管理者モード"}
@@ -316,22 +328,9 @@ export default function EncyclopediaView() {
                 onClick={() => found && setSelectedType(f.type)}
                 className={`relative rounded-xl p-3 bg-mid text-center ${found ? "cursor-pointer active:bg-white/10 transition-colors" : ""}`}
               >
-                {/* 編集・削除ボタン */}
+                {/* 編集ボタン（削除はモーダル内に移動） */}
                 {canEdit && (
                   <div className="absolute top-1.5 right-1.5 flex gap-1">
-                    {isCustom && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (window.confirm(`「${f.type}」を削除しますか？`)) {
-                            game.removeCustomFish(f.type);
-                          }
-                        }}
-                        className="text-[10px] bg-black/40 px-1.5 py-0.5 rounded-lg text-coral leading-tight active:bg-black/70"
-                      >
-                        🗑
-                      </button>
-                    )}
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -459,6 +458,22 @@ export default function EncyclopediaView() {
                 </div>
               </div>
 
+              {/* 泳ぐ層 */}
+              <div>
+                <div className="text-xs font-bold text-glow mb-1">泳ぐ層</div>
+                <div className="flex gap-2">
+                  {(["top", "middle", "bottom"] as const).map((l) => (
+                    <button
+                      key={l}
+                      onClick={() => setBuiltinForm((f) => ({ ...f, layer: l }))}
+                      className={`flex-1 py-1.5 rounded-lg text-xs font-bold ${builtinForm.layer === l ? "bg-sand text-deep" : "bg-white/10 text-dim"}`}
+                    >
+                      {l === "top" ? "上層" : l === "middle" ? "中層" : "底層"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* 説明 */}
               <div>
                 <div className="text-xs font-bold text-glow mb-1">説明</div>
@@ -557,17 +572,33 @@ export default function EncyclopediaView() {
                 </div>
               </div>
 
-              {/* 表示層 */}
+              {/* 水の種類 */}
               <div>
-                <div className="text-xs font-bold text-glow mb-1">表示層</div>
+                <div className="text-xs font-bold text-glow mb-1">水の種類</div>
                 <div className="flex gap-2">
-                  {(["middle", "bottom"] as const).map((l) => (
+                  {(["saltwater", "freshwater"] as const).map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setCustomForm((f) => ({ ...f, waterType: t }))}
+                      className={`flex-1 py-1.5 rounded-lg text-xs font-bold ${customForm.waterType === t ? "bg-sand text-deep" : "bg-white/10 text-dim"}`}
+                    >
+                      {t === "saltwater" ? "🌊 海水" : "🌿 淡水"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 泳ぐ層 */}
+              <div>
+                <div className="text-xs font-bold text-glow mb-1">泳ぐ層</div>
+                <div className="flex gap-2">
+                  {(["top", "middle", "bottom"] as const).map((l) => (
                     <button
                       key={l}
                       onClick={() => setCustomForm((f) => ({ ...f, layer: l }))}
                       className={`flex-1 py-1.5 rounded-lg text-xs font-bold ${customForm.layer === l ? "bg-sand text-deep" : "bg-white/10 text-dim"}`}
                     >
-                      {l === "middle" ? "🌊 水中" : "🪸 底生"}
+                      {l === "top" ? "上層" : l === "middle" ? "中層" : "底層"}
                     </button>
                   ))}
                 </div>
@@ -648,6 +679,18 @@ export default function EncyclopediaView() {
                   更新する
                 </button>
               </div>
+              {/* 削除ボタン（モーダル内に移動） */}
+              <button
+                onClick={() => {
+                  if (window.confirm(`「${editTarget.type}」を削除しますか？`)) {
+                    game.removeCustomFish(editTarget.type);
+                    setEditTarget(null);
+                  }
+                }}
+                className="w-full py-2 rounded-xl bg-coral/20 text-coral text-sm font-bold"
+              >
+                🗑 削除する
+              </button>
             </div>
           </div>
         </div>
@@ -701,17 +744,33 @@ export default function EncyclopediaView() {
                 </div>
               </div>
 
-              {/* 表示層 */}
+              {/* 水の種類 */}
               <div>
-                <div className="text-xs font-bold text-glow mb-1">表示層</div>
+                <div className="text-xs font-bold text-glow mb-1">水の種類</div>
                 <div className="flex gap-2">
-                  {(["middle", "bottom"] as const).map((l) => (
+                  {(["saltwater", "freshwater"] as const).map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setCustomForm((f) => ({ ...f, waterType: t }))}
+                      className={`flex-1 py-1.5 rounded-lg text-xs font-bold ${customForm.waterType === t ? "bg-sand text-deep" : "bg-white/10 text-dim"}`}
+                    >
+                      {t === "saltwater" ? "🌊 海水" : "🌿 淡水"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 泳ぐ層 */}
+              <div>
+                <div className="text-xs font-bold text-glow mb-1">泳ぐ層</div>
+                <div className="flex gap-2">
+                  {(["top", "middle", "bottom"] as const).map((l) => (
                     <button
                       key={l}
                       onClick={() => setCustomForm((f) => ({ ...f, layer: l }))}
                       className={`flex-1 py-1.5 rounded-lg text-xs font-bold ${customForm.layer === l ? "bg-sand text-deep" : "bg-white/10 text-dim"}`}
                     >
-                      {l === "middle" ? "🌊 水中" : "🪸 底生"}
+                      {l === "top" ? "上層" : l === "middle" ? "中層" : "底層"}
                     </button>
                   ))}
                 </div>
@@ -797,6 +856,55 @@ export default function EncyclopediaView() {
                   追加する
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* パスワード入力モーダル（window.prompt の代替） */}
+      {showPasswordModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6">
+          <div className="w-full max-w-xs bg-sea rounded-2xl p-6 space-y-4 font-pixel">
+            <p className="text-foam font-bold text-sm text-center">管理者パスワードを入力</p>
+            <input
+              type="password"
+              value={passwordInput}
+              onChange={(e) => { setPasswordInput(e.target.value); setPasswordError(false); }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  if (passwordInput === "shi-chankawaii0521LOVE") {
+                    setSecretUnlocked(true);
+                    setShowPasswordModal(false);
+                  } else {
+                    setPasswordError(true);
+                  }
+                }
+              }}
+              className="w-full px-3 py-2.5 rounded-xl bg-mid text-foam outline-none text-center font-bold tracking-widest"
+              autoFocus
+              placeholder="••••••"
+            />
+            {passwordError && <p className="text-coral text-xs text-center">パスワードが違います</p>}
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowPasswordModal(false)}
+                className="flex-1 py-2 rounded-xl bg-white/10 text-dim text-sm font-bold"
+              >
+                キャンセル
+              </button>
+              <button
+                onClick={() => {
+                  if (passwordInput === "shi-chankawaii0521LOVE") {
+                    setSecretUnlocked(true);
+                    setShowPasswordModal(false);
+                  } else {
+                    setPasswordError(true);
+                  }
+                }}
+                className="flex-1 py-2 rounded-xl bg-glow text-deep text-sm font-bold"
+              >
+                OK
+              </button>
             </div>
           </div>
         </div>

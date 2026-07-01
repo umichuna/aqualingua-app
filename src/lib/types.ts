@@ -27,6 +27,7 @@ export interface Word {
   level: WordLevel;
   genre: WordGenre;
   lastUpdated: number;
+  createdAt?: number; // 登録時のみ設定。編集時は保持する（登録日順ソート用）
 }
 
 export interface WordStats {
@@ -95,6 +96,7 @@ export interface CustomFishDef {
   description: string;
   palette: { body: string; stripe: string; fin: string; eye: string };
   layer?: "bottom" | "middle" | "top";
+  waterType?: WaterType; // 海水 / 淡水（組み込み魚と編集項目を統一）
   imageUrl?: string; // base64画像（canvas縮小後のJPEG）
   displaySize?: FishDisplaySize; // 表示サイズ
 }

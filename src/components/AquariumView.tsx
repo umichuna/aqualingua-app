@@ -214,6 +214,7 @@ export default function AquariumView() {
               style={{
                 left: `${pos.x}%`,
                 top: `${pos.y}%`,
+                transform: "translate(-50%, -50%)",
                 transition: eating ? "all 0.9s ease-in" : "all 1.8s ease-in-out",
               }}
             >

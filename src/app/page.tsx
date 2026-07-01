@@ -104,6 +104,7 @@ function AppShell() {
 
   const [screen, setScreen] = useState<"start" | "app">("start");
   const [tab, setTab] = useState<TabId>("home");
+  const [studyInProgress, setStudyInProgress] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
@@ -127,8 +128,11 @@ function AppShell() {
     return null; // record/words/zukan/blank は無音
   };
 
-  // タブ移動 + BGM切り替えをまとめて行うヘルパー
+  // タブ移動 + BGM切り替えをまとめて行うヘルパー（学習中の中断確認あり）
   const navigateTo = (newTab: TabId) => {
+    if (studyInProgress && newTab !== "study") {
+      if (!window.confirm("学習中です。中断してよいですか？")) return;
+    }
     setTab(newTab);
     void playBgmForScene(tabToScene(newTab));
   };
@@ -192,7 +196,7 @@ function AppShell() {
           />
         )}
         {tab === "aquarium" && <AquariumView />}
-        {tab === "study" && <StudyView />}
+        {tab === "study" && <StudyView onPhaseChange={setStudyInProgress} />}
         {tab === "record" && <RecordView />}
         {tab === "words" && <WordManager />}
         {tab === "zukan" && <EncyclopediaView />}

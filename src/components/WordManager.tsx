@@ -156,7 +156,7 @@ export default function WordManager() {
     return [...pool].sort((a, b) => {
       switch (sort) {
         case "alpha": return a.spelling.localeCompare(b.spelling, "en");
-        case "date": return b.lastUpdated - a.lastUpdated;
+        case "date": return (b.createdAt ?? b.lastUpdated) - (a.createdAt ?? a.lastUpdated);
         case "level": return LEVEL_ORDER[a.level] - LEVEL_ORDER[b.level];
         case "weak":
           return (
@@ -202,6 +202,7 @@ export default function WordManager() {
     examples: [],
     level: "1",
     genre: "日常会話",
+    createdAt: Date.now(),
     lastUpdated: Date.now(),
   });
 

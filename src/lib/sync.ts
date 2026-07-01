@@ -23,9 +23,11 @@ export async function pullFromCloud(userId: string): Promise<boolean> {
   try {
     console.log(`[Sync] Restoring from cloud for userId: ${userId}`);
 
+    // Azure SQL コールドスタート対策: 50秒タイムアウト
     const response = await fetch("/api/sync/pull", {
       method: "GET",
       headers: { "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(50_000),
     });
 
     if (!response.ok) {
@@ -112,10 +114,12 @@ export async function pushToCloud(userId: string): Promise<void> {
       fishHistory,
     };
 
+    // Azure SQL コールドスタート対策: 50秒タイムアウト
     const response = await fetch("/api/sync/push", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(50_000),
     });
 
     if (!response.ok) {
