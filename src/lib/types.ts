@@ -46,6 +46,7 @@ export interface Tank {
   type: WaterType;
   name: string;    // "海水 1", "淡水 1" など
   capacity: number; // この水槽の最大魚数
+  backgroundImageBase64?: string; // この水槽の背景画像（base64）
 }
 
 // 相棒バフの種類

@@ -138,7 +138,7 @@ interface GameContextValue {
   moveFishToTank: (fishId: string, targetTankId: string) => void;
   buyTank: (type: WaterType) => void;
   renameTank: (tankId: string, newName: string) => void;
-  setBackgroundImage: (base64: string) => void;
+  setBackgroundImage: (tankId: string, base64: string) => void;
   feedAllFish: (kind: BaitKind) => boolean;
   useMedicine: (fishId: string) => boolean;
   moveTankFishToBox: (fishId: string) => void;
@@ -1086,9 +1086,13 @@ export function GameProvider({ children }: { children: ReactNode }) {
   );
 
   const setBackgroundImage = useCallback(
-    (base64: string) => {
+    (tankId: string, base64: string) => {
       const u = userRef.current;
-      persistUser({ ...u, backgroundImageBase64: base64 });
+      const currentTanks = u.tanks ?? [];
+      const updated = currentTanks.map(t =>
+        t.id === tankId ? { ...t, backgroundImageBase64: base64 } : t
+      );
+      persistUser({ ...u, tanks: updated });
     },
     [persistUser]
   );

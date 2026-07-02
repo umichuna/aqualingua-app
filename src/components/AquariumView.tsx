@@ -66,7 +66,7 @@ export default function AquariumView() {
     const reader = new FileReader();
     reader.onload = () => {
       const base64 = reader.result as string;
-      game.setBackgroundImage(base64);
+      game.setBackgroundImage(currentTankId, base64);
     };
     reader.readAsDataURL(file);
   };
@@ -177,9 +177,12 @@ export default function AquariumView() {
         onClick={dropBait}
         className="relative flex-1 overflow-hidden cursor-pointer select-none"
         style={{
-          backgroundImage: user.backgroundImageBase64
-            ? `url('${user.backgroundImageBase64}')`
-            : "url('/aquarium-bg.png')",
+          backgroundImage: (() => {
+            const currentTank = tanks.find(t => t.id === currentTankId);
+            return currentTank?.backgroundImageBase64
+              ? `url('${currentTank.backgroundImageBase64}')`
+              : "url('/aquarium-bg.png')";
+          })(),
           backgroundSize: "cover",
           backgroundPosition: "center bottom",
           minHeight: "320px",
