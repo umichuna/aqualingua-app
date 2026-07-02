@@ -13,9 +13,30 @@ async function readError(response: Response): Promise<string> {
   return response.statusText || `HTTP ${response.status}`;
 }
 
+async function fetchWithRetry(
+  path: string,
+  init: RequestInit = {},
+  retries = 4,
+  timeoutMs = 55_000
+): Promise<Response> {
+  const backoffMs = [5000, 10000, 20000];
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      return await fetch(path, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+    } catch (e) {
+      lastErr = e;
+      if (attempt < retries - 1) {
+        await new Promise((r) => setTimeout(r, backoffMs[attempt] ?? 20000));
+      }
+    }
+  }
+  throw lastErr;
+}
+
 // 共有カスタム魚を全件取得
 export async function fetchSharedCustomFish(): Promise<CustomFishDef[]> {
-  const res = await fetch("/api/custom-fish", { method: "GET" });
+  const res = await fetchWithRetry("/api/custom-fish", { method: "GET" });
   if (!res.ok) throw new Error(`fetch shared fish failed: ${await readError(res)}`);
   const body = await res.json();
   return Array.isArray(body?.fish) ? (body.fish as CustomFishDef[]) : [];
@@ -23,7 +44,7 @@ export async function fetchSharedCustomFish(): Promise<CustomFishDef[]> {
 
 // 共有カスタム魚を登録（全ユーザーへ反映）
 export async function postSharedCustomFish(def: CustomFishDef): Promise<void> {
-  const res = await fetch("/api/custom-fish", {
+  const res = await fetchWithRetry("/api/custom-fish", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(def),
@@ -33,7 +54,7 @@ export async function postSharedCustomFish(def: CustomFishDef): Promise<void> {
 
 // 共有カスタム魚を削除（全ユーザーから消える）
 export async function deleteSharedCustomFish(fishType: string): Promise<void> {
-  const res = await fetch("/api/custom-fish", {
+  const res = await fetchWithRetry("/api/custom-fish", {
     method: "DELETE",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ fishType }),
