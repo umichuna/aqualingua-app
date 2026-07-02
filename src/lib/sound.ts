@@ -17,7 +17,16 @@ const BGM_BY_SCENE: Record<NonNullable<BgmScene>, string> = {
   study: "/音源素材/海底からの手紙ロング.mp3",
   shop: "/音源素材/海中世界.mp3",
 };
+
+// 水槽タイプ別BGMファイルパス
+export type TankBgmType = "saltwater" | "freshwater";
+const BGM_BY_TANK_TYPE: Record<TankBgmType, string> = {
+  saltwater: "", // 空文字 = シーン別BGMを使う（上書きしない）
+  freshwater: "/音源素材/freshwater-bgm.mp3",
+};
+
 let currentScene: BgmScene = null;
+let currentTankType: TankBgmType | null = null;
 
 // 効果音ファイル（public/音源素材/）
 const SFX_FILES = {
@@ -137,6 +146,8 @@ export function stopBgm(): void {
 export async function playBgmForScene(scene: BgmScene): Promise<void> {
   if (typeof window === "undefined") return;
   if (scene === currentScene && bgmAudio) return; // 同じシーンで既に再生中なら何もしない
+  currentScene = scene;
+  currentTankType = null; // シーン別BGMに切り替わるので、タンク別BGMはクリア
   // 現在のBGMを停止
   try {
     if (bgmAudio) {
@@ -148,7 +159,6 @@ export async function playBgmForScene(scene: BgmScene): Promise<void> {
     // 無視
   }
   if (scene === null || !isBgmEnabled()) {
-    currentScene = scene;
     return;
   }
   const src = BGM_BY_SCENE[scene];
@@ -156,7 +166,34 @@ export async function playBgmForScene(scene: BgmScene): Promise<void> {
   audio.loop = true;
   audio.volume = getBgmVolume();
   bgmAudio = audio;
-  currentScene = scene;
+  void audio.play().catch(() => {
+    // 自動再生制限などは無視
+  });
+}
+
+// 水槽タイプ別BGM切り替え（水槽表示中のBGM管理）
+export async function playBgmForTankType(tankType: TankBgmType): Promise<void> {
+  if (typeof window === "undefined" || !isBgmEnabled()) return;
+  // シーン別BGMが有効な場合はそちらを優先（学習中は水槽BGM切り替えない）
+  if (currentScene !== null) return;
+  if (tankType === currentTankType && bgmAudio) return; // 同じタンクタイプで既に再生中なら何もしない
+  currentTankType = tankType;
+  // 現在のBGMを停止
+  try {
+    if (bgmAudio) {
+      bgmAudio.pause();
+      bgmAudio.currentTime = 0;
+      bgmAudio = null;
+    }
+  } catch {
+    // 無視
+  }
+  const src = BGM_BY_TANK_TYPE[tankType];
+  if (!src) return; // 海水は空文字なので何もしない
+  const audio = new Audio(src);
+  audio.loop = true;
+  audio.volume = getBgmVolume();
+  bgmAudio = audio;
   void audio.play().catch(() => {
     // 自動再生制限などは無視
   });

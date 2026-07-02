@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { RARITY_INFO, RARITY_STARS, type FishDisplaySize } from "@/data/fishMaster";
 import { BOX_CAPACITY_INITIAL, MAX_AFFECTION } from "@/lib/gameLogic";
-import { sfx } from "@/lib/sound";
+import { sfx, playBgmForTankType } from "@/lib/sound";
 import type { Fish } from "@/lib/types";
 import { useGame, type BaitKind } from "./GameProvider";
 import PixelFish from "./PixelFish";
@@ -164,6 +164,14 @@ export default function AquariumView() {
   };
 
   const [showSubPanel, setShowSubPanel] = useState(false);
+
+  // 水槽タイプ変更時にBGMを切り替える（淡水=淡水BGM、海水=デフォルトBGMを無視）
+  useEffect(() => {
+    const currentTank = tanks.find(t => t.id === currentTankId);
+    if (currentTank) {
+      void playBgmForTankType(currentTank.type);
+    }
+  }, [currentTankId, tanks]);
 
   const sel = fishList.find((f) => f.fishId === selected) ?? null;
   const boxFish = user.boxFish ?? [];
