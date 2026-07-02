@@ -5,7 +5,7 @@
 // - 底生魚（layer:"bottom"）は下層に固定表示
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getFishMaster, RARITY_INFO, RARITY_STARS, type FishDisplaySize } from "@/data/fishMaster";
+import { RARITY_INFO, RARITY_STARS, type FishDisplaySize } from "@/data/fishMaster";
 import { BOX_CAPACITY_INITIAL, MAX_AFFECTION } from "@/lib/gameLogic";
 import { sfx } from "@/lib/sound";
 import type { Fish } from "@/lib/types";
@@ -73,7 +73,7 @@ export default function AquariumView() {
 
   // 底生魚は y 65〜80%、その他は 15〜60% の範囲で泳ぐ
   const defaultPos = (f: Fish, i: number): Pos => {
-    const master = getFishMaster(f.type);
+    const master = allFishMaster.find((m) => m.type === f.type);
     const isBottom = master?.layer === "bottom";
     const yMin = isBottom ? 65 : 15;
     const yMax = isBottom ? 80 : 60;
@@ -90,7 +90,7 @@ export default function AquariumView() {
       setPositions((prev) => {
         const next = { ...prev };
         displayFish.forEach((f, i) => {
-          const master = getFishMaster(f.type);
+          const master = allFishMaster.find((m) => m.type === f.type);
           const isBottom = master?.layer === "bottom";
           const yMin = isBottom ? 65 : 8;
           const yMax = isBottom ? 82 : 62;
