@@ -145,7 +145,7 @@ interface GameContextValue {
   buyGachaFish: (tier: GachaTier) => FishMaster | null;
   addFishToTank: (master: FishMaster, name: string) => void;
   addFishToBox: (master: FishMaster, name: string) => void;
-  moveBoxFishToTank: (fishId: string) => boolean;
+  moveBoxFishToTank: (fishId: string, targetTankId: string) => boolean;
   releaseBoxFish: (fishId: string) => void;
 
   // ショップ
@@ -230,8 +230,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
     const swCount = user.saltwaterTankCount ?? 1;
     const fwCount = user.freshwaterTankCount ?? (user.hasFreshwaterTank ? 1 : 0);
     const result: Tank[] = [];
-    for (let i = 1; i <= swCount; i++) result.push({ id: `sw-${i}`, type: "saltwater", name: `海水 ${i}` });
-    for (let i = 1; i <= fwCount; i++) result.push({ id: `fw-${i}`, type: "freshwater", name: `淡水 ${i}` });
+    for (let i = 1; i <= swCount; i++) result.push({ id: `sw-${i}`, type: "saltwater", name: `海水 ${i}`, capacity: 50 });
+    for (let i = 1; i <= fwCount; i++) result.push({ id: `fw-${i}`, type: "freshwater", name: `淡水 ${i}`, capacity: 50 });
     return result;
   }, [user.tanks, user.saltwaterTankCount, user.freshwaterTankCount, user.hasFreshwaterTank]);
 
@@ -663,16 +663,20 @@ export function GameProvider({ children }: { children: ReactNode }) {
   );
 
   const moveBoxFishToTank = useCallback(
-    (fishId: string): boolean => {
+    (fishId: string, targetTankId: string): boolean => {
       const u = userRef.current;
-      if (fishRef.current.length >= u.tankCapacity) return false;
       const boxFish = (u.boxFish ?? []).find((f) => f.fishId === fishId);
       if (!boxFish) return false;
+      // 対象タンクの容量をチェック
+      const targetTank = (u.tanks ?? []).find(t => t.id === targetTankId);
+      if (!targetTank) return false;
+      const tankFishCount = fishRef.current.filter(f => (f.tankId ?? "sw-1") === targetTankId).length;
+      if (tankFishCount >= targetTank.capacity) return false;
       const newBoxFish = (u.boxFish ?? []).filter((f) => f.fishId !== fishId);
       persistUser({ ...u, boxFish: newBoxFish });
-      const next = [...fishRef.current, boxFish];
+      const next = [...fishRef.current, { ...boxFish, tankId: targetTankId }];
       setFishList(next);
-      void putFish(boxFish);
+      void putFish({ ...boxFish, tankId: targetTankId });
       pushNotice("🐠", `${boxFish.name} が水槽に移った！`);
       return true;
     },
@@ -1042,8 +1046,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
         const swCount = u.saltwaterTankCount ?? 1;
         const fwCount = u.freshwaterTankCount ?? (u.hasFreshwaterTank ? 1 : 0);
         const r: Tank[] = [];
-        for (let i = 1; i <= swCount; i++) r.push({ id: `sw-${i}`, type: "saltwater", name: `海水 ${i}` });
-        for (let i = 1; i <= fwCount; i++) r.push({ id: `fw-${i}`, type: "freshwater", name: `淡水 ${i}` });
+        for (let i = 1; i <= swCount; i++) r.push({ id: `sw-${i}`, type: "saltwater", name: `海水 ${i}`, capacity: 50 });
+        for (let i = 1; i <= fwCount; i++) r.push({ id: `fw-${i}`, type: "freshwater", name: `淡水 ${i}`, capacity: 50 });
         return r;
       })();
       const sameTanks = currentTanks.filter(t => t.type === type);
@@ -1053,7 +1057,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       const idx = sameTanks.length + 1;
       const prefix = type === "saltwater" ? "sw" : "fw";
       const tankName = type === "saltwater" ? `海水 ${idx}` : `淡水 ${idx}`;
-      const newTank: Tank = { id: `${prefix}-${idx}`, type, name: tankName };
+      const newTank: Tank = { id: `${prefix}-${idx}`, type, name: tankName, capacity: 50 };
       persistUser({ ...u, gold: u.gold - price, tanks: [...currentTanks, newTank] });
       recordLedger(-price, `${tankName}水槽追加`, u.gold - price);
     },

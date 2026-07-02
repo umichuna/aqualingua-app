@@ -404,8 +404,8 @@ export default function AquariumView() {
                     <div className="text-[10px] text-foam text-center whitespace-nowrap">{f.name}</div>
                     <button
                       onClick={() => {
-                        if (!game.moveBoxFishToTank(f.fishId)) {
-                          game.pushNotice("💦", "水槽がいっぱい！まず水槽に空きを作ろう");
+                        if (!game.moveBoxFishToTank(f.fishId, currentTankId)) {
+                          game.pushNotice("💦", "この水槽がいっぱい！別の水槽を選ぶか空きを作ろう");
                         }
                       }}
                       className="text-[10px] px-2 py-0.5 rounded-full bg-glow text-deep font-bold whitespace-nowrap"

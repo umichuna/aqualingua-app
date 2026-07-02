@@ -45,6 +45,7 @@ export interface Tank {
   id: string;      // "sw-1", "fw-1" など
   type: WaterType;
   name: string;    // "海水 1", "淡水 1" など
+  capacity: number; // この水槽の最大魚数
 }
 
 // 相棒バフの種類
