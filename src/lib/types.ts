@@ -149,6 +149,7 @@ export interface UserStatus {
   saltwaterTankCount?: number; // 後方互換（廃止予定）
   freshwaterTankCount?: number; // 後方互換（廃止予定）
   tanks?: Tank[]; // 所持水槽リスト（新方式）
+  backgroundImageBase64?: string; // 水槽背景画像（base64）
 }
 
 export type StudyMode = "self" | "choice" | "listen" | "blank";

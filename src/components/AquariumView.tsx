@@ -57,6 +57,19 @@ export default function AquariumView() {
   const [renameTarget, setRenameTarget] = useState<Fish | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [releaseConfirm, setReleaseConfirm] = useState<string | null>(null);
+  const [editingTankId, setEditingTankId] = useState<string | null>(null);
+  const [editingTankName, setEditingTankName] = useState("");
+
+  const handleBackgroundImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = reader.result as string;
+      game.setBackgroundImage(base64);
+    };
+    reader.readAsDataURL(file);
+  };
 
   // 底生魚は y 65〜80%、その他は 15〜60% の範囲で泳ぐ
   const defaultPos = (f: Fish, i: number): Pos => {
@@ -164,7 +177,9 @@ export default function AquariumView() {
         onClick={dropBait}
         className="relative flex-1 overflow-hidden cursor-pointer select-none"
         style={{
-          backgroundImage: "url('/aquarium-bg.png')",
+          backgroundImage: user.backgroundImageBase64
+            ? `url('${user.backgroundImageBase64}')`
+            : "url('/aquarium-bg.png')",
           backgroundSize: "cover",
           backgroundPosition: "center bottom",
           minHeight: "320px",
@@ -273,15 +288,50 @@ export default function AquariumView() {
         {tanks.length > 1 && (
           <div className="absolute top-10 left-1/2 -translate-x-1/2 flex gap-1.5 overflow-x-auto max-w-[80%]">
             {tanks.map((tank) => (
-              <button
-                key={tank.id}
-                onClick={(e) => { e.stopPropagation(); setCurrentTankId(tank.id); }}
-                className={`px-3 py-1.5 rounded-full font-bold text-xs transition-all whitespace-nowrap ${
-                  currentTankId === tank.id ? "bg-glow text-deep" : "bg-black/40 text-dim"
-                }`}
-              >
-                {tank.type === "saltwater" ? "🌊" : "🌿"} {tank.name}
-              </button>
+              <div key={tank.id} className="flex items-center gap-0.5">
+                {editingTankId === tank.id ? (
+                  <input
+                    type="text"
+                    value={editingTankName}
+                    onChange={(e) => setEditingTankName(e.target.value)}
+                    onBlur={() => {
+                      if (editingTankName.trim()) game.renameTank(tank.id, editingTankName.trim());
+                      setEditingTankId(null);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        if (editingTankName.trim()) game.renameTank(tank.id, editingTankName.trim());
+                        setEditingTankId(null);
+                      } else if (e.key === "Escape") {
+                        setEditingTankId(null);
+                      }
+                    }}
+                    autoFocus
+                    className="px-2 py-1 rounded-full bg-sand text-deep font-bold text-xs outline-none w-20"
+                  />
+                ) : (
+                  <>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setCurrentTankId(tank.id); }}
+                      className={`px-3 py-1.5 rounded-full font-bold text-xs transition-all whitespace-nowrap ${
+                        currentTankId === tank.id ? "bg-glow text-deep" : "bg-black/40 text-dim"
+                      }`}
+                    >
+                      {tank.type === "saltwater" ? "🌊" : "🌿"} {tank.name}
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingTankId(tank.id);
+                        setEditingTankName(tank.name);
+                      }}
+                      className="px-1.5 py-1 text-xs text-dim hover:text-foam transition-colors"
+                    >
+                      ✏️
+                    </button>
+                  </>
+                )}
+              </div>
             ))}
           </div>
         )}
@@ -298,6 +348,17 @@ export default function AquariumView() {
         >
           {showSubPanel ? "✕" : <span>📦 {boxFish.length}/{boxCapacity}</span>}
         </button>
+
+        {/* 背景画像設定ボタン */}
+        <label className="absolute bottom-2 right-2 cursor-pointer flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-full bg-black/60 text-foam font-bold hover:bg-black/80 transition-colors">
+          🖼️ 背景
+          <input
+            type="file"
+            accept="image/*"
+            onChange={handleBackgroundImageChange}
+            className="hidden"
+          />
+        </label>
       </div>
 
       {/* 魚詳細パネル */}

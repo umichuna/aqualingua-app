@@ -137,6 +137,8 @@ interface GameContextValue {
   setCurrentTankId: (id: string) => void;
   moveFishToTank: (fishId: string, targetTankId: string) => void;
   buyTank: (type: WaterType) => void;
+  renameTank: (tankId: string, newName: string) => void;
+  setBackgroundImage: (base64: string) => void;
   feedAllFish: (kind: BaitKind) => boolean;
   useMedicine: (fishId: string) => boolean;
   moveTankFishToBox: (fishId: string) => void;
@@ -1073,6 +1075,24 @@ export function GameProvider({ children }: { children: ReactNode }) {
     [persistUser, recordLedger]
   );
 
+  const renameTank = useCallback(
+    (tankId: string, newName: string) => {
+      const u = userRef.current;
+      const currentTanks = u.tanks ?? [];
+      const updated = currentTanks.map(t => t.id === tankId ? { ...t, name: newName } : t);
+      persistUser({ ...u, tanks: updated });
+    },
+    [persistUser]
+  );
+
+  const setBackgroundImage = useCallback(
+    (base64: string) => {
+      const u = userRef.current;
+      persistUser({ ...u, backgroundImageBase64: base64 });
+    },
+    [persistUser]
+  );
+
   const moveFishToTank = useCallback(
     (fishId: string, targetTankId: string) => {
       const fish = fishRef.current.find(f => f.fishId === fishId);
@@ -1277,6 +1297,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
         setCurrentTankId,
         moveFishToTank,
         buyTank,
+        renameTank,
+        setBackgroundImage,
         blankQuestions,
         blankQuestionStats,
         addBlankQuestion,
