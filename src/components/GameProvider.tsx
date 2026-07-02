@@ -667,9 +667,18 @@ export function GameProvider({ children }: { children: ReactNode }) {
       const u = userRef.current;
       const boxFish = (u.boxFish ?? []).find((f) => f.fishId === fishId);
       if (!boxFish) return false;
-      // 対象タンクの容量をチェック
+      // 対象タンク情報を取得
       const targetTank = (u.tanks ?? []).find(t => t.id === targetTankId);
       if (!targetTank) return false;
+      // 魚の水の種類を取得（海水/淡水）
+      const fishMaster = allFishMasterRef.current.find(m => m.type === boxFish.type);
+      const fishWaterType = fishMaster?.waterType ?? "saltwater";
+      // 魚の水の種類とタンクの種類が一致しているか確認
+      if (fishWaterType !== targetTank.type) {
+        pushNotice("💧", `${fishWaterType === "saltwater" ? "海水" : "淡水"}魚は${targetTank.type === "saltwater" ? "海水" : "淡水"}水槽に入りません`);
+        return false;
+      }
+      // タンクの容量をチェック
       const tankFishCount = fishRef.current.filter(f => (f.tankId ?? "sw-1") === targetTankId).length;
       if (tankFishCount >= targetTank.capacity) return false;
       const newBoxFish = (u.boxFish ?? []).filter((f) => f.fishId !== fishId);
