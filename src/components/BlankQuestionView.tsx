@@ -43,11 +43,13 @@ export function QuizPlay({
   stats,
   onRecord,
   onFinish,
+  onQuit,
 }: {
   questions: BlankQuestion[];
   stats: Record<string, { incorrectCount: number }>;
   onRecord: (id: string, correct: boolean) => void;
   onFinish: (score: number, total: number) => void;
+  onQuit?: (completedCount: number, score: number) => void;
 }) {
   const [idx, setIdx] = useState(0);
   const [picked, setPicked] = useState<string | null>(null);
@@ -75,6 +77,7 @@ export function QuizPlay({
   return (
     <div className="p-4 flex flex-col gap-4 h-full">
       <div className="flex justify-between text-xs text-dim">
+        <button onClick={() => onQuit?.(idx, score)} className="underline">← やめる</button>
         <span>{idx + 1} / {questions.length}</span>
         {stats[q.id]?.incorrectCount ? (
           <span className="text-coral">⚠️ 苦手 {stats[q.id].incorrectCount}回</span>

@@ -506,25 +506,29 @@ export default function StudyView({ onPhaseChange }: { onPhaseChange?: (inPlay: 
   // ============ 穴抜けクイズ プレイ ============
   if (mode === "blank" && phase === "play") {
     return (
-      <QuizPlay
-        questions={blankQuizQs}
-        stats={blankQuestionStats}
-        onRecord={recordBlankAnswer}
-        onFinish={(finalScore, total) => {
-          const res = game.completeStudy("blank", total, finalScore);
-          setEarnedGold(res.gold);
-          setScore(finalScore);
-          setOriginalCount(total);
-          const extras: string[] = [];
-          if (res.leveledUp) extras.push(`🎖️ 職業レベルが Lv.${user.jobLevel + 1} に上がった！`);
-          for (const t of res.newTitles) extras.push(`👑 称号「${t}」を獲得！`);
-          setResultExtra(extras);
-          setPhase("done");
-          sfx.complete();
-          if (res.leveledUp || res.newTitles.length > 0) sfx.levelUp();
-          void playBgmForScene("home");
-        }}
-      />
+      <>
+        <QuizPlay
+          questions={blankQuizQs}
+          stats={blankQuestionStats}
+          onRecord={recordBlankAnswer}
+          onQuit={(n, s) => requestQuit(n, s)}
+          onFinish={(finalScore, total) => {
+            const res = game.completeStudy("blank", total, finalScore);
+            setEarnedGold(res.gold);
+            setScore(finalScore);
+            setOriginalCount(total);
+            const extras: string[] = [];
+            if (res.leveledUp) extras.push(`🎖️ 職業レベルが Lv.${user.jobLevel + 1} に上がった！`);
+            for (const t of res.newTitles) extras.push(`👑 称号「${t}」を獲得！`);
+            setResultExtra(extras);
+            setPhase("done");
+            sfx.complete();
+            if (res.leveledUp || res.newTitles.length > 0) sfx.levelUp();
+            void playBgmForScene("home");
+          }}
+        />
+        <QuitConfirmOverlay quitConfirm={quitConfirm} onConfirm={() => finishQuiz(quitConfirm!.mode as StudyMode, quitConfirm!.count, quitConfirm!.score)} onCancel={() => setQuitConfirm(null)} />
+      </>
     );
   }
 
@@ -1274,18 +1278,21 @@ function ListenPlay({
     };
   }, []);
 
-  // 無音ループ再生でオーディオセッションを保持し、speechSynthesis が
-  // 他アプリの音声フォーカスを奪わないようにする（Android Chrome で効果あり）
+  // AudioContext で無音ループを維持してオーディオセッションをキープ
+  // 空WAVより確実にOSがメディアとして認識する（Android Chrome で効果あり）
   useEffect(() => {
-    const silent = new Audio(
-      "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA="
-    );
-    silent.loop = true;
-    silent.volume = 0;
-    void silent.play().catch(() => {});
+    if (typeof window === "undefined" || !window.AudioContext) return;
+    const ctx = new window.AudioContext();
+    void ctx.resume();
+    const buf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.loop = true;
+    src.connect(ctx.destination);
+    src.start(0);
     return () => {
-      silent.pause();
-      silent.src = "";
+      src.stop();
+      void ctx.close();
     };
   }, []);
 
