@@ -60,15 +60,34 @@ export default function AquariumView() {
   const [editingTankId, setEditingTankId] = useState<string | null>(null);
   const [editingTankName, setEditingTankName] = useState("");
 
+  // 水槽背景画像は横長（1200px幅上限・JPEG圧縮）にリサイズしてから保存する
+  const resizeBackgroundToBase64 = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const MAX_WIDTH = 1200;
+          const scale = Math.min(MAX_WIDTH / img.width, 1);
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.round(img.width * scale);
+          canvas.height = Math.round(img.height * scale);
+          canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+          resolve(canvas.toDataURL("image/jpeg", 0.8));
+        };
+        img.onerror = reject;
+        img.src = e.target!.result as string;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
   const handleBackgroundImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const base64 = reader.result as string;
+    void resizeBackgroundToBase64(file).then((base64) => {
       game.setBackgroundImage(currentTankId, base64);
-    };
-    reader.readAsDataURL(file);
+    });
   };
 
   // 底生魚は y 65〜80%、その他は 15〜60% の範囲で泳ぐ
@@ -164,6 +183,7 @@ export default function AquariumView() {
   };
 
   const [showSubPanel, setShowSubPanel] = useState(false);
+  const [showTankPicker, setShowTankPicker] = useState(false);
 
   // 水槽タイプ変更時にBGMを切り替える（淡水=淡水BGM、海水=デフォルトBGMを無視）
   useEffect(() => {
@@ -295,56 +315,15 @@ export default function AquariumView() {
           </button>
         </div>
 
-        {/* 水槽タブ（2槽以上持っている場合に表示） */}
+        {/* 水槽切り替えボタン（2槽以上持っている場合に表示） */}
         {tanks.length > 1 && (
-          <div className="absolute top-10 left-1/2 -translate-x-1/2 flex gap-1.5 overflow-x-auto max-w-[80%]">
-            {tanks.map((tank) => (
-              <div key={tank.id} className="flex items-center gap-0.5">
-                {editingTankId === tank.id ? (
-                  <input
-                    type="text"
-                    value={editingTankName}
-                    onChange={(e) => setEditingTankName(e.target.value)}
-                    onBlur={() => {
-                      if (editingTankName.trim()) game.renameTank(tank.id, editingTankName.trim());
-                      setEditingTankId(null);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        if (editingTankName.trim()) game.renameTank(tank.id, editingTankName.trim());
-                        setEditingTankId(null);
-                      } else if (e.key === "Escape") {
-                        setEditingTankId(null);
-                      }
-                    }}
-                    autoFocus
-                    className="px-2 py-1 rounded-full bg-sand text-deep font-bold text-xs outline-none w-20"
-                  />
-                ) : (
-                  <>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setCurrentTankId(tank.id); }}
-                      className={`px-3 py-1.5 rounded-full font-bold text-xs transition-all whitespace-nowrap ${
-                        currentTankId === tank.id ? "bg-glow text-deep" : "bg-black/40 text-dim"
-                      }`}
-                    >
-                      {tank.type === "saltwater" ? "🌊" : "🌿"} {tank.name}
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setEditingTankId(tank.id);
-                        setEditingTankName(tank.name);
-                      }}
-                      className="px-1.5 py-1 text-xs text-dim hover:text-foam transition-colors"
-                    >
-                      ✏️
-                    </button>
-                  </>
-                )}
-              </div>
-            ))}
-          </div>
+          <button
+            onClick={(e) => { e.stopPropagation(); setShowTankPicker(true); }}
+            className="absolute top-10 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 text-foam font-bold text-xs whitespace-nowrap"
+          >
+            🔄 {tanks.find((t) => t.id === currentTankId)?.type === "saltwater" ? "🌊" : "🌿"}{" "}
+            {tanks.find((t) => t.id === currentTankId)?.name ?? "水槽を切り替え"}
+          </button>
         )}
 
         {/* 飼育数 */}
@@ -371,6 +350,75 @@ export default function AquariumView() {
           />
         </label>
       </div>
+
+      {/* 水槽切り替えモーダル */}
+      {showTankPicker && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6"
+          onClick={() => setShowTankPicker(false)}
+        >
+          <div
+            className="w-full max-w-xs bg-sea rounded-2xl p-4 space-y-2 font-pixel max-h-[70vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-foam font-bold text-sm text-center mb-2">水槽を選ぶ</p>
+            {tanks.map((tank) => (
+              <div key={tank.id} className="flex items-center gap-1.5">
+                {editingTankId === tank.id ? (
+                  <input
+                    type="text"
+                    value={editingTankName}
+                    onChange={(e) => setEditingTankName(e.target.value)}
+                    onBlur={() => {
+                      if (editingTankName.trim()) game.renameTank(tank.id, editingTankName.trim());
+                      setEditingTankId(null);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        if (editingTankName.trim()) game.renameTank(tank.id, editingTankName.trim());
+                        setEditingTankId(null);
+                      } else if (e.key === "Escape") {
+                        setEditingTankId(null);
+                      }
+                    }}
+                    autoFocus
+                    className="flex-1 px-3 py-2 rounded-xl bg-mid text-foam font-bold text-sm outline-none"
+                  />
+                ) : (
+                  <>
+                    <button
+                      onClick={() => {
+                        setCurrentTankId(tank.id);
+                        setShowTankPicker(false);
+                      }}
+                      className={`flex-1 text-left px-3 py-2 rounded-xl font-bold text-sm transition-all ${
+                        currentTankId === tank.id ? "bg-glow text-deep" : "bg-mid text-foam"
+                      }`}
+                    >
+                      {tank.type === "saltwater" ? "🌊" : "🌿"} {tank.name}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEditingTankId(tank.id);
+                        setEditingTankName(tank.name);
+                      }}
+                      className="px-2 py-2 text-dim hover:text-foam transition-colors"
+                    >
+                      ✏️
+                    </button>
+                  </>
+                )}
+              </div>
+            ))}
+            <button
+              onClick={() => setShowTankPicker(false)}
+              className="w-full mt-2 py-2 rounded-xl bg-mid text-dim font-bold text-xs"
+            >
+              閉じる
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 魚詳細パネル */}
       {sel && (

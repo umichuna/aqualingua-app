@@ -174,8 +174,8 @@ export async function playBgmForScene(scene: BgmScene): Promise<void> {
 // 水槽タイプ別BGM切り替え（水槽表示中のBGM管理）
 export async function playBgmForTankType(tankType: TankBgmType): Promise<void> {
   if (typeof window === "undefined" || !isBgmEnabled()) return;
-  // シーン別BGMが有効な場合はそちらを優先（学習中は水槽BGM切り替えない）
-  if (currentScene !== null) return;
+  // 学習中（study/shop）は水槽BGM切り替えない、ホーム画面では水槽BGMを許可
+  if (currentScene !== null && currentScene !== "home" && currentScene !== "study") return;
   if (tankType === currentTankType && bgmAudio) return; // 同じタンクタイプで既に再生中なら何もしない
   currentTankType = tankType;
   // 現在のBGMを停止
@@ -189,7 +189,18 @@ export async function playBgmForTankType(tankType: TankBgmType): Promise<void> {
     // 無視
   }
   const src = BGM_BY_TANK_TYPE[tankType];
-  if (!src) return; // 海水は空文字なので何もしない
+  if (!src) {
+    // 海水は専用BGMなし → 現在のシーンBGMを再生し直す
+    if (currentScene) {
+      const sceneSrc = BGM_BY_SCENE[currentScene];
+      const audio = new Audio(sceneSrc);
+      audio.loop = true;
+      audio.volume = getBgmVolume();
+      bgmAudio = audio;
+      void audio.play().catch(() => {});
+    }
+    return;
+  }
   const audio = new Audio(src);
   audio.loop = true;
   audio.volume = getBgmVolume();

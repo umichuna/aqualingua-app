@@ -136,7 +136,7 @@ interface GameContextValue {
   currentTankId: string;
   setCurrentTankId: (id: string) => void;
   moveFishToTank: (fishId: string, targetTankId: string) => void;
-  buyTank: (type: WaterType) => void;
+  buyTank: (type: WaterType) => boolean;
   renameTank: (tankId: string, newName: string) => void;
   setBackgroundImage: (tankId: string, base64: string) => void;
   feedAllFish: (kind: BaitKind) => boolean;
@@ -1051,28 +1051,43 @@ export function GameProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const buyTank = useCallback(
-    (type: WaterType) => {
-      const u = userRef.current;
-      const currentTanks = u.tanks ?? (() => {
-        const swCount = u.saltwaterTankCount ?? 1;
-        const fwCount = u.freshwaterTankCount ?? (u.hasFreshwaterTank ? 1 : 0);
-        const r: Tank[] = [];
-        for (let i = 1; i <= swCount; i++) r.push({ id: `sw-${i}`, type: "saltwater", name: `海水 ${i}`, capacity: 50 });
-        for (let i = 1; i <= fwCount; i++) r.push({ id: `fw-${i}`, type: "freshwater", name: `淡水 ${i}`, capacity: 50 });
-        return r;
-      })();
-      const sameTanks = currentTanks.filter(t => t.type === type);
-      if (sameTanks.length >= 3) return; // 上限 3 槽
-      const price = SHOP_PRICES.freshwaterTank; // 海水・淡水共通 3000G
-      if (u.gold < price) return;
-      const idx = sameTanks.length + 1;
-      const prefix = type === "saltwater" ? "sw" : "fw";
-      const tankName = type === "saltwater" ? `海水 ${idx}` : `淡水 ${idx}`;
-      const newTank: Tank = { id: `${prefix}-${idx}`, type, name: tankName, capacity: 50 };
-      persistUser({ ...u, gold: u.gold - price, tanks: [...currentTanks, newTank] });
-      recordLedger(-price, `${tankName}水槽追加`, u.gold - price);
+    (type: WaterType): boolean => {
+      // setUser の関数型更新を使い、userRef 経由の古いスナップショット参照によるレース
+      // （連打時に古い水槽数・所持金で判定して静かに失敗する）を避ける。
+      let success = false;
+      let stampedResult: UserStatus | null = null;
+      setUser((u) => {
+        const currentTanks = u.tanks ?? (() => {
+          const swCount = u.saltwaterTankCount ?? 1;
+          const fwCount = u.freshwaterTankCount ?? (u.hasFreshwaterTank ? 1 : 0);
+          const r: Tank[] = [];
+          for (let i = 1; i <= swCount; i++) r.push({ id: `sw-${i}`, type: "saltwater", name: `海水 ${i}`, capacity: 50 });
+          for (let i = 1; i <= fwCount; i++) r.push({ id: `fw-${i}`, type: "freshwater", name: `淡水 ${i}`, capacity: 50 });
+          return r;
+        })();
+        const sameTanks = currentTanks.filter(t => t.type === type);
+        if (sameTanks.length >= 3) return u; // 上限 3 槽
+        const price = SHOP_PRICES.freshwaterTank; // 海水・淡水共通 3000G
+        if (u.gold < price) return u;
+        const idx = sameTanks.length + 1;
+        const prefix = type === "saltwater" ? "sw" : "fw";
+        const tankName = type === "saltwater" ? `海水 ${idx}` : `淡水 ${idx}`;
+        const newTank: Tank = { id: `${prefix}-${idx}`, type, name: tankName, capacity: 50 };
+        const stamped = { ...u, gold: u.gold - price, tanks: [...currentTanks, newTank], lastUpdated: Date.now() };
+        success = true;
+        stampedResult = stamped;
+        return stamped;
+      });
+      if (success && stampedResult) {
+        const finalUser: UserStatus = stampedResult;
+        void putUserStatus(finalUser);
+        const addedTank = finalUser.tanks![finalUser.tanks!.length - 1];
+        recordLedger(-SHOP_PRICES.freshwaterTank, `${addedTank.name}水槽追加`, finalUser.gold);
+        schedulePush();
+      }
+      return success;
     },
-    [persistUser, recordLedger]
+    [recordLedger, schedulePush]
   );
 
   const renameTank = useCallback(

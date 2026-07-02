@@ -115,7 +115,11 @@ export default function ShopView() {
       flash(false, "ゴールドが足りません");
       return;
     }
-    game.buyTank(type);
+    const ok = game.buyTank(type);
+    if (!ok) {
+      flash(false, "水槽を追加できませんでした（もう一度お試しください）");
+      return;
+    }
     sfx.register();
     flash(true, `${type === "saltwater" ? "🌊 海水" : "🌿 淡水"}水槽を追加しました！`);
   };
