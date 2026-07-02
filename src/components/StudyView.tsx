@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MODE_BASE_GOLD, sessionGold } from "@/lib/gameLogic";
 import { playBgmForScene, sfx } from "@/lib/sound";
 import { cancelSpeech, releaseWakeLock, requestWakeLock, speak } from "@/lib/speech";
+import { fetchTtsAudio, playTtsAudio } from "@/lib/tts";
 import { type BlankQuestion, type StudyMode, type Word, type WordGenre, type WordLevel, type WordType } from "@/lib/types";
 import { useGame } from "./GameProvider";
 import BlankQuestionView, { QuizPlay } from "./BlankQuestionView";
@@ -1364,17 +1365,26 @@ function ListenPlay({
         const pool = currentWordsRef.current;
         const w = pool[indexRef.current];
         const meaning = w.meanings.length > 0 ? w.meanings.join("、") : null;
+        const playTts = async (text: string, lang: "en" | "ja") => {
+          try {
+            const blob = await fetchTtsAudio(text, lang, rateRef.current);
+            await playTtsAudio(blob);
+          } catch (err) {
+            console.error(`TTS failed for "${text}"`, err);
+            // フォールバック: speechSynthesis を使う
+            await speak(text, lang === "en" ? "en-US" : "ja-JP", rateRef.current);
+          }
+        };
+
         const speakPair = async () => {
-          // 各発話前に resume して停止を防ぐ
-          if (typeof window !== "undefined") window.speechSynthesis?.resume();
           if (direction === "ja2en") {
-            if (meaning) await speak(meaning, "ja-JP", rateRef.current);
+            if (meaning) await playTts(meaning, "ja");
             if (stopped || !playingRef.current || skipRef.current) return;
-            await speak(w.spelling, "en-US", rateRef.current);
+            await playTts(w.spelling, "en");
           } else {
-            await speak(w.spelling, "en-US", rateRef.current);
+            await playTts(w.spelling, "en");
             if (stopped || !playingRef.current || skipRef.current) return;
-            if (meaning) await speak(meaning, "ja-JP", rateRef.current);
+            if (meaning) await playTts(meaning, "ja");
           }
         };
         // 1回目
