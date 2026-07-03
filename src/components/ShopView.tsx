@@ -42,7 +42,9 @@ function rarityRateText(weights: Record<string, number>): string {
 
 export default function ShopView() {
   const game = useGame();
-  const { user, fishList, allFishMaster } = game;
+  const { user, fishList, allFishMaster, currentTankId } = game;
+  // ガチャ・水槽満杯判定は「今見ている水槽」の匹数だけを対象にする（口座全体ではない）
+  const currentTankFishCount = fishList.filter((f) => (f.tankId ?? "sw-1") === currentTankId).length;
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [gacha, setGacha] = useState<{
     phase: GachaPhase;
@@ -78,7 +80,7 @@ export default function ShopView() {
     if (!gacha) return;
     const name = nameInput.trim() || gacha.fish.type;
     const boxCap = user.boxCapacity ?? BOX_CAPACITY_INITIAL;
-    if (fishList.length >= user.tankCapacity) {
+    if (currentTankFishCount >= user.tankCapacity) {
       if ((user.boxFish ?? []).length >= boxCap) {
         flash(false, "水槽もボックスも満杯！ボックス拡張キットを買おう");
         return;
@@ -151,7 +153,7 @@ export default function ShopView() {
 
       {/* 3種ガチャ（要求 #7） */}
       <div className="space-y-2">
-        <div className="text-xs font-bold text-glow">🎰 おさかなガチャ（水槽 {fishList.length}/{user.tankCapacity}）</div>
+        <div className="text-xs font-bold text-glow">🎰 おさかなガチャ（水槽 {currentTankFishCount}/{user.tankCapacity}）</div>
         {TIER_KEYS.map((tier) => {
           const info = GACHA_TIERS[tier];
           const afford = user.gold >= info.price;
@@ -310,7 +312,7 @@ export default function ShopView() {
                     onClick={() => setGacha((g) => (g ? { ...g, phase: "naming" } : g))}
                     className="flex-1 py-2.5 font-bold bg-sand text-deep active:scale-95 transition-transform"
                   >
-                    {fishList.length >= user.tankCapacity ? "📦 ボックスへ" : "なかまにする！"}
+                    {currentTankFishCount >= user.tankCapacity ? "📦 ボックスへ" : "なかまにする！"}
                   </button>
                 </div>
               </div>

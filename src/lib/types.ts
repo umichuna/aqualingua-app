@@ -45,7 +45,8 @@ export interface Tank {
   id: string;      // "sw-1", "fw-1" など
   type: WaterType;
   name: string;    // "海水 1", "淡水 1" など
-  capacity: number; // この水槽の最大魚数
+  /** @deprecated 未使用。上限は口座共通の UserStatus.tankCapacity を各水槽で参照する */
+  capacity?: number;
   backgroundImageBase64?: string; // この水槽の背景画像（base64）
 }
 
@@ -150,7 +151,6 @@ export interface UserStatus {
   saltwaterTankCount?: number; // 後方互換（廃止予定）
   freshwaterTankCount?: number; // 後方互換（廃止予定）
   tanks?: Tank[]; // 所持水槽リスト（新方式）
-  backgroundImageBase64?: string; // 水槽背景画像（base64）
 }
 
 export type StudyMode = "self" | "choice" | "listen" | "blank";

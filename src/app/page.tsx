@@ -100,7 +100,7 @@ function HomeView({
 
 function AppShell() {
   const game = useGame();
-  const { ready, user, notices } = game;
+  const { ready, fishDataReady, user, notices } = game;
 
   const [screen, setScreen] = useState<"start" | "app">("start");
   const [tab, setTab] = useState<TabId>("home");
@@ -154,7 +154,7 @@ function AppShell() {
     game.pushNotice("🐠", "ツノちゃんとサンプル単語10語をプレゼント！");
   };
 
-  if (!ready) {
+  if (!ready || !fishDataReady) {
     return (
       <div className="w-full h-dvh flex items-center justify-center bg-deep text-dim text-sm font-pixel">
         🫧 よみこみ中…

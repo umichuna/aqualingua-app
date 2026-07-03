@@ -108,6 +108,7 @@ export interface GameNotice {
 
 interface GameContextValue {
   ready: boolean;
+  fishDataReady: boolean;
   user: UserStatus;
   fishList: Fish[];
   words: Word[];
@@ -201,6 +202,25 @@ let noticeSeq = 1;
 export function GameProvider({ children }: { children: ReactNode }) {
   const { data: session } = useSession();
   const [ready, setReady] = useState(false);
+  // 組み込み魚オーバーライド・共有カスタム魚の初回取得が終わるまで水槽描画を待たせるゲート。
+  // これが無いと、ローカルDB読み込み完了(ready)直後にクラウド取得が終わる前の
+  // allFishMaster（編集前の画像・カスタム魚なし）で一瞬だけ魚が描画されてしまう。
+  const [fishDataReady, setFishDataReady] = useState(false);
+  const fishDataReadySourcesRef = useRef({ localOverrides: false, cloudOverrides: false, cloudCustomFish: false });
+  const markFishDataSourceSettled = useCallback((key: "localOverrides" | "cloudOverrides" | "cloudCustomFish") => {
+    fishDataReadySourcesRef.current[key] = true;
+    const s = fishDataReadySourcesRef.current;
+    const noSession = !session?.user?.email;
+    if (s.localOverrides && (noSession || s.cloudOverrides) && (noSession || s.cloudCustomFish)) {
+      setFishDataReady(true);
+    }
+  }, [session?.user?.email]);
+  useEffect(() => {
+    // 回線が遅い/クラウドがコールドスタート中でも読み込み画面が固まらないよう、
+    // 短いタイムアウトで強制的に表示を進める（その後リトライで裏側から正しい画像に切り替わる）
+    const t = setTimeout(() => setFishDataReady(true), 3000);
+    return () => clearTimeout(t);
+  }, []);
   const [user, setUser] = useState<UserStatus>(createInitialUserStatus);
   const [fishList, setFishList] = useState<Fish[]>([]);
   const [words, setWords] = useState<Word[]>([]);
@@ -232,8 +252,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
     const swCount = user.saltwaterTankCount ?? 1;
     const fwCount = user.freshwaterTankCount ?? (user.hasFreshwaterTank ? 1 : 0);
     const result: Tank[] = [];
-    for (let i = 1; i <= swCount; i++) result.push({ id: `sw-${i}`, type: "saltwater", name: `海水 ${i}`, capacity: 50 });
-    for (let i = 1; i <= fwCount; i++) result.push({ id: `fw-${i}`, type: "freshwater", name: `淡水 ${i}`, capacity: 50 });
+    for (let i = 1; i <= swCount; i++) result.push({ id: `sw-${i}`, type: "saltwater", name: `海水 ${i}` });
+    for (let i = 1; i <= fwCount; i++) result.push({ id: `fw-${i}`, type: "freshwater", name: `淡水 ${i}` });
     return result;
   }, [user.tanks, user.saltwaterTankCount, user.freshwaterTankCount, user.hasFreshwaterTank]);
 
@@ -439,6 +459,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       } catch (e) {
         console.error("[CustomFish] load failed", e);
       }
+      if (!cancelled) markFishDataSourceSettled("cloudCustomFish");
     })();
     return () => {
       cancelled = true;
@@ -535,7 +556,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
       });
       const baseGain = kind === "basic" ? BAIT_EFFECT.basic : BAIT_EFFECT.premium;
       const affection_boost = 0;
+      const targetTankId = currentTankIdRef.current;
       const next = fishRef.current.map((f) => {
+        if ((f.tankId ?? "sw-1") !== targetTankId) return f; // 今見ている水槽の魚だけに餌を反映
         const level = Math.min(MAX_FISH_LEVEL, f.level + 1);
         const grew = f.growthStage === "幼魚" && level >= ADULT_LEVEL;
         if (grew) pushNotice("✨", `${f.name} が成魚に成長した！`);
@@ -680,9 +703,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
         pushNotice("💧", `${fishWaterType === "saltwater" ? "海水" : "淡水"}魚は${targetTank.type === "saltwater" ? "海水" : "淡水"}水槽に入りません`);
         return false;
       }
-      // タンクの容量をチェック
+      // タンクの容量をチェック（上限は口座共通の tankCapacity を各水槽で参照）
       const tankFishCount = fishRef.current.filter(f => (f.tankId ?? "sw-1") === targetTankId).length;
-      if (tankFishCount >= targetTank.capacity) return false;
+      if (tankFishCount >= u.tankCapacity) return false;
       const newBoxFish = (u.boxFish ?? []).filter((f) => f.fishId !== fishId);
       persistUser({ ...u, boxFish: newBoxFish });
       const next = [...fishRef.current, { ...boxFish, tankId: targetTankId }];
@@ -1010,7 +1033,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
   // fishOverrides を DB から読み込み、クラウドの最新データとマージ
   useEffect(() => {
-    void getAllFishOverrides().then(setFishOverrides);
+    void getAllFishOverrides().then((local) => {
+      setFishOverrides(local);
+      markFishDataSourceSettled("localOverrides");
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -1037,6 +1064,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       } catch (e) {
         console.error("[FishOverrides] cloud load failed", e);
       }
+      if (!cancelled) markFishDataSourceSettled("cloudOverrides");
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1061,8 +1089,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
           const swCount = u.saltwaterTankCount ?? 1;
           const fwCount = u.freshwaterTankCount ?? (u.hasFreshwaterTank ? 1 : 0);
           const r: Tank[] = [];
-          for (let i = 1; i <= swCount; i++) r.push({ id: `sw-${i}`, type: "saltwater", name: `海水 ${i}`, capacity: 50 });
-          for (let i = 1; i <= fwCount; i++) r.push({ id: `fw-${i}`, type: "freshwater", name: `淡水 ${i}`, capacity: 50 });
+          for (let i = 1; i <= swCount; i++) r.push({ id: `sw-${i}`, type: "saltwater", name: `海水 ${i}` });
+          for (let i = 1; i <= fwCount; i++) r.push({ id: `fw-${i}`, type: "freshwater", name: `淡水 ${i}` });
           return r;
         })();
         const sameTanks = currentTanks.filter(t => t.type === type);
@@ -1072,7 +1100,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         const idx = sameTanks.length + 1;
         const prefix = type === "saltwater" ? "sw" : "fw";
         const tankName = type === "saltwater" ? `海水 ${idx}` : `淡水 ${idx}`;
-        const newTank: Tank = { id: `${prefix}-${idx}`, type, name: tankName, capacity: 50 };
+        const newTank: Tank = { id: `${prefix}-${idx}`, type, name: tankName };
         const stamped = { ...u, gold: u.gold - price, tanks: [...currentTanks, newTank], lastUpdated: Date.now() };
         success = true;
         stampedResult = stamped;
@@ -1268,6 +1296,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     <GameContext.Provider
       value={{
         ready,
+        fishDataReady,
         user,
         fishList,
         words,

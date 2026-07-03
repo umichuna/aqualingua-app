@@ -216,21 +216,6 @@ export default function AquariumView() {
           minHeight: "320px",
         }}
       >
-        {/* 泡 */}
-        {[12, 30, 55, 75, 90].map((left, i) => (
-          <div
-            key={i}
-            className="absolute rounded-full animate-bounce opacity-30 border-2 border-foam"
-            style={{
-              left: `${left}%`,
-              bottom: `${10 + i * 8}%`,
-              width: 6 + (i % 3) * 3,
-              height: 6 + (i % 3) * 3,
-              animationDuration: `${2 + i * 0.5}s`,
-            }}
-          />
-        ))}
-
         {/* 餌 */}
         {bait && (
           <div
@@ -315,17 +300,6 @@ export default function AquariumView() {
           </button>
         </div>
 
-        {/* 水槽切り替えボタン（2槽以上持っている場合に表示） */}
-        {tanks.length > 1 && (
-          <button
-            onClick={(e) => { e.stopPropagation(); setShowTankPicker(true); }}
-            className="absolute top-10 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 text-foam font-bold text-xs whitespace-nowrap"
-          >
-            🔄 {tanks.find((t) => t.id === currentTankId)?.type === "saltwater" ? "🌊" : "🌿"}{" "}
-            {tanks.find((t) => t.id === currentTankId)?.name ?? "水槽を切り替え"}
-          </button>
-        )}
-
         {/* 飼育数 */}
         <div className="absolute top-2 right-2 text-xs px-2 py-1 rounded-full bg-black/40 text-dim">
           🐠 {displayFish.length} / {user.tankCapacity}
@@ -339,16 +313,27 @@ export default function AquariumView() {
           {showSubPanel ? "✕" : <span>📦 {boxFish.length}/{boxCapacity}</span>}
         </button>
 
-        {/* 背景画像設定ボタン */}
-        <label className="absolute bottom-2 right-2 cursor-pointer flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-full bg-black/60 text-foam font-bold hover:bg-black/80 transition-colors">
-          🖼️ 背景
-          <input
-            type="file"
-            accept="image/*"
-            onChange={handleBackgroundImageChange}
-            className="hidden"
-          />
-        </label>
+        {/* 水槽切り替え（2槽以上のみ）+ 背景画像設定 */}
+        <div className="absolute bottom-2 right-2 flex items-center gap-2">
+          {tanks.length > 1 && (
+            <button
+              onClick={(e) => { e.stopPropagation(); setShowTankPicker(true); }}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-black/60 text-foam font-bold text-xs whitespace-nowrap"
+            >
+              🔄 {tanks.find((t) => t.id === currentTankId)?.type === "saltwater" ? "🌊" : "🌿"}{" "}
+              {tanks.find((t) => t.id === currentTankId)?.name ?? "水槽を切り替え"}
+            </button>
+          )}
+          <label className="cursor-pointer flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-full bg-black/60 text-foam font-bold hover:bg-black/80 transition-colors">
+            🖼️ 背景
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleBackgroundImageChange}
+              className="hidden"
+            />
+          </label>
+        </div>
       </div>
 
       {/* 水槽切り替えモーダル */}
