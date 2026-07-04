@@ -52,6 +52,9 @@ import {
   getAllFish,
   getAllFishHistory,
   getAllFishOverrides,
+  getAllSharedCustomFish,
+  replaceSharedCustomFish,
+  putFishOverridesBulk,
   getAllGoldLedger,
   getAllStudySessions,
   getAllWordStats,
@@ -211,15 +214,17 @@ export function GameProvider({ children }: { children: ReactNode }) {
   // これが無いと、ローカルDB読み込み完了(ready)直後にクラウド取得が終わる前の
   // allFishMaster（編集前の画像・カスタム魚なし）で一瞬だけ魚が描画されてしまう。
   const [fishDataReady, setFishDataReady] = useState(false);
-  const fishDataReadySourcesRef = useRef({ localOverrides: false, cloudOverrides: false, cloudCustomFish: false });
-  const markFishDataSourceSettled = useCallback((key: "localOverrides" | "cloudOverrides" | "cloudCustomFish") => {
+  // ローカルキャッシュ（前回クラウドから取得して保存した編集内容・カスタム魚）の読み込みが
+  // 終わった時点で表示を開始する。クラウド取得の完了は待たない（コールドスタートで数十秒
+  // かかっても、ローカルキャッシュがあれば正しい画像を即座に出せる）。クラウド分は裏で更新。
+  const fishDataReadySourcesRef = useRef({ localOverrides: false, localCustomFish: false });
+  const markFishDataSourceSettled = useCallback((key: "localOverrides" | "localCustomFish") => {
     fishDataReadySourcesRef.current[key] = true;
     const s = fishDataReadySourcesRef.current;
-    const noSession = !session?.user?.email;
-    if (s.localOverrides && (noSession || s.cloudOverrides) && (noSession || s.cloudCustomFish)) {
+    if (s.localOverrides && s.localCustomFish) {
       setFishDataReady(true);
     }
-  }, [session?.user?.email]);
+  }, []);
   useEffect(() => {
     // 回線が遅い/クラウドがコールドスタート中でも読み込み画面が固まらないよう、
     // 短いタイムアウトで強制的に表示を進める（その後リトライで裏側から正しい画像に切り替わる）
@@ -427,6 +432,19 @@ export function GameProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user?.email]);
 
+  // ---------- 全員共有カスタム魚をローカルキャッシュから即読み込み ----------
+  // 前回クラウドから取得して保存した魚を、クラウド取得を待たずに即反映する。
+  // これで水槽・図鑑を開いた直後から他ユーザー作のカスタム魚も正しい画像で表示される。
+  useEffect(() => {
+    void getAllSharedCustomFish()
+      .then((local) => {
+        if (local.length > 0) setSharedCustomFish((prev) => (prev.length ? prev : local));
+      })
+      .catch((e) => console.error("[CustomFish] local cache load failed", e))
+      .finally(() => markFishDataSourceSettled("localCustomFish"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ---------- 全員共有のカスタム魚を取得 ----------
   // ログイン中に共有テーブルから取得して全ユーザーのガチャ・図鑑に反映する。
   // さらに、この端末にローカルだけで持っていたカスタム魚を共有へ移行する
@@ -461,10 +479,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
           }
         }
         setSharedCustomFish(merged);
+        void replaceSharedCustomFish(merged); // 次回起動用にローカルへキャッシュ
       } catch (e) {
         console.error("[CustomFish] load failed", e);
       }
-      if (!cancelled) markFishDataSourceSettled("cloudCustomFish");
     })();
     return () => {
       cancelled = true;
@@ -1165,10 +1183,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
   // fishOverrides を DB から読み込み、クラウドの最新データとマージ
   useEffect(() => {
-    void getAllFishOverrides().then((local) => {
-      setFishOverrides(local);
-      markFishDataSourceSettled("localOverrides");
-    });
+    void getAllFishOverrides()
+      .then((local) => setFishOverrides(local))
+      .catch((e) => console.error("[FishOverrides] local load failed", e))
+      .finally(() => markFishDataSourceSettled("localOverrides"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1191,12 +1209,12 @@ export function GameProvider({ children }: { children: ReactNode }) {
               merged[idx] = remote;
             }
           }
+          void putFishOverridesBulk(merged); // 次回起動用にローカルへキャッシュ
           return merged;
         });
       } catch (e) {
         console.error("[FishOverrides] cloud load failed", e);
       }
-      if (!cancelled) markFishDataSourceSettled("cloudOverrides");
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps

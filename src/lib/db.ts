@@ -5,6 +5,7 @@ import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type {
   BlankQuestion,
   BlankQuestionStats,
+  CustomFishDef,
   EncyclopediaEntry,
   Fish,
   FishHistoryEntry,
@@ -17,7 +18,7 @@ import type {
 } from "./types";
 
 const DB_NAME = "AquaLinguaDB";
-const DB_VERSION = 6; // v6: exampleSentences / exampleSentenceStats ストア追加
+const DB_VERSION = 7; // v7: sharedCustomFish（全員共有カスタム魚のローカルキャッシュ）ストア追加
 
 export const LOCAL_USER_ID = "local-user"; // MVP: 認証なしの固定ユーザーID
 
@@ -34,6 +35,7 @@ interface AppDBSchema extends DBSchema {
   fishOverrides: { key: string; value: FishOverride };
   blankQuestions: { key: string; value: BlankQuestion };
   blankQuestionStats: { key: string; value: BlankQuestionStats };
+  sharedCustomFish: { key: string; value: CustomFishDef };
 }
 
 let dbPromise: Promise<IDBPDatabase<AppDBSchema>> | null = null;
@@ -65,6 +67,9 @@ export function getLocalDB(): Promise<IDBPDatabase<AppDBSchema>> {
         if (oldVersion < 6) {
           db.createObjectStore("blankQuestions", { keyPath: "id" });
           db.createObjectStore("blankQuestionStats", { keyPath: "id" });
+        }
+        if (oldVersion < 7) {
+          db.createObjectStore("sharedCustomFish", { keyPath: "type" });
         }
       },
     });
@@ -398,8 +403,32 @@ export async function putFishOverride(override: FishOverride): Promise<void> {
   });
 }
 
+// クラウドから取得した編集内容をローカルにも保存（lastUpdated は上書きしない）。
+// 次回起動時にクラウドを待たず即座に正しい画像を出すためのキャッシュ。
+export async function putFishOverridesBulk(list: FishOverride[]): Promise<void> {
+  const db = await getLocalDB();
+  const tx = db.transaction("fishOverrides", "readwrite");
+  await Promise.all(list.map((o) => tx.store.put(o)));
+  await tx.done;
+}
+
 export async function deleteFishOverride(type: string): Promise<void> {
   await (await getLocalDB()).delete("fishOverrides", type);
+}
+
+// ---------- SharedCustomFish（全員共有カスタム魚のローカルキャッシュ） ----------
+// クラウド（shared_custom_fish）から取得した魚をローカルにも保存し、次回起動時に
+// クラウドを待たず即座に図鑑・水槽へ正しい画像を出すためのキャッシュ。
+export async function getAllSharedCustomFish(): Promise<CustomFishDef[]> {
+  return (await getLocalDB()).getAll("sharedCustomFish");
+}
+
+export async function replaceSharedCustomFish(list: CustomFishDef[]): Promise<void> {
+  const db = await getLocalDB();
+  const tx = db.transaction("sharedCustomFish", "readwrite");
+  await tx.store.clear();
+  await Promise.all(list.map((f) => tx.store.put(f)));
+  await tx.done;
 }
 
 // ---------- BlankQuestions（穴抜け問題集） ----------
