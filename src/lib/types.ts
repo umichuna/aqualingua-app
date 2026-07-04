@@ -156,6 +156,7 @@ export interface UserStatus {
   lifetimeWordsAnswered?: number; // 累計学習単語数（実績判定用）
   lifetimeGoldEarned?: number; // 累計獲得ゴールド（実績判定用）
   unlockedAchievements?: string[]; // 解除済み実績ID（AchievementDef.id）
+  claimedAchievementRewards?: string[]; // 報酬魚を受け取り済みの実績ID（後追い付与の重複防止）
 }
 
 export type StudyMode = "self" | "choice" | "listen" | "blank";
