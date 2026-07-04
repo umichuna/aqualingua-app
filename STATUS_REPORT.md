@@ -6,6 +6,58 @@
 
 ---
 
+## 2026-07-04: 実績システム バグ一括修正（7件）
+
+### 依頼内容
+実績リワード機能の実装後、「複数の実績を同時に解除したときに報酬魚が消えないか」等の
+疑問をきっかけにコード監査を実施。`GameProvider.tsx` の実績付与まわりで確定した7件の
+バグ（B1〜B7）をまとめて修正。
+
+### 原因（確定バグ）
+| # | 場所 | 不具合 |
+|---|------|--------|
+| B1 | 実績effect | `encyclopediaCount` が実績専用魚を含む `encyclopedia.length`。図鑑コンプリートが誤って早期解除 |
+| B2 | 実績effect | `setUser` の更新関数**内**で `addFishToTank`/`pushNotice` 等の別state更新を呼んでいた |
+| B3 | `addFishToTank` | `setFishList([...fishRef.current, fish])` の絶対値更新で、複数付与時に最後の1匹しか残らない |
+| B4 | `addFishToBox` | `persistUser(userRef基準)` の絶対値更新で boxFish消失＋`unlockedAchievements` 巻き戻し |
+| B5 | 実績effect | 容量チェックが全水槽合計。正しくは現在の水槽内の匹数で判定すべき |
+| B6 | 後追い専用effect | 通常effectと重複発火の温床 |
+| B7 | 実績effect | `ready`/`fishDataReady` を待たず評価し、カスタム魚未ロードで図鑑コンプリート誤解除 |
+
+### 修正内容
+- `addFishToTank`：関数型更新 `setFishList((list)=>[...list, fish])` に変更（B3）
+- `addFishToBox`：関数型 `setUser` + `putUserStatus`（updater内・冪等）に変更（B4）
+- 実績effectを1本に統合。後追い専用effectと `hasCheckedRetroactiveAchievements` ref を削除：
+  - 冒頭 `if (!ready || !fishDataReady) return;` ＋ deps に追加（B7）
+  - `encyclopediaCount` を実績専用魚除外に統一（B1）
+  - `grantedRewardRef`(Set) で同期的に二重付与ロック（B2/B6）
+  - 新規解除IDは1回の関数型 `setUser` でまとめて追記、副作用ゼロ（B2）
+  - 魚付与・通知は updater の外でループ。現在の水槽内の匹数をローカル追跡し容量判定（B5）
+
+### 変更ファイル一覧
+- `src/components/GameProvider.tsx`（3箇所）
+- ※ `AchievementView.tsx` / `achievements.ts` は既に正しく変更なし
+
+### 検証
+- `npm run build`：エラー0件・TypeScript通過を確認済み
+- **ブラウザ実機確認済み（2026-07-04）**：ローカルのみのログイン迂回（`?devbypass=1`、確認後に削除済み）で
+  実績画面を操作。以下を確認：
+  - 実績タブが全10件正常表示、進捗表示も正しい
+  - カスタム魚を1匹追加→「オリジナル飼育員」が✅解除、**リロード後も保持**（永続化・B4系OK）
+  - カスタム魚追加後も「図鑑コンプリート」は🔒のまま＝**誤解除なし（B1/B7の統一ロジックが機能）**
+  - Console に「Cannot update a component while rendering」警告なし（B2）。
+    ※出た401エラーは迂回ログインによる無関係なもの。
+- **未実施（コード＋ビルドで担保）**：複数の報酬魚を同時付与するB3/B5の実操作再現は、
+  実績に紐付いた報酬魚を事前登録した状態が必要なため今回のまっさら環境では未再現。
+  ロジックはコードレビュー＋ビルドで確認済み。
+
+### 技術情報メモ
+- `fishDataReady` は 3秒タイムアウトで強制true化される（遅い回線対策）。ゲートはそれと併用。
+- `grantedRewardRef` はセッション内の同期ガード。永続的な真実は `user.unlockedAchievements`。
+  リロード時は Set が空でも `checkNewAchievements` が解除済みを除外するため二重付与しない。
+
+---
+
 ## 2026-07-03: クライアント修正指示5件対応
 
 ### 依頼内容

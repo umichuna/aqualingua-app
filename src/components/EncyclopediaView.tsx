@@ -7,6 +7,7 @@
 // - ＋ カスタム魚追加ボタン（ヘッダー右）
 
 import { useState } from "react";
+import { ACHIEVEMENTS } from "@/data/achievements";
 import { FISH_MASTER, RARITY_INFO, RARITY_STARS, type FishDisplaySize } from "@/data/fishMaster";
 import { todayString } from "@/lib/gameLogic";
 import type { CustomFishDef, FishHistoryEntry, FishOverride, Rarity, WaterType } from "@/lib/types";
@@ -45,6 +46,8 @@ const EMPTY_CUSTOM_FORM = {
   displaySize: "medium" as FishDisplaySize,
   paletteIdx: 0,
   imageUrl: "",
+  rewardOnly: false,
+  linkedAchievementId: "",
 };
 
 const RARITY_ORDER: Record<Rarity, number> = { 激安: 0, 普通: 1, 高級: 2, ロマン: 3 };
@@ -213,6 +216,8 @@ export default function EncyclopediaView() {
       displaySize: fish.displaySize ?? "medium",
       paletteIdx: 0,
       imageUrl: fish.imageUrl ?? "",
+      rewardOnly: (fish as CustomFishDef).rewardOnly ?? false,
+      linkedAchievementId: (fish as CustomFishDef).linkedAchievementId ?? "",
     });
     setCustomError("");
     setEditTarget({ type, isCustom: true });
@@ -245,6 +250,8 @@ export default function EncyclopediaView() {
       waterType: customForm.waterType,
       displaySize: customForm.displaySize,
       imageUrl: customForm.imageUrl || undefined,
+      rewardOnly: customForm.rewardOnly,
+      linkedAchievementId: customForm.rewardOnly ? customForm.linkedAchievementId || undefined : undefined,
     };
     game.updateCustomFish(def);
     setEditTarget(null);
@@ -267,6 +274,8 @@ export default function EncyclopediaView() {
       waterType: customForm.waterType,
       displaySize: customForm.displaySize,
       imageUrl: customForm.imageUrl || undefined,
+      rewardOnly: customForm.rewardOnly,
+      linkedAchievementId: customForm.rewardOnly ? customForm.linkedAchievementId || undefined : undefined,
     };
     game.addCustomFish(def);
     setCustomForm({ ...EMPTY_CUSTOM_FORM });
@@ -675,6 +684,51 @@ export default function EncyclopediaView() {
                 )}
               </div>
 
+              {/* 実績専用にする */}
+              <div>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={customForm.rewardOnly}
+                    onChange={(e) =>
+                      setCustomForm((f) => ({
+                        ...f,
+                        rewardOnly: e.target.checked,
+                        linkedAchievementId: e.target.checked ? f.linkedAchievementId : "",
+                      }))
+                    }
+                    className="w-4 h-4"
+                  />
+                  <span className="text-xs font-bold text-glow">🎁 実績専用にする（ガチャに出現しなくなります）</span>
+                </label>
+              </div>
+
+              {/* 実績を選択 */}
+              {customForm.rewardOnly && (
+                <div>
+                  <div className="text-xs font-bold text-glow mb-1">紐付ける実績</div>
+                  <select
+                    value={customForm.linkedAchievementId}
+                    onChange={(e) =>
+                      setCustomForm((f) => ({ ...f, linkedAchievementId: e.target.value }))
+                    }
+                    className="w-full px-3 py-2 rounded-xl bg-black/30 text-foam outline-none text-sm"
+                  >
+                    <option value="">-- 選択してください --</option>
+                    {ACHIEVEMENTS.filter((a) => {
+                      const alreadyLinked = game.allFishMaster.some(
+                        (f) => f.linkedAchievementId === a.id
+                      );
+                      return !alreadyLinked;
+                    }).map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.icon} {a.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               {/* ボタン */}
               <div className="flex gap-2">
                 <button
@@ -851,6 +905,51 @@ export default function EncyclopediaView() {
                   </label>
                 )}
               </div>
+
+              {/* 実績専用にする */}
+              <div>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={customForm.rewardOnly}
+                    onChange={(e) =>
+                      setCustomForm((f) => ({
+                        ...f,
+                        rewardOnly: e.target.checked,
+                        linkedAchievementId: e.target.checked ? f.linkedAchievementId : "",
+                      }))
+                    }
+                    className="w-4 h-4"
+                  />
+                  <span className="text-xs font-bold text-glow">🎁 実績専用にする（ガチャに出現しなくなります）</span>
+                </label>
+              </div>
+
+              {/* 実績を選択 */}
+              {customForm.rewardOnly && (
+                <div>
+                  <div className="text-xs font-bold text-glow mb-1">紐付ける実績</div>
+                  <select
+                    value={customForm.linkedAchievementId}
+                    onChange={(e) =>
+                      setCustomForm((f) => ({ ...f, linkedAchievementId: e.target.value }))
+                    }
+                    className="w-full px-3 py-2 rounded-xl bg-black/30 text-foam outline-none text-sm"
+                  >
+                    <option value="">-- 選択してください --</option>
+                    {ACHIEVEMENTS.filter((a) => {
+                      const alreadyLinked = game.allFishMaster.some(
+                        (f) => f.linkedAchievementId === a.id
+                      );
+                      return !alreadyLinked;
+                    }).map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.icon} {a.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {/* ボタン */}
               <div className="flex gap-2">

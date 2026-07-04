@@ -102,6 +102,8 @@ export interface CustomFishDef {
   waterType?: WaterType; // 海水 / 淡水（組み込み魚と編集項目を統一）
   imageUrl?: string; // base64画像（canvas縮小後のJPEG）
   displaySize?: FishDisplaySize; // 表示サイズ
+  rewardOnly?: boolean; // 実績報酬専用（true の場合ガチャ抽選対象外）
+  linkedAchievementId?: string; // rewardOnly: true の場合、紐付く実績ID
 }
 
 export type FishDisplaySize = "tiny" | "xsmall" | "small" | "medium" | "large" | "xlarge";
@@ -151,6 +153,9 @@ export interface UserStatus {
   saltwaterTankCount?: number; // 後方互換（廃止予定）
   freshwaterTankCount?: number; // 後方互換（廃止予定）
   tanks?: Tank[]; // 所持水槽リスト（新方式）
+  lifetimeWordsAnswered?: number; // 累計学習単語数（実績判定用）
+  lifetimeGoldEarned?: number; // 累計獲得ゴールド（実績判定用）
+  unlockedAchievements?: string[]; // 解除済み実績ID（AchievementDef.id）
 }
 
 export type StudyMode = "self" | "choice" | "listen" | "blank";

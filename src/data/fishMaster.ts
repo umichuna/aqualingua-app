@@ -46,6 +46,8 @@ export interface FishMaster {
   layer?: "bottom" | "middle" | "top"; // 水槽内の表示層（bottom=底生）
   displaySize?: FishDisplaySize; // 表示サイズ（デフォルト medium）
   waterType?: WaterType; // 水槽タイプ（デフォルト saltwater）
+  rewardOnly?: boolean; // 実績報酬専用（true の場合ガチャ抽選対象外）
+  linkedAchievementId?: string; // rewardOnly: true の場合、紐付く実績ID
 }
 
 export const FISH_MASTER: FishMaster[] = [
@@ -498,6 +500,7 @@ export function getFishMaster(type: string): FishMaster | undefined {
 
 // 任意の重みテーブルでガチャ排出（tiersごとに異なる重みを渡す）
 // allFish に共有カスタム魚を含めた一覧を渡すと、カスタム魚もガチャに排出される。
+// rewardOnly: true の魚はガチャ対象外。
 export function rollGachaWithWeights(
   weights: Record<Rarity, number>,
   allFish: FishMaster[] = FISH_MASTER
@@ -512,10 +515,12 @@ export function rollGachaWithWeights(
       break;
     }
   }
-  const pool = allFish.filter((f) => f.rarity === rarity);
+  const pool = allFish.filter((f) => f.rarity === rarity && !f.rewardOnly);
   if (pool.length === 0) {
     // ロマンが0重みの激安ガチャ等でPoolが空になった場合のフォールバック
-    return allFish[Math.floor(Math.random() * allFish.length)];
+    // rewardOnly でない魚で再度選び直す
+    const nonReward = allFish.filter((f) => !f.rewardOnly);
+    return nonReward.length > 0 ? nonReward[Math.floor(Math.random() * nonReward.length)] : allFish[0];
   }
   return pool[Math.floor(Math.random() * pool.length)];
 }

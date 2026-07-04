@@ -7,6 +7,7 @@
 
 import { useEffect, useState } from "react";
 import { signIn, useSession } from "next-auth/react";
+import AchievementView from "@/components/AchievementView";
 import AdminView from "@/components/AdminView";
 import AquariumView from "@/components/AquariumView";
 import BlankQuestionView from "@/components/BlankQuestionView";
@@ -31,7 +32,7 @@ const NAV_TABS = [
 ] as const;
 
 // ナビ外のビュー（ホームから開く）
-type TabId = (typeof NAV_TABS)[number]["id"] | "record" | "words" | "zukan" | "admin" | "blank";
+type TabId = (typeof NAV_TABS)[number]["id"] | "record" | "words" | "zukan" | "admin" | "blank" | "achievements";
 
 // ホーム画面のボタン一覧
 const HOME_BUTTONS: { id: TabId | "settings" | "tutorial"; label: string; icon: string; desc: string }[] = [
@@ -40,6 +41,7 @@ const HOME_BUTTONS: { id: TabId | "settings" | "tutorial"; label: string; icon: 
   { id: "record", label: "記録", icon: "📊", desc: "しごと記録と通帳" },
   { id: "words", label: "単語帳", icon: "📚", desc: "単語の管理・追加" },
   { id: "zukan", label: "図鑑", icon: "📕", desc: "発見したおさかな" },
+  { id: "achievements", label: "実績", icon: "🏆", desc: "達成した実績と報酬" },
   { id: "shop", label: "ショップ", icon: "🛒", desc: "ガチャ・アイテム" },
   { id: "tutorial", label: "あそびかた", icon: "📖", desc: "チュートリアルを見る" },
   { id: "settings", label: "設定", icon: "⚙️", desc: "セーブ・音・初期化" },
@@ -200,6 +202,7 @@ function AppShell() {
         {tab === "record" && <RecordView />}
         {tab === "words" && <WordManager />}
         {tab === "zukan" && <EncyclopediaView />}
+        {tab === "achievements" && <AchievementView />}
         {tab === "shop" && <ShopView />}
         {tab === "blank" && <BlankQuestionView />}
         {tab === "admin" && <AdminView />}

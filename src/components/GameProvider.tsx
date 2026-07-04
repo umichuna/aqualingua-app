@@ -16,6 +16,10 @@ import {
 import { useSession } from "next-auth/react";
 import { FISH_MASTER, rollGachaWithWeights, type FishMaster } from "@/data/fishMaster";
 import {
+  checkNewAchievements,
+  buildAchievementStats,
+} from "@/data/achievements";
+import {
   ADULT_LEVEL,
   AFFECTION_GAIN_RATE,
   BAIT_EFFECT,
@@ -502,6 +506,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
         totalStudyCount,
         jobLevel: newJobLevel,
         achievedTitles: titles,
+        lifetimeWordsAnswered: (u.lifetimeWordsAnswered ?? 0) + questionCount,
+        lifetimeGoldEarned: (u.lifetimeGoldEarned ?? 0) + gold,
       });
       recordLedger(
         gold,
@@ -517,7 +523,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const completeFreeWork = useCallback(
     (label: string, amount: number) => {
       const u = userRef.current;
-      persistUser({ ...u, gold: u.gold + amount });
+      persistUser({
+        ...u,
+        gold: u.gold + amount,
+        lifetimeGoldEarned: (u.lifetimeGoldEarned ?? 0) + amount,
+      });
       recordLedger(amount, `フリー: ${label}`, u.gold + amount);
       const sessionId = recordSession("free", label, 0, 0, amount);
       return { sessionId };
@@ -644,8 +654,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
         lastUpdated: now,
         tankId: currentTankIdRef.current,
       };
-      const next = [...fishRef.current, fish];
-      setFishList(next);
+      // 関数型更新：同一同期パスで複数実績の魚を続けて付与しても消えない（B3対策）
+      setFishList((list) => [...list, fish]);
       void putFish(fish);
       void discoverFishType(master.type);
       setEncyclopedia((enc) =>
@@ -674,8 +684,17 @@ export function GameProvider({ children }: { children: ReactNode }) {
         sickStartTime: null,
         lastUpdated: now,
       };
-      const u = userRef.current;
-      persistUser({ ...u, boxFish: [...(u.boxFish ?? []), fish] });
+      // 関数型更新：boxFish のlost-updateと、外側で追記した unlockedAchievements の
+      // 巻き戻しを防ぐ（B4対策）。putUserStatus は冪等なDB書き込みなのでupdater内で呼んでよい。
+      setUser((u) => {
+        const updated = {
+          ...u,
+          boxFish: [...(u.boxFish ?? []), fish],
+          lastUpdated: Date.now(),
+        };
+        void putUserStatus(updated);
+        return updated;
+      });
       void discoverFishType(master.type);
       setEncyclopedia((enc) =>
         enc.some((e) => e.fishType === master.type)
@@ -684,7 +703,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       );
       pushNotice("📦", `${name} はボックスに入った！水槽に空きができたら移せるよ`);
     },
-    [persistUser, pushNotice]
+    [pushNotice]
   );
 
   const moveBoxFishToTank = useCallback(
@@ -924,6 +943,83 @@ export function GameProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     allFishMasterRef.current = allFishMaster;
   }, [allFishMaster]);
+
+  // 実績チェック：stat変化を検知して新規解除を自動付与（通常＋後追いを1本に統合）。
+  // grantedRewardRef で「effectが素早く2回発火しても」同期的に二重付与をロックする（B2/B6対策）。
+  const grantedRewardRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    // 魚データ（クラウドのカスタム魚等）が揃う前に評価すると gachaFishMasterCount が
+    // 小さく、図鑑コンプリートが誤解除される。読み込み完了までゲートする（B7対策）。
+    if (!ready || !fishDataReady) return;
+
+    const stats = buildAchievementStats(
+      user.tanks ?? [],
+      user.lifetimeWordsAnswered ?? 0,
+      user.lifetimeGoldEarned ?? 0,
+      user.jobLevel,
+      user.customFish?.length ?? 0,
+      // 実績専用魚を分母・分子とも除外して統一（AchievementView と同じロジック。B1対策）
+      encyclopedia.filter(
+        (e) => allFishMaster.find((f) => f.type === e.fishType)?.rewardOnly !== true
+      ).length,
+      allFishMaster.filter((f) => !f.rewardOnly).length
+    );
+    const newAchievements = checkNewAchievements(stats, user.unlockedAchievements ?? []);
+
+    // 同期的な二重付与ガード（setUser がコミットされる前の再発火をブロック）
+    const toGrant = newAchievements.filter((a) => !grantedRewardRef.current.has(a.id));
+    if (toGrant.length === 0) return;
+    for (const a of toGrant) grantedRewardRef.current.add(a.id);
+
+    // ① 解除IDは1回の関数型 setUser でまとめて追記（副作用ゼロ。B2対策）
+    setUser((prevUser) => {
+      const alreadyUnlocked = prevUser.unlockedAchievements ?? [];
+      const merged = [...alreadyUnlocked];
+      for (const a of toGrant) if (!merged.includes(a.id)) merged.push(a.id);
+      if (merged.length === alreadyUnlocked.length) return prevUser;
+      const updated = { ...prevUser, unlockedAchievements: merged, lastUpdated: Date.now() };
+      void putUserStatus(updated);
+      return updated;
+    });
+
+    // ② 報酬魚の付与・通知は updater の外でループ。現在の水槽内の匹数をローカル追跡し、
+    //    水槽ごとの容量（口座共通の tankCapacity）で判定する（B5対策）。
+    let tankCount = fishRef.current.filter(
+      (f) => (f.tankId ?? "sw-1") === currentTankIdRef.current
+    ).length;
+    for (const a of toGrant) {
+      const rewardFish = allFishMaster.find((f) => f.linkedAchievementId === a.id);
+      if (rewardFish) {
+        if (tankCount < user.tankCapacity) {
+          addFishToTank(rewardFish, a.label);
+          tankCount++;
+        } else {
+          addFishToBox(rewardFish, a.label);
+        }
+        pushNotice("🏆", `実績解除:「${a.label}」→ ${rewardFish.displayName ?? rewardFish.type}がなかまに！`);
+      } else {
+        // 報酬魚未登録の場合はお知らせのみ
+        pushNotice("🏆", `実績解除:「${a.label}」（報酬のおさかなは準備中です）`);
+      }
+    }
+  }, [
+    ready,
+    fishDataReady,
+    user.tanks,
+    user.lifetimeWordsAnswered,
+    user.lifetimeGoldEarned,
+    user.jobLevel,
+    user.customFish,
+    user.tankCapacity,
+    user.unlockedAchievements,
+    sharedCustomFish,
+    encyclopedia,
+    allFishMaster,
+    setUser,
+    addFishToTank,
+    addFishToBox,
+    pushNotice,
+  ]);
 
   const addCustomFish = useCallback(
     (def: CustomFishDef) => {
