@@ -70,16 +70,16 @@ export default function AchievementView() {
                 </div>
               )}
 
-              {/* 報酬魚 */}
+              {/* 報酬魚（未解除・未受取はシルエット＆名前伏せ） */}
               {rewardFish && (
                 <div className="ml-12 pt-2 space-y-2">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-pixel text-glow">報酬:</span>
                     <div className="w-10 h-10 bg-sea rounded-lg flex items-center justify-center flex-shrink-0">
-                      <PixelFish type={rewardFish.type} size={40} />
+                      <PixelFish type={rewardFish.type} size={40} imageUrl={rewardFish.imageUrl} silhouette={!isClaimed} />
                     </div>
                     <span className="text-xs font-pixel text-glow">
-                      {rewardFish.displayName ?? rewardFish.type}
+                      {isClaimed ? (rewardFish.displayName ?? rewardFish.type) : "？？？"}
                     </span>
                   </div>
 
