@@ -2,9 +2,32 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getPool } from "@/lib/azure-sql";
+import type sql from "mssql";
 
 // Vercel のサーバー実行時間上限を延長（許可プランで有効。非対応でも無害）
 export const maxDuration = 60;
+
+// 穴抜け問題のテーブルは後から追加したため、無ければ自動作成する
+async function ensureBlankTables(pool: sql.ConnectionPool) {
+  await pool.request().query(`
+    IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'blank_questions')
+    CREATE TABLE blank_questions (
+      userId NVARCHAR(256) NOT NULL,
+      id NVARCHAR(128) NOT NULL,
+      data NVARCHAR(MAX) NOT NULL,
+      lastUpdated BIGINT NOT NULL,
+      PRIMARY KEY (userId, id)
+    );
+    IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'blank_question_stats')
+    CREATE TABLE blank_question_stats (
+      userId NVARCHAR(256) NOT NULL,
+      id NVARCHAR(128) NOT NULL,
+      data NVARCHAR(MAX) NOT NULL,
+      lastUpdated BIGINT NOT NULL,
+      PRIMARY KEY (userId, id)
+    );
+  `);
+}
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -13,6 +36,7 @@ export async function GET() {
 
   try {
     const pool = await getPool();
+    await ensureBlankTables(pool);
 
     // sync.ts のキー名（camelCase）に合わせる
     const tables = [
@@ -23,6 +47,8 @@ export async function GET() {
     { name: "study_sessions", resultKey: "studySessions", key: "sessionId" },
     { name: "gold_ledger",    resultKey: "goldLedger",    key: "entryId" },
     { name: "fish_history",   resultKey: "fishHistory",   key: "entryId" },
+    { name: "blank_questions",      resultKey: "blankQuestions",     key: "id" },
+    { name: "blank_question_stats", resultKey: "blankQuestionStats", key: "id" },
   ] as const;
 
   const result: Record<string, unknown[] | unknown> = {};

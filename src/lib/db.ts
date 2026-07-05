@@ -288,7 +288,7 @@ export async function syncPutGoldLedgerEntry(entry: GoldLedgerEntry): Promise<vo
 
 // ---------- クラウド復元用: 各ストアをまるごと置き換える（clear → put） ----------
 // 同期（クラウド=正）の pull で使用。lastUpdated は上書きしない。
-async function replaceStore<K extends "words" | "wordStats" | "encyclopedia" | "studySessions" | "goldLedger" | "fishHistory">(
+async function replaceStore<K extends "words" | "wordStats" | "encyclopedia" | "studySessions" | "goldLedger" | "fishHistory" | "blankQuestions" | "blankQuestionStats">(
   storeName: K,
   records: AppDBSchema[K]["value"][]
 ): Promise<void> {
@@ -317,6 +317,12 @@ export async function replaceGoldLedger(entries: GoldLedgerEntry[]): Promise<voi
 }
 export async function replaceFishHistory(entries: FishHistoryEntry[]): Promise<void> {
   await replaceStore("fishHistory", entries);
+}
+export async function replaceBlankQuestions(qs: BlankQuestion[]): Promise<void> {
+  await replaceStore("blankQuestions", qs);
+}
+export async function replaceBlankQuestionStats(stats: BlankQuestionStats[]): Promise<void> {
+  await replaceStore("blankQuestionStats", stats);
 }
 // 魚は clearFishList() + syncPutFishList() を流用するため専用ヘルパーは不要
 

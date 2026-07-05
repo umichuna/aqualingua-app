@@ -76,3 +76,20 @@ CREATE TABLE fish_history (
   lastUpdated BIGINT NOT NULL,
   PRIMARY KEY (userId, entryId)
 );
+
+-- 穴抜け問題（後から追加。/api/sync のルートが無ければ自動作成するため手動実行は任意）
+CREATE TABLE blank_questions (
+  userId NVARCHAR(256) NOT NULL,
+  id NVARCHAR(128) NOT NULL,
+  data NVARCHAR(MAX) NOT NULL,
+  lastUpdated BIGINT NOT NULL,
+  PRIMARY KEY (userId, id)
+);
+
+CREATE TABLE blank_question_stats (
+  userId NVARCHAR(256) NOT NULL,
+  id NVARCHAR(128) NOT NULL,
+  data NVARCHAR(MAX) NOT NULL,
+  lastUpdated BIGINT NOT NULL,
+  PRIMARY KEY (userId, id)
+);

@@ -76,6 +76,14 @@ export async function pullFromCloud(userId: string): Promise<boolean> {
       await db.replaceFishHistory(cloudData.fishHistory);
       restored = true;
     }
+    if (Array.isArray(cloudData.blankQuestions) && cloudData.blankQuestions.length > 0) {
+      await db.replaceBlankQuestions(cloudData.blankQuestions);
+      restored = true;
+    }
+    if (Array.isArray(cloudData.blankQuestionStats) && cloudData.blankQuestionStats.length > 0) {
+      await db.replaceBlankQuestionStats(cloudData.blankQuestionStats);
+      restored = true;
+    }
 
     console.log(`[Sync] Restore completed for userId: ${userId} (restored=${restored})`);
     return restored;
@@ -102,6 +110,8 @@ export async function pushToCloud(userId: string): Promise<void> {
     const studySessions = await db.getAllStudySessions();
     const goldLedger = await db.getAllGoldLedger();
     const fishHistory = await db.getAllFishHistory();
+    const blankQuestions = await db.getAllBlankQuestions();
+    const blankQuestionStats = await db.getAllBlankQuestionStats();
 
     const payload = {
       userStatus,
@@ -112,6 +122,8 @@ export async function pushToCloud(userId: string): Promise<void> {
       studySessions,
       goldLedger,
       fishHistory,
+      blankQuestions,
+      blankQuestionStats,
     };
 
     // Azure SQL コールドスタート対策: 50秒タイムアウト

@@ -377,6 +377,8 @@ export const FISH_MASTER: FishMaster[] = [
     companionBuff: { type: "disease_resistance", value: 0.8, description: "病気耐性+80%（最強の免疫）" },
     displaySize: "xlarge",
     waterType: "saltwater",
+    rewardOnly: true,
+    linkedAchievementId: "gold_30000",
   },
   {
     type: "オウムガイ",
@@ -387,6 +389,8 @@ export const FISH_MASTER: FishMaster[] = [
     companionBuff: { type: "decay_reduction", value: 0.5, description: "放置による好感度低下-50%（殻が守る）" },
     displaySize: "small",
     waterType: "saltwater",
+    rewardOnly: true,
+    linkedAchievementId: "words_50000",
   },
   {
     type: "ジュゴン",
@@ -397,6 +401,8 @@ export const FISH_MASTER: FishMaster[] = [
     companionBuff: { type: "heal_speed", value: 1, description: "病気が1日で治る（癒しの力）" },
     displaySize: "xlarge",
     waterType: "saltwater",
+    rewardOnly: true,
+    linkedAchievementId: "three_tanks",
   },
   {
     type: "リーフィーシードラゴン",
@@ -407,6 +413,8 @@ export const FISH_MASTER: FishMaster[] = [
     companionBuff: { type: "affection_boost", value: 5, description: "餌やりの好感度+5" },
     displaySize: "medium",
     waterType: "saltwater",
+    rewardOnly: true,
+    linkedAchievementId: "custom_fish_creator",
   },
   {
     type: "マンタ",
@@ -417,6 +425,8 @@ export const FISH_MASTER: FishMaster[] = [
     companionBuff: { type: "decay_reduction", value: 0.5, description: "放置による好感度低下-50%" },
     displaySize: "xlarge",
     waterType: "saltwater",
+    rewardOnly: true,
+    linkedAchievementId: "job_level_max",
   },
   {
     type: "ジンベエザメ",
@@ -427,6 +437,8 @@ export const FISH_MASTER: FishMaster[] = [
     companionBuff: { type: "tank_expansion", value: 1, description: "水槽収容数+1" },
     displaySize: "xlarge",
     waterType: "saltwater",
+    rewardOnly: true,
+    linkedAchievementId: "encyclopedia_complete",
   },
   {
     type: "マンボウ",
@@ -436,6 +448,8 @@ export const FISH_MASTER: FishMaster[] = [
     imageId: "fish_046",
     displaySize: "xlarge",
     waterType: "saltwater",
+    rewardOnly: true,
+    linkedAchievementId: "gold_100000",
   },
   {
     type: "シャチ",
@@ -446,6 +460,8 @@ export const FISH_MASTER: FishMaster[] = [
     companionBuff: { type: "disease_resistance", value: 0.7, description: "病気耐性+70%" },
     displaySize: "xlarge",
     waterType: "saltwater",
+    rewardOnly: true,
+    linkedAchievementId: "six_tanks_full",
   },
   {
     type: "シーラカンス",
@@ -455,6 +471,8 @@ export const FISH_MASTER: FishMaster[] = [
     imageId: "fish_019",
     displaySize: "large",
     waterType: "saltwater",
+    rewardOnly: true,
+    linkedAchievementId: "words_10000",
   },
   {
     type: "イッカク",

@@ -166,6 +166,7 @@ interface GameContextValue {
   saveWord: (word: Word) => void;
   saveWords: (words: Word[]) => void;
   removeWord: (id: string) => void;
+  removeWords: (ids: string[]) => void;
   recordAnswer: (wordId: string, correct: boolean) => void;
   resetWordWeak: (wordId: string) => void;
   allGenres: string[]; // 単語データ + customGenres から自動生成
@@ -187,6 +188,8 @@ interface GameContextValue {
   blankQuestionStats: Record<string, BlankQuestionStats>;
   addBlankQuestion: (q: Omit<BlankQuestion, "id" | "createdAt" | "lastUpdated">) => void;
   importBlankQuestions: (qs: Omit<BlankQuestion, "id" | "createdAt" | "lastUpdated">[]) => void;
+  updateBlankQuestion: (q: BlankQuestion) => void;
+  upsertBlankQuestions: (rows: BlankQuestion[]) => void;
   removeBlankQuestion: (id: string) => void;
   recordBlankAnswer: (id: string, correct: boolean) => void;
 
@@ -865,6 +868,21 @@ export function GameProvider({ children }: { children: ReactNode }) {
     persistUser({ ...u, deletedWordIds: [...(u.deletedWordIds ?? []), id] });
   }, [persistUser]);
 
+  // 一括削除（バッチ）：state更新1回・UserStatus書き込み1回で重い再描画/書き込みループを解消
+  const removeWords = useCallback((ids: string[]) => {
+    if (ids.length === 0) return;
+    const idSet = new Set(ids);
+    setWords((ws) => ws.filter((w) => !idSet.has(w.id)));
+    setWordStats((s) => {
+      const next = { ...s };
+      for (const id of ids) delete next[id];
+      return next;
+    });
+    for (const id of ids) void dbDeleteWord(id);
+    const u = userRef.current;
+    persistUser({ ...u, deletedWordIds: [...(u.deletedWordIds ?? []), ...ids] });
+  }, [persistUser]);
+
   const recordAnswer = useCallback((wordId: string, correct: boolean) => {
     setWordStats((s) => {
       const prev = s[wordId] ?? {
@@ -1040,11 +1058,14 @@ export function GameProvider({ children }: { children: ReactNode }) {
     for (const a of rewardsToClaim) {
       const rewardFish = allFishMaster.find((f) => f.linkedAchievementId === a.id);
       if (!rewardFish) continue;
+      // 通常のガチャ入手と同じく、魚の名前は種族名（displayName優先）をデフォルトにする。
+      // 実績のラベルを名前にしてしまうと後から改名しづらいバグだったため修正。
+      const fishName = rewardFish.displayName ?? rewardFish.type;
       if (tankCount < user.tankCapacity) {
-        addFishToTank(rewardFish, a.label);
+        addFishToTank(rewardFish, fishName);
         tankCount++;
       } else {
-        addFishToBox(rewardFish, a.label);
+        addFishToBox(rewardFish, fishName);
       }
       pushNotice("🏆", `実績報酬:「${a.label}」→ ${rewardFish.displayName ?? rewardFish.type}がなかまに！`);
     }
@@ -1363,6 +1384,29 @@ export function GameProvider({ children }: { children: ReactNode }) {
     []
   );
 
+  const updateBlankQuestion = useCallback(
+    (q: BlankQuestion) => {
+      const updated: BlankQuestion = { ...q, lastUpdated: Date.now() };
+      setBlankQuestions((prev) => prev.map((x) => (x.id === q.id ? updated : x)));
+      void putBlankQuestion(updated);
+    },
+    []
+  );
+
+  // CSV往復取り込み用：id一致は更新、無ければ追加を一括処理（統計はid据え置きで維持）
+  const upsertBlankQuestions = useCallback(
+    (rows: BlankQuestion[]) => {
+      if (rows.length === 0) return;
+      setBlankQuestions((prev) => {
+        const map = new Map(prev.map((q) => [q.id, q]));
+        for (const r of rows) map.set(r.id, r);
+        return Array.from(map.values());
+      });
+      void putBlankQuestions(rows);
+    },
+    []
+  );
+
   const removeBlankQuestion = useCallback(
     (id: string) => {
       setBlankQuestions((prev) => prev.filter((q) => q.id !== id));
@@ -1414,8 +1458,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
         return;
       }
       // pull 後に全 state を IndexedDB から再読み込み
-      const [updatedFish, updatedUser, updatedWords, updatedStats, updatedEncy, updatedHistory, updatedSessions, updatedLedger] = await Promise.all([
-        getAllFish(), getUserStatus(), getAllWords(), getAllWordStats(), getAllEncyclopedia(), getAllFishHistory(), getAllStudySessions(), getAllGoldLedger()
+      const [updatedFish, updatedUser, updatedWords, updatedStats, updatedEncy, updatedHistory, updatedSessions, updatedLedger, updatedBlanks, updatedBlankStats] = await Promise.all([
+        getAllFish(), getUserStatus(), getAllWords(), getAllWordStats(), getAllEncyclopedia(), getAllFishHistory(), getAllStudySessions(), getAllGoldLedger(), getAllBlankQuestions(), getAllBlankQuestionStats()
       ]);
       setFishList(updatedFish);
       if (updatedUser) setUser(updatedUser);
@@ -1425,6 +1469,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
       setFishHistory(updatedHistory.sort((a, b) => a.timestamp - b.timestamp));
       setStudySessions(updatedSessions.sort((a, b) => a.timestamp - b.timestamp));
       setGoldLedger(updatedLedger.sort((a, b) => a.timestamp - b.timestamp));
+      setBlankQuestions(updatedBlanks);
+      setBlankQuestionStats(Object.fromEntries(updatedBlankStats.map((s) => [s.id, s])));
       pushNotice("☁️", "クラウドから復元しました");
     } catch (err) {
       console.error("[Sync] pull failed:", err);
@@ -1477,6 +1523,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         saveWord,
         saveWords,
         removeWord,
+        removeWords,
         recordAnswer,
         resetWordWeak,
         allGenres,
@@ -1501,6 +1548,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
         blankQuestionStats,
         addBlankQuestion,
         importBlankQuestions,
+        updateBlankQuestion,
+        upsertBlankQuestions,
         removeBlankQuestion,
         recordBlankAnswer,
         resetAllData,

@@ -1,4 +1,4 @@
-const CACHE_NAME = "aqualingua-v3";
+const CACHE_NAME = "aqualingua-v4";
 const STATIC_ASSETS = [
   "/manifest.json",
 ];

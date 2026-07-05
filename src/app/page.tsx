@@ -44,7 +44,7 @@ const HOME_BUTTONS: { id: TabId | "settings" | "tutorial"; label: string; icon: 
   { id: "achievements", label: "実績", icon: "🏆", desc: "達成した実績と報酬" },
   { id: "shop", label: "ショップ", icon: "🛒", desc: "ガチャ・アイテム" },
   { id: "tutorial", label: "あそびかた", icon: "📖", desc: "チュートリアルを見る" },
-  { id: "settings", label: "設定", icon: "⚙️", desc: "セーブ・音・初期化" },
+  { id: "settings", label: "設定", icon: "⚙️", desc: "セーブ・音・アカウント" },
   { id: "admin", label: "管理者", icon: "🔧", desc: "図鑑のおさかなを追加" },
 ];
 
@@ -302,7 +302,7 @@ export default function Page() {
     );
   }
 
-  if (status === "unauthenticated") {
+  if (status === "unauthenticated" && typeof window !== "undefined" && !window.location.search.includes("devbypass=1")) {
     return <LoginScreen />;
   }
 

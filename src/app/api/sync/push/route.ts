@@ -20,7 +20,32 @@ type PushPayload = {
   studySessions?: Row[];
   goldLedger?: Row[];
   fishHistory?: Row[];
+  blankQuestions?: Row[];
+  blankQuestionStats?: Row[];
 };
+
+// 穴抜け問題のテーブルは後から追加したため、無ければ自動作成する
+// （非エンジニアでも Azure で手作業せずに動くように）
+async function ensureBlankTables(pool: sql.ConnectionPool) {
+  await pool.request().query(`
+    IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'blank_questions')
+    CREATE TABLE blank_questions (
+      userId NVARCHAR(256) NOT NULL,
+      id NVARCHAR(128) NOT NULL,
+      data NVARCHAR(MAX) NOT NULL,
+      lastUpdated BIGINT NOT NULL,
+      PRIMARY KEY (userId, id)
+    );
+    IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'blank_question_stats')
+    CREATE TABLE blank_question_stats (
+      userId NVARCHAR(256) NOT NULL,
+      id NVARCHAR(128) NOT NULL,
+      data NVARCHAR(MAX) NOT NULL,
+      lastUpdated BIGINT NOT NULL,
+      PRIMARY KEY (userId, id)
+    );
+  `);
+}
 
 // 各行を { key, data(オブジェクト全体), lastUpdated } に整形して JSON 文字列にする
 function buildRowsJson(rows: Row[], keyCol: string): string {
@@ -98,10 +123,13 @@ export async function POST(req: NextRequest) {
   try {
     const body: PushPayload = await req.json();
     const pool = await getPool();
+    await ensureBlankTables(pool);
 
     // words / fish は clear+rewrite（削除した分がクラウドに残り続けるのを防ぐ）
     await replaceTable(pool, userId, "words", "id", body.words ?? []);
     await replaceTable(pool, userId, "fish", "fishId", body.fish ?? []);
+    // 穴抜け問題も削除反映のため clear+rewrite
+    await replaceTable(pool, userId, "blank_questions", "id", body.blankQuestions ?? []);
 
     // 他テーブルは LWW 条件付き MERGE
     await mergeTable(pool, userId, "word_stats", "wordId", body.wordStats ?? []);
@@ -109,6 +137,7 @@ export async function POST(req: NextRequest) {
     await mergeTable(pool, userId, "study_sessions", "sessionId", body.studySessions ?? []);
     await mergeTable(pool, userId, "gold_ledger", "entryId", body.goldLedger ?? []);
     await mergeTable(pool, userId, "fish_history", "entryId", body.fishHistory ?? []);
+    await mergeTable(pool, userId, "blank_question_stats", "id", body.blankQuestionStats ?? []);
 
     if (body.userStatus) {
       const us = body.userStatus;

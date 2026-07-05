@@ -169,6 +169,7 @@ export interface BlankQuestion {
   wrongChoices: [string, string, string]; // 誤答3つ
   japaneseText: string;          // 日本語訳
   explanation: string;           // 解説
+  genre?: WordGenre;             // ジャンル（単語帳と共通。未設定は「未分類」扱い）
   createdAt: number;
   lastUpdated: number;
 }

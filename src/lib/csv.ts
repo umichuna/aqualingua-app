@@ -83,18 +83,24 @@ export function parseVocabularyCsv(
     const meanings = [row["意味1"], row["意味2"], row["意味3"]]
       .map((m) => (m ?? "").trim())
       .filter(Boolean);
-    const examples = [row["例文1"], row["例文2"], row["例文3"]]
-      .map((e) => (e ?? "").trim())
-      .filter(Boolean);
+    // 例文と訳をペアで取り込む（訳列があれば往復編集で保持される）
+    const exampleParts = [
+      { s: (row["例文1"] ?? "").trim(), t: (row["訳1"] ?? "").trim() },
+      { s: (row["例文2"] ?? "").trim(), t: (row["訳2"] ?? "").trim() },
+      { s: (row["例文3"] ?? "").trim(), t: (row["訳3"] ?? "").trim() },
+    ].filter((e) => e.s);
+
+    // id 列があれば保持（エクスポート→編集→取り込みで既存を上書き更新するため）
+    const existingId = (row["id"] ?? "").trim();
 
     const word: Word = {
-      id: crypto.randomUUID(),
+      id: existingId || crypto.randomUUID(),
       spelling,
       wordType,
       meanings,
-      exampleSentence: examples[0] ?? "",
-      exampleTranslation: "",
-      examples: examples.map((s) => ({ sentence: s, translation: "" })),
+      exampleSentence: exampleParts[0]?.s ?? "",
+      exampleTranslation: exampleParts[0]?.t ?? "",
+      examples: exampleParts.map((e) => ({ sentence: e.s, translation: e.t })),
       level,
       genre: genre ?? rawGenre,
       lastUpdated: Date.now(),
@@ -111,4 +117,41 @@ export function parseVocabularyCsv(
 
   result.unknownGenres = Array.from(unknownGenreSet);
   return result;
+}
+
+// 単語をCSV文字列に変換（エクスポート用）。
+// id 列を含むため、編集して取り込むと既存単語を上書き更新できる（往復編集）。
+// 列: id,単語,種別,ジャンル,レベル,意味1..3,例文1..3,訳1..3
+export function wordsToCsv(words: Word[]): string {
+  const rows = words.map((w) => {
+    const examples =
+      w.examples && w.examples.length > 0
+        ? w.examples
+        : w.exampleSentence
+        ? [{ sentence: w.exampleSentence, translation: w.exampleTranslation ?? "" }]
+        : [];
+    return {
+      id: w.id,
+      単語: w.spelling,
+      種別: w.wordType,
+      ジャンル: w.genre,
+      レベル: w.level,
+      意味1: w.meanings[0] ?? "",
+      意味2: w.meanings[1] ?? "",
+      意味3: w.meanings[2] ?? "",
+      例文1: examples[0]?.sentence ?? "",
+      例文2: examples[1]?.sentence ?? "",
+      例文3: examples[2]?.sentence ?? "",
+      訳1: examples[0]?.translation ?? "",
+      訳2: examples[1]?.translation ?? "",
+      訳3: examples[2]?.translation ?? "",
+    };
+  });
+  const columns = [
+    "id", "単語", "種別", "ジャンル", "レベル",
+    "意味1", "意味2", "意味3",
+    "例文1", "例文2", "例文3",
+    "訳1", "訳2", "訳3",
+  ];
+  return Papa.unparse({ fields: columns, data: rows });
 }

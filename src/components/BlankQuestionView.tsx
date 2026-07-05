@@ -258,7 +258,10 @@ function QuestionForm({
 export default function BlankQuestionView() {
   const game = useGame();
   const { blankQuestions, blankQuestionStats } = game;
-  const genres = useMemo(() => ["未分類", ...game.allGenres.filter((g) => g !== "未分類")], [game.allGenres]);
+  const genres = useMemo(() => {
+    const set = new Set(blankQuestions.map((q) => q.genre ?? "未分類"));
+    return ["未分類", ...Array.from(set).filter((g) => g !== "未分類").sort()];
+  }, [blankQuestions]);
 
   const [showForm, setShowForm] = useState(false);
   const [editingQ, setEditingQ] = useState<BlankQuestion | null>(null);
@@ -292,12 +295,16 @@ export default function BlankQuestionView() {
       encoding: "UTF-8",
       skipEmptyLines: true,
       complete: (result) => {
-        const rows = result.data.filter((r) => r[0] !== "文");
+        const rows = result.data.filter((r) => {
+          const first = (r[0] ?? "").replace(/^﻿/, "").trim();
+          return first !== "文" && first !== "";
+        });
         const parsed: Omit<BlankQuestion, "id" | "createdAt" | "lastUpdated">[] = [];
         const errors: string[] = [];
         rows.forEach((cols, i) => {
           if (cols.length < 6) { errors.push(`行${i + 2}: 列が足りません`); return; }
-          const [sentence, japaneseText, answer, w1, w2, w3, explanation = "", genre = "未分類"] = cols;
+          const sentence = cols[0].replace(/^﻿/, "").trim();
+          const [, japaneseText, answer, w1, w2, w3, explanation = "", genre = "未分類"] = cols;
           if (!sentence.includes(PLACEHOLDER)) { errors.push(`行${i + 2}: 〈〉がありません`); return; }
           parsed.push({
             sentence: sentence.trim(),
