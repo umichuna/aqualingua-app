@@ -35,9 +35,11 @@ export default function AchievementView() {
       <div className="grid grid-cols-1 gap-3">
         {ACHIEVEMENTS.map((achievement) => {
           const isUnlocked = user.unlockedAchievements?.includes(achievement.id);
+          const isClaimed = user.claimedAchievementRewards?.includes(achievement.id) ?? false;
           const rewardFish = allFishMaster.find(
             (f) => f.linkedAchievementId === achievement.id
           );
+          const showGetButton = isUnlocked && rewardFish && !isClaimed;
 
           return (
             <div
@@ -48,7 +50,6 @@ export default function AchievementView() {
             >
               {/* ヘッダー */}
               <div className="flex items-start gap-3">
-                {/* アイコンと名前 */}
                 <div className="text-3xl flex-shrink-0">
                   {isUnlocked ? "✅" : "🔒"}
                 </div>
@@ -69,19 +70,30 @@ export default function AchievementView() {
                 </div>
               )}
 
-              {/* 報酬魚サムネイル */}
-              {isUnlocked && rewardFish && (
-                <div className="flex items-center gap-2 ml-12 pt-2">
-                  <span className="text-xs font-pixel text-glow">報酬:</span>
-                  <div className="w-10 h-10 bg-sea rounded-lg flex items-center justify-center flex-shrink-0">
-                    <PixelFish
-                      type={rewardFish.type}
-                      size={40}
-                    />
+              {/* 報酬魚 */}
+              {rewardFish && (
+                <div className="ml-12 pt-2 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-pixel text-glow">報酬:</span>
+                    <div className="w-10 h-10 bg-sea rounded-lg flex items-center justify-center flex-shrink-0">
+                      <PixelFish type={rewardFish.type} size={40} />
+                    </div>
+                    <span className="text-xs font-pixel text-glow">
+                      {rewardFish.displayName ?? rewardFish.type}
+                    </span>
                   </div>
-                  <span className="text-xs font-pixel text-glow">
-                    {rewardFish.displayName ?? rewardFish.type}
-                  </span>
+
+                  {showGetButton && (
+                    <button
+                      onClick={() => game.claimAchievementReward(achievement.id)}
+                      className="w-full py-2 rounded-xl bg-glow text-deep text-sm font-bold font-pixel active:scale-95 transition-transform"
+                    >
+                      🎁 GET
+                    </button>
+                  )}
+                  {isClaimed && (
+                    <div className="text-center text-xs font-pixel text-dim">受け取り済み ✅</div>
+                  )}
                 </div>
               )}
             </div>

@@ -193,6 +193,9 @@ interface GameContextValue {
   removeBlankQuestion: (id: string) => void;
   recordBlankAnswer: (id: string, correct: boolean) => void;
 
+  // 実績
+  claimAchievementReward: (achievementId: string) => void;
+
   // その他
   resetAllData: () => Promise<void>;
   syncNow: () => Promise<void>;
@@ -1006,73 +1009,33 @@ export function GameProvider({ children }: { children: ReactNode }) {
     // 新たに条件を満たした実績（ロック→解除）
     const newAchievements = checkNewAchievements(stats, alreadyUnlocked);
 
-    // 「解除済み」と「報酬受け取り済み」を分離して管理する。
-    // 報酬魚は実績登録より後に紐付けられるため、解除だけ先に済んでいる実績にも
-    // あとから報酬魚が用意されたら届くようにする（＝解除の瞬間だけに依存しない）。
     const newToUnlock = newAchievements.filter((a) => !grantedRewardRef.current.has(a.id));
-    // 解除済み（既存＋今回新規）のうち、報酬魚が登録済みでまだ受け取っていないもの
-    const unlockedIds = new Set<string>([...alreadyUnlocked, ...newAchievements.map((a) => a.id)]);
-    const rewardsToClaim = ACHIEVEMENTS.filter(
-      (a) =>
-        unlockedIds.has(a.id) &&
-        !claimed.includes(a.id) &&
-        !grantedRewardRef.current.has(`reward:${a.id}`) &&
-        allFishMaster.some((f) => f.linkedAchievementId === a.id)
-    );
 
-    if (newToUnlock.length === 0 && rewardsToClaim.length === 0) return;
+    if (newToUnlock.length === 0) return;
 
-    // 同期的な二重処理ガード（setUser がコミットされる前の再発火をブロック）
+    // 同期的な二重処理ガード
     for (const a of newToUnlock) grantedRewardRef.current.add(a.id);
-    for (const a of rewardsToClaim) grantedRewardRef.current.add(`reward:${a.id}`);
 
-    // ① unlockedAchievements と claimedAchievementRewards を1回の関数型 setUser で更新（B2対策）
+    // unlockedAchievements を関数型 setUser で更新（B2対策）
     setUser((prevUser) => {
       const prevUnlocked = prevUser.unlockedAchievements ?? [];
-      const prevClaimed = prevUser.claimedAchievementRewards ?? [];
       const mergedUnlocked = [...prevUnlocked];
       for (const a of newToUnlock) if (!mergedUnlocked.includes(a.id)) mergedUnlocked.push(a.id);
-      const mergedClaimed = [...prevClaimed];
-      for (const a of rewardsToClaim) if (!mergedClaimed.includes(a.id)) mergedClaimed.push(a.id);
-      if (
-        mergedUnlocked.length === prevUnlocked.length &&
-        mergedClaimed.length === prevClaimed.length
-      ) {
-        return prevUser;
-      }
+      if (mergedUnlocked.length === prevUnlocked.length) return prevUser;
       const updated = {
         ...prevUser,
         unlockedAchievements: mergedUnlocked,
-        claimedAchievementRewards: mergedClaimed,
         lastUpdated: Date.now(),
       };
       void putUserStatus(updated);
       return updated;
     });
 
-    // ② 報酬魚の付与・通知は updater の外でループ。現在の水槽内の匹数をローカル追跡し、
-    //    水槽ごとの容量（口座共通の tankCapacity）で判定する（B5対策）。
-    let tankCount = fishRef.current.filter(
-      (f) => (f.tankId ?? "sw-1") === currentTankIdRef.current
-    ).length;
-    for (const a of rewardsToClaim) {
-      const rewardFish = allFishMaster.find((f) => f.linkedAchievementId === a.id);
-      if (!rewardFish) continue;
-      // 通常のガチャ入手と同じく、魚の名前は種族名（displayName優先）をデフォルトにする。
-      // 実績のラベルを名前にしてしまうと後から改名しづらいバグだったため修正。
-      const fishName = rewardFish.displayName ?? rewardFish.type;
-      if (tankCount < user.tankCapacity) {
-        addFishToTank(rewardFish, fishName);
-        tankCount++;
-      } else {
-        addFishToBox(rewardFish, fishName);
-      }
-      pushNotice("🏆", `実績報酬:「${a.label}」→ ${rewardFish.displayName ?? rewardFish.type}がなかまに！`);
-    }
-
-    // ③ 新規解除だが報酬魚がまだ登録されていないものはお知らせのみ
+    // 新規解除の通知（報酬魚の有無で文言を変える）
     for (const a of newToUnlock) {
-      if (!allFishMaster.some((f) => f.linkedAchievementId === a.id)) {
+      if (allFishMaster.some((f) => f.linkedAchievementId === a.id)) {
+        pushNotice("🏆", `実績解除:「${a.label}」→ 実績画面でGETしてね！`);
+      } else {
         pushNotice("🏆", `実績解除:「${a.label}」（報酬のおさかなは準備中です）`);
       }
     }
@@ -1084,17 +1047,47 @@ export function GameProvider({ children }: { children: ReactNode }) {
     user.lifetimeGoldEarned,
     user.jobLevel,
     user.customFish,
-    user.tankCapacity,
     user.unlockedAchievements,
-    user.claimedAchievementRewards,
     sharedCustomFish,
     encyclopedia,
     allFishMaster,
     setUser,
-    addFishToTank,
-    addFishToBox,
     pushNotice,
   ]);
+
+  const claimAchievementReward = useCallback(
+    (achievementId: string) => {
+      const achievement = ACHIEVEMENTS.find((a) => a.id === achievementId);
+      const rewardFish = allFishMasterRef.current.find((f) => f.linkedAchievementId === achievementId);
+      if (!rewardFish) return;
+
+      const name = rewardFish.displayName ?? rewardFish.type;
+      const tankCount = fishRef.current.filter(
+        (f) => (f.tankId ?? "sw-1") === currentTankIdRef.current
+      ).length;
+
+      if (tankCount < userRef.current.tankCapacity) {
+        addFishToTank(rewardFish, name);
+      } else {
+        addFishToBox(rewardFish, name);
+      }
+
+      setUser((u) => {
+        const prev = u.claimedAchievementRewards ?? [];
+        if (prev.includes(achievementId)) return u;
+        const updated = {
+          ...u,
+          claimedAchievementRewards: [...prev, achievementId],
+          lastUpdated: Date.now(),
+        };
+        void putUserStatus(updated);
+        return updated;
+      });
+
+      pushNotice("🏆", `「${achievement?.label ?? ""}」の報酬 ${name} がなかまに！`);
+    },
+    [addFishToTank, addFishToBox, pushNotice, setUser]
+  );
 
   const addCustomFish = useCallback(
     (def: CustomFishDef) => {
@@ -1552,6 +1545,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         upsertBlankQuestions,
         removeBlankQuestion,
         recordBlankAnswer,
+        claimAchievementReward,
         resetAllData,
         syncNow,
         pushNow,
