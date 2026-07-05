@@ -80,6 +80,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     icon: "💰",
     description: "累計獲得ゴールドが10万Gに到達する",
     isUnlocked: (s) => s.lifetimeGoldEarned >= 100000,
+    progressText: (s) =>
+      `${Math.min(s.lifetimeGoldEarned, 100000).toLocaleString()}/100,000G`,
   },
   {
     id: "job_level_max",
