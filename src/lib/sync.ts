@@ -39,6 +39,17 @@ export async function pullFromCloud(userId: string): Promise<boolean> {
 
     // userStatus（所持金・累計・カスタム魚・onboardingDone などを含む単一レコード）
     if (cloudData.userStatus) {
+      // ---- 調査ログ: pull がローカルの userStatus を何で上書きするか ----
+      const localBefore = await db.getUserStatus();
+      const c = cloudData.userStatus;
+      console.warn(
+        "[SyncDebug] PULL userStatus overwrite",
+        {
+          local: localBefore && { tankCapacity: localBefore.tankCapacity, boxCapacity: localBefore.boxCapacity, gold: localBefore.gold, items: localBefore.items, lastUpdated: localBefore.lastUpdated },
+          cloud: { tankCapacity: c.tankCapacity, boxCapacity: c.boxCapacity, gold: c.gold, items: c.items, lastUpdated: c.lastUpdated },
+          willRollback: !!localBefore && c.lastUpdated < localBefore.lastUpdated,
+        }
+      );
       await db.putUserStatus(cloudData.userStatus);
       restored = true;
     }
@@ -112,6 +123,18 @@ export async function pushToCloud(userId: string): Promise<void> {
     const fishHistory = await db.getAllFishHistory();
     const blankQuestions = await db.getAllBlankQuestions();
     const blankQuestionStats = await db.getAllBlankQuestionStats();
+
+    // ---- 調査ログ: push がクラウドへ送る userStatus の中身 ----
+    console.warn(
+      "[SyncDebug] PUSH userStatus",
+      userStatus && {
+        tankCapacity: userStatus.tankCapacity,
+        boxCapacity: userStatus.boxCapacity,
+        gold: userStatus.gold,
+        items: userStatus.items,
+        lastUpdated: userStatus.lastUpdated,
+      }
+    );
 
     const payload = {
       userStatus,

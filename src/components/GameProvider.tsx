@@ -433,7 +433,34 @@ export function GameProvider({ children }: { children: ReactNode }) {
         const answered = sessions.filter((s) => s.mode !== "free").reduce((acc, s) => acc + (s.count ?? 0), 0);
         if (answered > 0) { loadedUser.lifetimeWordsAnswered = answered; needsSave = true; }
       }
-      if (needsSave) void putUserStatus(loadedUser);
+
+      // ---- 拡張パック(容量)の復旧 ----
+      // 同期バグで tankCapacity/boxCapacity が巻き戻ることがある。
+      // 通帳（購入記録は消えない）から本来の容量を計算し、現在値が下回っていたら戻す。
+      {
+        const tankBuys = ledger.filter((e) => e.reason === "水槽拡張キット").length;
+        const boxBuys = ledger.filter((e) => e.reason === "ボックス拡張キット").length;
+        const expectedTank = Math.min(MAX_TANK_CAPACITY, 4 + tankBuys * 2);
+        const expectedBox = BOX_CAPACITY_INITIAL + boxBuys * 5;
+        if (loadedUser.tankCapacity < expectedTank) {
+          console.warn(`[Recover] tankCapacity ${loadedUser.tankCapacity} → ${expectedTank}（通帳の拡張購入 ${tankBuys}回から復旧）`);
+          loadedUser.tankCapacity = expectedTank;
+          needsSave = true;
+        }
+        const curBox = loadedUser.boxCapacity ?? BOX_CAPACITY_INITIAL;
+        if (curBox < expectedBox) {
+          console.warn(`[Recover] boxCapacity ${curBox} → ${expectedBox}（通帳の拡張購入 ${boxBuys}回から復旧）`);
+          loadedUser.boxCapacity = expectedBox;
+          needsSave = true;
+        }
+      }
+
+      // 補正・復旧したデータは「新しい変更」として扱う（古い日時のまま保存すると
+      // 同期で巻き戻る原因になるため、lastUpdated を現在時刻に更新する）
+      if (needsSave) {
+        loadedUser.lastUpdated = now;
+        void putUserStatus(loadedUser);
+      }
 
       if (u) {
         applyOfflineEffects(loadedUser, fish, now);
