@@ -421,6 +421,16 @@ export function GameProvider({ children }: { children: ReactNode }) {
       setStudySessions(sessions.sort((a, b) => a.timestamp - b.timestamp));
       setGoldLedger(ledger.sort((a, b) => a.timestamp - b.timestamp));
       const now = Date.now();
+
+      // lifetimeGoldEarned が未設定/0 の場合、通帳のプラス合計でバックフィル
+      if (!loadedUser.lifetimeGoldEarned && ledger.length > 0) {
+        const earned = ledger.filter((e) => e.amount > 0).reduce((s, e) => s + e.amount, 0);
+        if (earned > 0) {
+          loadedUser.lifetimeGoldEarned = earned;
+          void putUserStatus(loadedUser);
+        }
+      }
+
       if (u) {
         applyOfflineEffects(loadedUser, fish, now);
       } else {
