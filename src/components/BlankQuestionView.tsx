@@ -49,25 +49,39 @@ export function QuizPlay({
   onFinish: (score: number, total: number) => void;
   onQuit?: (completedCount: number, score: number) => void;
 }) {
-  const [idx, setIdx] = useState(0);
+  // キュー方式: 不正解は末尾に追加して正解するまで繰り返す
+  const [queue, setQueue] = useState<BlankQuestion[]>([...questions]);
+  const [queueIdx, setQueueIdx] = useState(0);
   const [picked, setPicked] = useState<string | null>(null);
   const [score, setScore] = useState(0);
+  const firstAttempted = useRef<Set<string>>(new Set()); // 初回挑戦済みID（スコアの二重加算防止）
 
-  const q = questions[idx];
+  const q = queue[queueIdx];
   const choices = useMemo(
     () => (q ? shuffle([q.answer, ...q.wrongChoices]) : []),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [idx]
+    [queueIdx]
   );
 
   if (!q) return null;
   const isCorrect = picked === q.answer;
+  const correctCount = firstAttempted.current.size; // 初回正解済み問題数（進捗表示用）
 
   const next = () => {
-    if (idx + 1 >= questions.length) {
-      onFinish(score + (isCorrect ? 1 : 0), questions.length);
+    if (!picked) return;
+    if (isCorrect) {
+      // 正解: キューの次へ
+      if (queueIdx + 1 >= queue.length) {
+        onFinish(score, questions.length);
+      } else {
+        setQueueIdx((i) => i + 1);
+        setPicked(null);
+      }
     } else {
-      setIdx(idx + 1);
+      // 不正解: 末尾に追加して次へ
+      const next = [...queue, q];
+      setQueue(next);
+      setQueueIdx((i) => i + 1);
       setPicked(null);
     }
   };
@@ -75,8 +89,8 @@ export function QuizPlay({
   return (
     <div className="p-4 flex flex-col gap-4 h-full">
       <div className="flex justify-between text-xs text-dim">
-        <button onClick={() => onQuit?.(idx, score)} className="underline">← やめる</button>
-        <span>{idx + 1} / {questions.length}</span>
+        <button onClick={() => onQuit?.(correctCount, score)} className="underline">← やめる</button>
+        <span>{correctCount} / {questions.length}</span>
         {stats[q.id]?.incorrectCount ? (
           <span className="text-coral">⚠️ 苦手 {stats[q.id].incorrectCount}回</span>
         ) : null}
@@ -116,7 +130,11 @@ export function QuizPlay({
               onClick={() => {
                 setPicked(c);
                 const ok = c === q.answer;
-                if (ok) setScore((s) => s + 1);
+                const isFirst = !firstAttempted.current.has(q.id);
+                if (ok && isFirst) {
+                  setScore((s) => s + 1);
+                  firstAttempted.current.add(q.id);
+                }
                 onRecord(q.id, ok);
               }}
               className={`py-3 px-4 rounded-xl font-bold text-sm text-left transition-all active:scale-95 ${cls}`}
@@ -132,7 +150,11 @@ export function QuizPlay({
           onClick={next}
           className="w-full py-3 rounded-xl font-bold bg-sand text-deep active:scale-95 transition-transform"
         >
-          {idx + 1 >= questions.length ? "結果を見る" : "次へ →"}
+          {isCorrect && correctCount + 1 >= questions.length
+            ? "結果を見る"
+            : isCorrect
+            ? "次へ →"
+            : "もう一度チャレンジ →"}
         </button>
       )}
     </div>
