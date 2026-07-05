@@ -423,13 +423,17 @@ export function GameProvider({ children }: { children: ReactNode }) {
       const now = Date.now();
 
       // lifetimeGoldEarned が未設定/0 の場合、通帳のプラス合計でバックフィル
+      // lifetimeWordsAnswered が未設定/0 の場合、カレンダー記録のcount合計でバックフィル
+      let needsSave = false;
       if (!loadedUser.lifetimeGoldEarned && ledger.length > 0) {
         const earned = ledger.filter((e) => e.amount > 0).reduce((s, e) => s + e.amount, 0);
-        if (earned > 0) {
-          loadedUser.lifetimeGoldEarned = earned;
-          void putUserStatus(loadedUser);
-        }
+        if (earned > 0) { loadedUser.lifetimeGoldEarned = earned; needsSave = true; }
       }
+      if (!loadedUser.lifetimeWordsAnswered && sessions.length > 0) {
+        const answered = sessions.filter((s) => s.mode !== "free").reduce((acc, s) => acc + (s.count ?? 0), 0);
+        if (answered > 0) { loadedUser.lifetimeWordsAnswered = answered; needsSave = true; }
+      }
+      if (needsSave) void putUserStatus(loadedUser);
 
       if (u) {
         applyOfflineEffects(loadedUser, fish, now);
