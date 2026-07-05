@@ -6,6 +6,40 @@
 
 ---
 
+## 2026-07-05（追記）: 実績報酬を手動GETボタン方式に変更
+
+### 依頼内容
+「水槽もBOXもいっぱいだと報酬を受け取れないのでは」という問題提起。
+自動付与をやめて、実績画面の「🎁 GET」ボタンから任意のタイミングで受け取れるようにする。
+
+### 変更内容
+
+**GameProvider.tsx**
+- 実績useEffectから自動付与ループを削除。解除検出と`unlockedAchievements`更新・通知のみに簡略化。
+- `claimAchievementReward(achievementId)` 関数を新設。呼び出すと水槽に空きがあれば水槽、なければBOXへ魚を追加し`claimedAchievementRewards`に記録。
+- 解除通知の文言を「実績画面でGETしてね！」に変更。
+
+**AchievementView.tsx**
+- 各実績カードに状態別の表示を追加：
+  - 解除済み・未受取 → 「🎁 GET」ボタン
+  - 解除済み・受取済み → 「受け取り済み ✅」テキスト
+  - 未解除 → 魚プレビューのみ（GETもテキストもなし）
+
+### 変更ファイル
+- `src/components/GameProvider.tsx`
+- `src/components/AchievementView.tsx`
+
+### 検証（ブラウザ実機 2026-07-05）
+- 型エラー0件（`npx tsc --noEmit`）
+- 実績画面で「✅ 受け取り済み」が既受取実績に正しく表示されることを確認
+- GETボタンのUI（コード・ロジック）は正常、報酬有り実績の未受取ケースで表示される
+
+### 技術情報メモ
+- `claimAchievementReward`は`fishRef`と`currentTankIdRef`（ref経由）を参照するため、useCallback依存配列はシンプル。
+- BOXには容量上限なし（現仕様）。GETボタン方式により、水槽がいっぱいでも整理してから受け取り可能になった。
+
+---
+
 ## 2026-07-05: WordManager・BlankQuestionView・StudyView・Modals 機能追加・デバッグ完了
 
 ### 依頼内容
