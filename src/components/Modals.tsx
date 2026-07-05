@@ -39,7 +39,6 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   const game = useGame();
   const { data: session } = useSession();
   const email = session?.user?.email;
-  const [confirmReset, setConfirmReset] = useState(false);
   const [sfxOn, setSfxOn] = useState(isSfxEnabled);
   const [bgmOn, setBgmOn] = useState(isBgmEnabled);
   const [bgmVol, setBgmVol] = useState(getBgmVolume);
@@ -306,51 +305,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
           )}
         </div>
 
-        <div className="text-[10px] font-bold tracking-widest mb-1 text-coral">危険ゾーン</div>
-        <div className="rounded-xl px-3 py-2.5 flex items-center justify-between bg-mid">
-          <div>
-            <div className="text-sm font-bold text-foam">ローカルデータを初期化</div>
-            <div className="text-[10px] text-dim">単語・魚・ゴールドが全部消えます（復元不可）</div>
-          </div>
-          <button
-            onClick={() => setConfirmReset(true)}
-            className="text-xs px-2.5 py-1 rounded-lg font-bold bg-coral/20 text-coral"
-          >
-            初期化
-          </button>
-        </div>
-
-<div className="text-center text-[10px] mt-3 text-dim">AquaLingua v1.0 MVP</div>
-
-        {confirmReset && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/80" onClick={() => setConfirmReset(false)}>
-            <div
-              onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-xs p-5 text-center bg-sea font-pixel"
-              style={{ border: "4px solid var(--aqua-coral)", boxShadow: "0 0 0 4px var(--aqua-deep)" }}
-            >
-              <div className="text-3xl mb-2">⚠️</div>
-              <div className="font-bold text-foam mb-1">本当に全部消す？</div>
-              <div className="text-xs text-dim mb-4">魚も単語もゴールドも、ぜんぶ最初からになるよ</div>
-              <div className="flex gap-2">
-                <button onClick={() => setConfirmReset(false)} className="flex-1 py-2 text-sm font-bold bg-white/10 text-dim">
-                  やめておく
-                </button>
-                <button
-                  onClick={() => {
-                    void game.resetAllData().then(() => {
-                      setConfirmReset(false);
-                      onClose();
-                    });
-                  }}
-                  className="flex-1 py-2 text-sm font-bold bg-coral text-deep"
-                >
-                  初期化する
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        <div className="text-center text-[10px] mt-3 text-dim">AquaLingua v1.0 MVP</div>
       </div>
     </div>
   );

@@ -8,7 +8,7 @@
 // - CSV一括登録
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { parseVocabularyCsv, type CsvImportResult } from "@/lib/csv";
+import { parseVocabularyCsv, wordsToCsv, type CsvImportResult } from "@/lib/csv";
 import { speak } from "@/lib/speech";
 import { type Word, type WordExample, type WordGenre, type WordLevel, type WordType } from "@/lib/types";
 import { useGame } from "./GameProvider";
@@ -113,6 +113,12 @@ export default function WordManager() {
   const [selLevels, setSelLevels] = useState<Set<WordLevel>>(new Set());
   const [selTypes, setSelTypes] = useState<Set<WordType>>(new Set());
   const [query, setQuery] = useState("");
+  // 検索は入力ごとに全リストを再フィルタ/再描画すると重いのでデバウンスする
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query), 180);
+    return () => clearTimeout(t);
+  }, [query]);
   const [sort, setSort] = useState<SortKey>("date");
   const [openFilter, setOpenFilter] = useState<"level" | "type" | "genre" | null>(null);
 
@@ -145,8 +151,8 @@ export default function WordManager() {
     if (selGenres.size > 0) pool = pool.filter((w) => selGenres.has(w.genre));
     if (selLevels.size > 0) pool = pool.filter((w) => selLevels.has(w.level));
     if (selTypes.size > 0) pool = pool.filter((w) => selTypes.has(w.wordType));
-    if (query.trim()) {
-      const q = query.trim().toLowerCase();
+    if (debouncedQuery.trim()) {
+      const q = debouncedQuery.trim().toLowerCase();
       pool = pool.filter(
         (w) =>
           w.spelling.toLowerCase().includes(q) ||
@@ -165,7 +171,7 @@ export default function WordManager() {
           );
       }
     });
-  }, [words, selGenres, selLevels, selTypes, query, sort, wordStats]);
+  }, [words, selGenres, selLevels, selTypes, debouncedQuery, sort, wordStats]);
 
   const onCsvFile = async (file: File) => {
     const text = await file.text();
@@ -224,6 +230,21 @@ export default function WordManager() {
           >
             📥 テンプレ
           </a>
+          <button
+            onClick={() => {
+              const csv = wordsToCsv(words);
+              const blob = new Blob(["﻿" + csv], { type: "text/csv" });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `aqualingua-words-${new Date().toISOString().slice(0, 10)}.csv`;
+              a.click();
+              URL.revokeObjectURL(url);
+            }}
+            className="text-xs px-2 py-1.5 rounded-lg font-bold bg-white/10 text-dim"
+          >
+            📤 書き出し
+          </button>
           <button
             onClick={() => fileRef.current?.click()}
             className="text-xs px-2 py-1.5 rounded-lg font-bold bg-glow text-deep"
@@ -565,7 +586,7 @@ export default function WordManager() {
               </button>
               <button
                 onClick={() => {
-                  selWords.forEach((id) => game.removeWord(id));
+                  game.removeWords(Array.from(selWords));
                   setSelWords(new Set());
                   setBulkDeleteConfirm(false);
                 }}

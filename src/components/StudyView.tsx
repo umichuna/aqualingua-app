@@ -127,6 +127,7 @@ export default function StudyView({ onPhaseChange }: { onPhaseChange?: (inPlay: 
   const [mode, setMode] = useState<StudyMode | "free" | null>(null);
   const [blankCount, setBlankCount] = useState<number | "all">(10);
   const [blankWeakOnly, setBlankWeakOnly] = useState(false);
+  const [blankGenres, setBlankGenres] = useState<Set<WordGenre>>(new Set());
   const [blankQuizQs, setBlankQuizQs] = useState<BlankQuestion[]>([]);
   const [blankSubView, setBlankSubView] = useState<"select" | "manage" | "setup">("select");
   const [config, setConfig] = useState<QuizConfig>({
@@ -312,9 +313,9 @@ export default function StudyView({ onPhaseChange }: { onPhaseChange?: (inPlay: 
         .filter(([, s]) => s.incorrectCount > 0)
         .map(([id]) => id)
     );
-    const pool = blankWeakOnly
-      ? blankQuestions.filter((q) => blankWeakIds.has(q.id))
-      : blankQuestions;
+    const pool = blankQuestions
+      .filter((q) => !blankWeakOnly || blankWeakIds.has(q.id))
+      .filter((q) => blankGenres.size === 0 || blankGenres.has(q.genre ?? "未分類"));
     if (pool.length === 0) {
       game.pushNotice("⚠️", "穴抜け問題がありません。「穴抜け」タブから追加してね");
       return;
@@ -444,7 +445,9 @@ export default function StudyView({ onPhaseChange }: { onPhaseChange?: (inPlay: 
         .filter(([, s]) => s.incorrectCount > 0)
         .map(([id]) => id)
     );
-    const pool = blankWeakOnly ? blankQuestions.filter((q) => blankWeakIds.has(q.id)) : blankQuestions;
+    const pool = blankQuestions
+      .filter((q) => !blankWeakOnly || blankWeakIds.has(q.id))
+      .filter((q) => blankGenres.size === 0 || blankGenres.has(q.genre ?? "未分類"));
     const available = pool.length;
     const effectiveBlankCount = blankCount === "all" ? available : Math.min(blankCount, available);
     const estimatedBlankGold = effectiveBlankCount * MODE_BASE_GOLD["blank"];
@@ -456,6 +459,32 @@ export default function StudyView({ onPhaseChange }: { onPhaseChange?: (inPlay: 
             ← 戻る
           </button>
         </div>
+
+        {/* ジャンル絞り込み */}
+        {(() => {
+          const blankGenreList = Array.from(new Set(blankQuestions.map((q) => q.genre ?? "未分類")));
+          if (blankGenreList.length <= 1) return null;
+          return (
+            <div>
+              <div className="text-xs font-bold text-glow mb-1.5">ジャンル（空=すべて）</div>
+              <div className="flex flex-wrap gap-1.5">
+                {blankGenreList.map((g) => (
+                  <button
+                    key={g}
+                    onClick={() => setBlankGenres((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(g)) next.delete(g); else next.add(g);
+                      return next;
+                    })}
+                    className={`text-xs px-2.5 py-1 rounded-full font-bold ${blankGenres.has(g) ? "bg-sand text-deep" : "bg-white/10 text-dim"}`}
+                  >
+                    {g}
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
 
         <div>
           <div className="text-xs font-bold text-glow mb-1.5">出題数（最大 {blankQuestions.length} 問）</div>
