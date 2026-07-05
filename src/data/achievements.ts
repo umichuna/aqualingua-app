@@ -97,11 +97,11 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
   {
     id: "encyclopedia_complete",
-    label: "図鑑コンプリート",
+    label: "魚コレクター",
     icon: "📕",
-    description: "ガチャで手に入るおさかなを全て図鑑に登録する",
-    isUnlocked: (s) =>
-      s.gachaFishMasterCount > 0 && s.encyclopediaCount >= s.gachaFishMasterCount,
+    description: "30種類以上のおさかなを図鑑に登録する",
+    isUnlocked: (s) => s.encyclopediaCount >= 30,
+    progressText: (s) => `${Math.min(s.encyclopediaCount, 30)}/30`,
   },
 ];
 
