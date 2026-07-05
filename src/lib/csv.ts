@@ -2,7 +2,7 @@
 // 列: 単語,種別,ジャンル,レベル,意味1,意味2,意味3,例文1,例文2,例文3
 
 import Papa from "papaparse";
-import type { Word, WordGenre, WordLevel, WordType } from "./types";
+import type { BlankQuestion, Word, WordGenre, WordLevel, WordType } from "./types";
 
 export interface CsvRowError {
   row: number; // 1始まり（ヘッダー除く）
@@ -153,5 +153,22 @@ export function wordsToCsv(words: Word[]): string {
     "例文1", "例文2", "例文3",
     "訳1", "訳2", "訳3",
   ];
+  return Papa.unparse({ fields: columns, data: rows });
+}
+
+// 穴抜け問題をCSV文字列に変換（エクスポート用）。取り込みテンプレと同じ列構成。
+// 列: 文,日本語訳,正解,誤答1,誤答2,誤答3,解説,ジャンル
+export function blankQuestionsToCsv(questions: BlankQuestion[]): string {
+  const rows = questions.map((q) => ({
+    文: q.sentence,
+    日本語訳: q.japaneseText,
+    正解: q.answer,
+    誤答1: q.wrongChoices[0] ?? "",
+    誤答2: q.wrongChoices[1] ?? "",
+    誤答3: q.wrongChoices[2] ?? "",
+    解説: q.explanation ?? "",
+    ジャンル: q.genre ?? "未分類",
+  }));
+  const columns = ["文", "日本語訳", "正解", "誤答1", "誤答2", "誤答3", "解説", "ジャンル"];
   return Papa.unparse({ fields: columns, data: rows });
 }

@@ -126,7 +126,7 @@ export default function StudyView({ onPhaseChange }: { onPhaseChange?: (inPlay: 
   );
   const [mode, setMode] = useState<StudyMode | "free" | null>(null);
   const [blankCount, setBlankCount] = useState<number | "all">(10);
-  const [blankWeakOnly, setBlankWeakOnly] = useState(false);
+  const [blankWeakFirst, setBlankWeakFirst] = useState(false);
   const [blankGenres, setBlankGenres] = useState<Set<WordGenre>>(new Set());
   const [blankQuizQs, setBlankQuizQs] = useState<BlankQuestion[]>([]);
   const [blankSubView, setBlankSubView] = useState<"select" | "manage" | "setup">("select");
@@ -314,14 +314,25 @@ export default function StudyView({ onPhaseChange }: { onPhaseChange?: (inPlay: 
         .map(([id]) => id)
     );
     const pool = blankQuestions
-      .filter((q) => !blankWeakOnly || blankWeakIds.has(q.id))
       .filter((q) => blankGenres.size === 0 || blankGenres.has(q.genre ?? "未分類"));
     if (pool.length === 0) {
       game.pushNotice("⚠️", "穴抜け問題がありません。「穴抜け」タブから追加してね");
       return;
     }
-    const shuffled = shuffle(pool);
-    const qs = blankCount === "all" ? shuffled : shuffled.slice(0, blankCount);
+    if (blankCount !== "all" && blankCount < 1) {
+      game.pushNotice("⚠️", "出題数を入力してください");
+      return;
+    }
+    // 苦手優先: 間違えた回数が多い問題を先頭に並べる（他クイズと同じ挙動）
+    let ordered = shuffle(pool);
+    if (blankWeakFirst) {
+      ordered = ordered.sort(
+        (a, b) =>
+          (blankQuestionStats[b.id]?.incorrectCount ?? 0) -
+          (blankQuestionStats[a.id]?.incorrectCount ?? 0)
+      );
+    }
+    const qs = blankCount === "all" ? ordered : ordered.slice(0, blankCount);
     setBlankQuizQs(qs);
     setOriginalCount(qs.length);
     setScore(0);
@@ -446,7 +457,6 @@ export default function StudyView({ onPhaseChange }: { onPhaseChange?: (inPlay: 
         .map(([id]) => id)
     );
     const pool = blankQuestions
-      .filter((q) => !blankWeakOnly || blankWeakIds.has(q.id))
       .filter((q) => blankGenres.size === 0 || blankGenres.has(q.genre ?? "未分類"));
     const available = pool.length;
     const effectiveBlankCount = blankCount === "all" ? available : Math.min(blankCount, available);
@@ -492,9 +502,11 @@ export default function StudyView({ onPhaseChange }: { onPhaseChange?: (inPlay: 
             type="number"
             min={1}
             max={blankQuestions.length}
-            value={blankCount === "all" ? blankQuestions.length : blankCount}
+            value={blankCount === "all" ? blankQuestions.length : blankCount === 0 ? "" : blankCount}
             onChange={(e) => {
-              const n = Math.max(1, Math.floor(Number(e.target.value)));
+              const raw = e.target.value;
+              if (raw === "") { setBlankCount(0); return; } // 空欄を許可（0=未入力）
+              const n = Math.max(1, Math.floor(Number(raw)));
               setBlankCount(n >= blankQuestions.length ? "all" : n);
             }}
             className="w-full px-3 py-2.5 rounded-xl bg-mid text-foam outline-none text-center font-bold"
@@ -502,15 +514,15 @@ export default function StudyView({ onPhaseChange }: { onPhaseChange?: (inPlay: 
         </div>
 
         <div
-          onClick={() => setBlankWeakOnly(!blankWeakOnly)}
+          onClick={() => setBlankWeakFirst(!blankWeakFirst)}
           className="flex items-center justify-between p-3 rounded-xl bg-mid cursor-pointer active:bg-white/10"
         >
           <div>
-            <div className="text-sm font-bold text-foam">苦手問題のみ</div>
-            <div className="text-xs text-dim">間違えた問題だけ出題する（{blankWeakIds.size}問）</div>
+            <div className="text-sm font-bold text-foam">苦手問題を優先</div>
+            <div className="text-xs text-dim">間違えた問題を先に出題する（苦手 {blankWeakIds.size}問）</div>
           </div>
-          <div className={`w-10 h-6 rounded-full transition-colors ${blankWeakOnly ? "bg-glow" : "bg-white/20"}`}>
-            <div className={`w-4 h-4 bg-white rounded-full mt-1 transition-transform ${blankWeakOnly ? "translate-x-5" : "translate-x-1"}`} />
+          <div className={`w-10 h-6 rounded-full transition-colors ${blankWeakFirst ? "bg-glow" : "bg-white/20"}`}>
+            <div className={`w-4 h-4 bg-white rounded-full mt-1 transition-transform ${blankWeakFirst ? "translate-x-5" : "translate-x-1"}`} />
           </div>
         </div>
 

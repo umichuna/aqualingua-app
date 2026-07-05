@@ -4,12 +4,22 @@
 // - 問題一覧・追加・編集・CSV一括インポート（papaparse）・4択クイズ出題
 // - 〈〉プレースホルダーを選択肢で埋める形式
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Papa from "papaparse";
 import type { BlankQuestion, WordGenre } from "@/lib/types";
 import { useGame } from "./GameProvider";
+import { sfx } from "@/lib/sound";
+import { speak, cancelSpeech } from "@/lib/speech";
+import { blankQuestionsToCsv } from "@/lib/csv";
 
 const PLACEHOLDER = "〈〉";
+
+// 〈〉を正解語句で埋めた完全な英文を作る（読み上げ用）
+function fillSentence(sentence: string, answer: string): string {
+  const parts = sentence.split(PLACEHOLDER);
+  const fills = answer.split(" ");
+  return parts.map((p, i) => p + (i < parts.length - 1 ? (fills[i] ?? "") : "")).join("");
+}
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -67,8 +77,17 @@ export function QuizPlay({
   const isCorrect = picked === q.answer;
   const correctCount = firstAttempted.current.size; // 初回正解済み問題数（進捗表示用）
 
+  // 回答後に完成した英文を読み上げる
+  useEffect(() => {
+    if (picked) {
+      speak(fillSentence(q.sentence, q.answer), "en-US");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [picked]);
+
   const next = () => {
     if (!picked) return;
+    cancelSpeech();
     if (isCorrect) {
       // 正解: キューの次へ
       if (queueIdx + 1 >= queue.length) {
@@ -100,28 +119,37 @@ export function QuizPlay({
       <div className="rounded-2xl p-5 bg-mid text-center flex-1 flex flex-col items-center justify-center gap-2">
         <div className="text-xs text-dim mb-1">〈〉に入る語句を選ぼう</div>
         <div className="text-base font-bold text-foam leading-relaxed">
-          {renderSentence(q.sentence)}
+          {renderSentence(q.sentence, picked ? q.answer : undefined)}
         </div>
         <div className="text-xs text-dim mt-1">{q.japaneseText}</div>
+        {picked && (
+          <button
+            onClick={() => speak(fillSentence(q.sentence, q.answer), "en-US")}
+            className="text-xs text-glow mt-1 px-2 py-1 rounded-lg bg-white/10 active:scale-95"
+          >
+            🔊 もう一度きく
+          </button>
+        )}
       </div>
 
-      {/* 正誤バナー */}
+      {/* 正誤バナー（正解でも解説を表示） */}
       {picked && (
         <div className={`text-center text-sm font-bold ${isCorrect ? "text-glow" : "text-coral"}`}>
           {isCorrect ? "⭕ 正解！" : `❌ 正解は「${q.answer}」`}
-          {!isCorrect && q.explanation && (
-            <div className="text-xs font-normal mt-0.5 text-dim">{q.explanation}</div>
+          {q.explanation && (
+            <div className="text-xs font-normal mt-0.5 text-dim">💡 {q.explanation}</div>
           )}
         </div>
       )}
 
-      {/* 選択肢 */}
+      {/* 選択肢（単語のみ表示） */}
       <div className="grid grid-cols-1 gap-2">
         {choices.map((c) => {
           let cls = "bg-white/10 text-foam";
           if (picked) {
             if (c === q.answer) cls = "bg-glow text-deep";
             else if (c === picked) cls = "bg-coral text-deep";
+            else cls = "bg-white/5 text-dim";
           }
           return (
             <button
@@ -130,6 +158,7 @@ export function QuizPlay({
               onClick={() => {
                 setPicked(c);
                 const ok = c === q.answer;
+                if (ok) sfx.correct(); else sfx.wrong();
                 const isFirst = !firstAttempted.current.has(q.id);
                 if (ok && isFirst) {
                   setScore((s) => s + 1);
@@ -137,9 +166,9 @@ export function QuizPlay({
                 }
                 onRecord(q.id, ok);
               }}
-              className={`py-3 px-4 rounded-xl font-bold text-sm text-left transition-all active:scale-95 ${cls}`}
+              className={`py-3 px-4 rounded-xl font-bold text-sm text-center transition-all active:scale-95 ${cls}`}
             >
-              {renderSentence(q.sentence, c)}
+              {c}
             </button>
           );
         })}
@@ -323,6 +352,20 @@ export default function BlankQuestionView() {
     });
   };
 
+  const exportCsv = () => {
+    if (displayed.length === 0) { setCsvError("書き出す問題がありません"); return; }
+    const csv = blankQuestionsToCsv(displayed);
+    const blob = new Blob(["﻿" + csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const suffix = filterGenre === "すべて" ? "all" : filterGenre;
+    a.download = `blank_questions_${suffix}_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setCsvError(`${displayed.length}件を書き出しました`);
+  };
+
   const handleSave = (data: Omit<BlankQuestion, "id" | "createdAt" | "lastUpdated">) => {
     if (editingQ) {
       game.updateBlankQuestion({ ...editingQ, ...data, lastUpdated: Date.now() });
@@ -358,7 +401,13 @@ export default function BlankQuestionView() {
           📤 CSV取り込み
           <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={importCsv} />
         </label>
+        <button onClick={exportCsv} className="flex-1 text-xs py-2 rounded-xl bg-mid text-foam font-bold">
+          📦 書き出し
+        </button>
       </div>
+      <p className="text-[10px] text-dim text-center -mt-1">
+        「書き出し」は選択中のジャンル（{filterGenre}）の問題だけ出力します
+      </p>
       {csvError && <p className="text-xs text-center text-glow">{csvError}</p>}
 
       {/* ジャンルフィルター */}
