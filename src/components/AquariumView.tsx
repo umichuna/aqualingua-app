@@ -140,7 +140,7 @@ export default function AquariumView() {
     }, 1800);
     return () => clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [displayFish, eatingIds]);
+  }, [displayFish, eatingIds, allFishMaster]);
 
   const dropBait = (e: React.MouseEvent<HTMLDivElement>) => {
     if (bait || displayFish.length === 0) return;
