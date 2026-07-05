@@ -302,7 +302,7 @@ export default function Page() {
     );
   }
 
-  if (status === "unauthenticated" && typeof window !== "undefined" && !window.location.search.includes("devbypass=1")) {
+  if (status === "unauthenticated") {
     return <LoginScreen />;
   }
 
