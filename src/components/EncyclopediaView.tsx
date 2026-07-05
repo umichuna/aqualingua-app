@@ -9,7 +9,7 @@
 import { useState } from "react";
 import { ACHIEVEMENTS } from "@/data/achievements";
 import { FISH_MASTER, RARITY_INFO, RARITY_STARS, type FishDisplaySize } from "@/data/fishMaster";
-import { todayString } from "@/lib/gameLogic";
+import { MAX_FISH_LEVEL, todayString } from "@/lib/gameLogic";
 import type { CustomFishDef, FishHistoryEntry, FishOverride, Rarity, WaterType } from "@/lib/types";
 import { useGame } from "./GameProvider";
 import PixelFish from "./PixelFish";
@@ -330,6 +330,7 @@ export default function EncyclopediaView() {
             const found = discovered.has(f.type);
             const isCustom = !BUILTIN_TYPES.has(f.type);
             const canEdit = isCustom || found || secretUnlocked;
+            const maxLevelReached = fishList.some((fi) => fi.type === f.type && fi.level >= MAX_FISH_LEVEL);
 
             return (
               <div
@@ -367,6 +368,7 @@ export default function EncyclopediaView() {
                 </div>
                 <div className="text-sm font-bold text-foam">
                   {found ? (f.displayName ?? f.type) : "？？？"}
+                  {found && maxLevelReached && <span className="ml-1 text-xs text-sand">⭐</span>}
                 </div>
                 <div className="text-[10px] text-dim mt-1 min-h-7">
                   {found ? f.description : "まだ出会っていない…"}
