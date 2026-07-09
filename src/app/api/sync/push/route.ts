@@ -26,7 +26,11 @@ type PushPayload = {
 
 // 穴抜け問題のテーブルは後から追加したため、無ければ自動作成する
 // （非エンジニアでも Azure で手作業せずに動くように）
+// サーバーインスタンスごとに1回確認すれば十分なので、フラグで毎回の実行を避ける
+// （同期のたびのテーブル存在確認クエリはDB無料枠の無駄遣いになるため）
+let blankTablesEnsured = false;
 async function ensureBlankTables(pool: sql.ConnectionPool) {
+  if (blankTablesEnsured) return;
   await pool.request().query(`
     IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'blank_questions')
     CREATE TABLE blank_questions (
@@ -45,6 +49,7 @@ async function ensureBlankTables(pool: sql.ConnectionPool) {
       PRIMARY KEY (userId, id)
     );
   `);
+  blankTablesEnsured = true;
 }
 
 // sql.Request のコンストラクタは ConnectionPool | Transaction のユニオン型を

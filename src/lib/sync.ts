@@ -1,6 +1,15 @@
 import * as db from "./db";
 import type { Fish, UserStatus } from "./types";
 
+// Azure SQL 無料枠（月10万vCore秒、毎月1日リセット）を使い切ったときのエラーを検知して、
+// 非エンジニアにも分かる日本語メッセージに変換する。該当しなければ null。
+export function friendlySyncErrorMessage(rawMessage: string): string | null {
+  if (/free\s*(offer|limit|amount)|monthly\s*(usage\s*)?limit|reached\s+its\s+.*limit/i.test(rawMessage)) {
+    return "今月のデータベース無料枠を使い切りました。毎月1日に自動リセットされるまでクラウド同期は使えません（データは端末内に保存されています）";
+  }
+  return null;
+}
+
 // クラウドの userStatus がローカルより古い場合に無条件で上書きすると、
 // 「PCで実績報酬を受け取り→クラウドセーブ→スマホで同期」のような手順で
 // スマホ側のローカルデータ（未セーブ）が新しくても巻き戻ってしまう。

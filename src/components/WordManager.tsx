@@ -263,7 +263,7 @@ export default function WordManager() {
             }}
             className="text-xs px-2 py-1.5 rounded-lg font-bold bg-white/10 text-dim"
           >
-            📤 書き出し
+            📤 編集用CSV
           </button>
           <button
             onClick={() => fileRef.current?.click()}

@@ -467,12 +467,12 @@ export default function AquariumView() {
               />
             </div>
           </div>
-          {/* 引越しボタン（2槽以上ある場合） */}
-          {tanks.length > 1 && (
+          {/* 引越しボタン（同じ水の種類の水槽が他にある場合のみ。海水魚は海水槽、淡水魚は淡水槽だけ） */}
+          {tanks.some((t) => t.id !== currentTankId && t.type === (allFishMaster.find((m) => m.type === sel.type)?.waterType ?? "saltwater")) && (
             <div className="mt-2">
               <div className="text-xs text-dim mb-1">引越し先</div>
               <div className="flex gap-1.5 flex-wrap">
-                {tanks.filter((t) => t.id !== currentTankId).map((tank) => (
+                {tanks.filter((t) => t.id !== currentTankId && t.type === (allFishMaster.find((m) => m.type === sel.type)?.waterType ?? "saltwater")).map((tank) => (
                   <button
                     key={tank.id}
                     onClick={() => {

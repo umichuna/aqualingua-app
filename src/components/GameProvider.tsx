@@ -77,7 +77,7 @@ import {
   putWordStats,
 } from "@/lib/db";
 import { sfx } from "@/lib/sound";
-import { pullFromCloud, pushToCloud } from "@/lib/sync";
+import { friendlySyncErrorMessage, pullFromCloud, pushToCloud } from "@/lib/sync";
 import { deleteSharedCustomFish, fetchSharedCustomFish, postSharedCustomFish } from "@/lib/customFish";
 import { deleteSharedFishOverride, fetchSharedFishOverrides, postSharedFishOverride } from "@/lib/fishOverrides";
 import type {
@@ -215,6 +215,28 @@ export function useGame(): GameContextValue {
 
 
 let noticeSeq = 1;
+
+// ---- クラウド取得の間引き（Azure SQL 無料枠の節約） ----
+// 魚の共有データ（fishOverrides / sharedCustomFish）は起動のたびに取得すると
+// DBが毎回起こされて無料枠（月10万vCore秒）を消費するため、6時間に1回に間引く。
+// ローカルキャッシュ（IndexedDB）があるので、間引き中も表示は正しく出る。
+// 手動の☁️同期は従来通り即時。
+const CLOUD_FISH_REFRESH_INTERVAL_MS = 6 * 60 * 60 * 1000;
+function shouldRefreshCloudFish(key: "fishOverrides" | "customFish"): boolean {
+  try {
+    const at = Number(localStorage.getItem(`cloudFishFetchedAt:${key}`) ?? 0);
+    return Date.now() - at > CLOUD_FISH_REFRESH_INTERVAL_MS;
+  } catch {
+    return true; // localStorage が使えない環境では従来通り取得
+  }
+}
+function markCloudFishRefreshed(key: "fishOverrides" | "customFish"): void {
+  try {
+    localStorage.setItem(`cloudFishFetchedAt:${key}`, String(Date.now()));
+  } catch {
+    // 保存できなくても致命的ではない（次回も取得されるだけ）
+  }
+}
 
 // ---- 拡張パック(容量)の復旧 ----
 // 同期バグで tankCapacity/boxCapacity が巻き戻ることがある。
@@ -519,11 +541,13 @@ export function GameProvider({ children }: { children: ReactNode }) {
   // （以前は個人持ちだったものを全員共有にするため）。
   useEffect(() => {
     if (!session?.user?.email) return;
+    if (!shouldRefreshCloudFish("customFish")) return; // 6時間以内に取得済みならスキップ（無料枠節約）
     let cancelled = false;
     (async () => {
       try {
         const shared = await fetchSharedCustomFish();
         if (cancelled) return;
+        markCloudFishRefreshed("customFish");
         const sharedTypes = new Set(shared.map((f) => f.type));
         // ローカルにしか無いカスタム魚を共有へアップロード
         const localOnly = (userRef.current.customFish ?? []).filter(
@@ -1268,11 +1292,13 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!session?.user?.email) return;
+    if (!shouldRefreshCloudFish("fishOverrides")) return; // 6時間以内に取得済みならスキップ（無料枠節約）
     let cancelled = false;
     (async () => {
       try {
         const shared = await fetchSharedFishOverrides();
         if (cancelled) return;
+        markCloudFishRefreshed("fishOverrides");
         setFishOverrides((local) => {
           const merged = [...local];
           for (const remote of shared) {
@@ -1370,12 +1396,22 @@ export function GameProvider({ children }: { children: ReactNode }) {
     (fishId: string, targetTankId: string) => {
       const fish = fishRef.current.find(f => f.fishId === fishId);
       if (!fish) return;
+      // 水の種類チェック：海水魚は海水水槽、淡水魚は淡水水槽にしか引越しできない
+      // （moveBoxFishToTank と同じ判定。旧データ互換のため導出済みの tanks を参照）
+      const targetTank = tanks.find(t => t.id === targetTankId);
+      if (!targetTank) return;
+      const fishMaster = allFishMasterRef.current.find(m => m.type === fish.type);
+      const fishWaterType = fishMaster?.waterType ?? "saltwater";
+      if (fishWaterType !== targetTank.type) {
+        pushNotice("💧", `${fishWaterType === "saltwater" ? "海水" : "淡水"}魚は${targetTank.type === "saltwater" ? "海水" : "淡水"}水槽に入りません`);
+        return;
+      }
       const updated: Fish = { ...fish, tankId: targetTankId, lastUpdated: Date.now() };
       setFishList(list => list.map(f => f.fishId === fishId ? updated : f));
       void putFish(updated);
       schedulePush();
     },
-    [schedulePush]
+    [schedulePush, pushNotice, tanks]
   );
 
   // 旧 buyTankSlot — 互換のためにエイリアスを残す（ShopView 移行後は削除可）
@@ -1569,7 +1605,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       console.error("[Sync] pull failed:", err);
       const msg = err instanceof Error ? err.message : "";
-      pushNotice("⚠️", `同期に失敗しました${msg ? `（${msg}）` : ""}`);
+      const friendly = friendlySyncErrorMessage(msg);
+      pushNotice("⚠️", friendly ?? `同期に失敗しました${msg ? `（${msg}）` : ""}`);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user?.email, pushNotice]);

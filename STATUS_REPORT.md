@@ -151,6 +151,68 @@
 
 ---
 
+## 2026-07-05: DB無料枠対策・引越しの水種制限・CSV文言変更（オーナー報告3件）
+
+### 依頼内容
+1. クラウド同期が「今月のデータベース無料枠を使い切った」エラーで失敗する
+2. 海水魚が淡水水槽に引越しできてしまう（水の種類の制限がない）
+3. 単語帳の「書き出し」ボタンを「編集用CSV」に文言変更
+
+### 原因
+1. **DB無料枠**: Azure SQL serverless の無料枠は月10万vCore秒・毎月1日リセット。
+   最大の消費源は「アプリ起動のたびに魚の共有データを2本クラウド取得
+   （各4回リトライ・55秒タイムアウト）」で、開くたびにDBが起こされ課金されていた。
+   加えて同期のたびに穴抜けテーブルの存在確認クエリも毎回実行されていた。
+   ※今月分の枠はコードでは復活しない。8/1の自動リセット待ち（オーナー了承済み）。
+2. **引越し**: `moveFishToTank` に水の種類チェックがなかった（ボックス→水槽の
+   `moveBoxFishToTank` には正しいチェックがあるのに、水槽間の引越しには未実装）。
+   UI側も全水槽を引越し先として表示していた。
+3. 文言のみ。
+
+### 修正内容
+1. DB無料枠対策（3点）:
+   - 魚の共有データのクラウド取得を「起動のたび」→「**6時間に1回まで**」に間引き
+     （localStorage にタイムスタンプ保存。ローカルキャッシュがあるので表示は正常。
+     手動の☁️同期は従来通り即時）
+   - 穴抜けテーブルの存在確認をサーバーインスタンスごとに1回だけに変更
+   - 無料枠エラーを検知したら「今月のデータベース無料枠を使い切りました。毎月1日に
+     自動リセットされるまで〜」という分かりやすい日本語で表示
+     （`friendlySyncErrorMessage` を sync.ts に追加、syncNow と クラウドセーブの2箇所で使用）
+2. 引越しの水種制限:
+   - `moveFishToTank` に `moveBoxFishToTank` と同じガードを追加（不一致なら💧通知して中断）
+   - 引越し先ボタンを「同じ水の種類の水槽」だけに絞り込み。該当水槽がなければ
+     引越しセクション自体を非表示
+3. 「📤 書き出し」→「📤 編集用CSV」
+
+### 変更ファイル一覧
+- `src/components/GameProvider.tsx`（水種ガード、6時間間引き、エラー文言）
+- `src/components/AquariumView.tsx`（引越し先の絞り込み）
+- `src/components/WordManager.tsx`（文言）
+- `src/lib/sync.ts`（`friendlySyncErrorMessage` 追加）
+- `src/components/Modals.tsx`（クラウドセーブ失敗時の無料枠メッセージ）
+- `src/app/api/sync/push/route.ts`・`src/app/api/sync/pull/route.ts`（テーブル確認の1回化）
+
+### 検証
+- `npm run build` エラー0件・TypeScript通過
+- `npm run dev` でアプリが正常に起動・描画されることを確認
+- ログインが必要な画面（引越しUI・同期エラー表示）はオーナーの実機確認待ち
+
+### 未解決事項 / 次回作業
+- **8月1日に無料枠が自動リセット**されるまでクラウド同期は使えない（ローカル保存は正常）
+- 8月の消費ペースを見て、それでも枠が厳しければ**別DBへの移行を検討**
+  （候補: Supabase＝無料枠500MB・vCore秒課金なし / Neon＝Vercel統合が楽。
+  本アプリのテーブルは全て「userId+key+JSON」の単純構造なので移植は容易、
+  変更は接続ライブラリ＋API route 4本のみ）
+
+### 技術情報メモ
+- クラウド取得間引きの間隔: 6時間（`GameProvider.tsx` の `CLOUD_FISH_REFRESH_INTERVAL_MS`）。
+  localStorage キーは `cloudFishFetchedAt:fishOverrides` / `cloudFishFetchedAt:customFish`。
+  すぐに再取得したい場合はこのキーを削除すればよい
+- DBを叩くAPIは4本のみ: `/api/custom-fish`・`/api/fish-overrides`・`/api/sync/pull`・`/api/sync/push`
+  （auth/translate/tts はDB不使用）
+
+---
+
 ## 2026-07-04（追記3）: 実績報酬魚9件の紐付け＋派生バグ2件を修正
 
 ### 依頼内容

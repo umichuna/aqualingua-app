@@ -8,7 +8,10 @@ import type sql from "mssql";
 export const maxDuration = 60;
 
 // 穴抜け問題のテーブルは後から追加したため、無ければ自動作成する
+// サーバーインスタンスごとに1回確認すれば十分（毎回の存在確認クエリはDB無料枠の無駄遣い）
+let blankTablesEnsured = false;
 async function ensureBlankTables(pool: sql.ConnectionPool) {
+  if (blankTablesEnsured) return;
   await pool.request().query(`
     IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'blank_questions')
     CREATE TABLE blank_questions (
@@ -27,6 +30,7 @@ async function ensureBlankTables(pool: sql.ConnectionPool) {
       PRIMARY KEY (userId, id)
     );
   `);
+  blankTablesEnsured = true;
 }
 
 export async function GET() {

@@ -7,6 +7,7 @@ import { useRef, useState } from "react";
 import { signIn, signOut, useSession } from "next-auth/react";
 import { exportAllData, importAllData, type BackupData } from "@/lib/db";
 import { todayString } from "@/lib/gameLogic";
+import { friendlySyncErrorMessage } from "@/lib/sync";
 import {
   getBgmVolume,
   isBgmEnabled,
@@ -90,7 +91,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
         ? "⚠️ 未ログイン（クラウド保存にはログインが必要）"
         : msg === "cloud-status-stale"
         ? "⚠️ クラウドに他端末からのより新しいデータがあります。先に「☁️復元」で最新化してから保存してください（単語・魚などは保存済みです）"
-        : `⚠️ クラウド保存失敗（${msg || "原因不明"}）`;
+        : `⚠️ ${friendlySyncErrorMessage(msg) ?? `クラウド保存失敗（${msg || "原因不明"}）`}`;
       setIoMsg(errorMsg);
       console.error("[Cloud Save] push failed:", err);
     } finally {
