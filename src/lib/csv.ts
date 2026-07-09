@@ -14,6 +14,7 @@ export interface CsvImportResult {
   pendingWords: Word[]; // 未知ジャンルを含む単語（ユーザー確認後に追加）
   unknownGenres: string[]; // CSV内に登録されていないジャンル名（重複なし）
   errors: CsvRowError[];
+  hasIdColumn: boolean; // 「書き出し」CSVの再取込（id列あり=往復編集・削除反映対象）かどうか
 }
 
 function mapLevel(raw: string): WordLevel | null {
@@ -53,6 +54,7 @@ export function parseVocabularyCsv(
     pendingWords: [],
     unknownGenres: [],
     errors: [],
+    hasIdColumn: (parsed.meta.fields ?? []).includes("id"),
   };
   const unknownGenreSet = new Set<string>();
 
@@ -156,10 +158,13 @@ export function wordsToCsv(words: Word[]): string {
   return Papa.unparse({ fields: columns, data: rows });
 }
 
-// 穴抜け問題をCSV文字列に変換（エクスポート用）。取り込みテンプレと同じ列構成。
-// 列: 文,日本語訳,正解,誤答1,誤答2,誤答3,解説,ジャンル
+// 穴抜け問題をCSV文字列に変換（編集用・往復編集対応）。
+// id 列を含むため、編集して再取込すると id 一致で既存問題を更新できる
+// （id 列が無い「追加用CSV」は常に新規追加のみ）。
+// 列: id,文,日本語訳,正解,誤答1,誤答2,誤答3,解説,ジャンル
 export function blankQuestionsToCsv(questions: BlankQuestion[]): string {
   const rows = questions.map((q) => ({
+    id: q.id,
     文: q.sentence,
     日本語訳: q.japaneseText,
     正解: q.answer,
@@ -169,6 +174,58 @@ export function blankQuestionsToCsv(questions: BlankQuestion[]): string {
     解説: q.explanation ?? "",
     ジャンル: q.genre ?? "未分類",
   }));
-  const columns = ["文", "日本語訳", "正解", "誤答1", "誤答2", "誤答3", "解説", "ジャンル"];
+  const columns = ["id", "文", "日本語訳", "正解", "誤答1", "誤答2", "誤答3", "解説", "ジャンル"];
   return Papa.unparse({ fields: columns, data: rows });
+}
+
+const PLACEHOLDER = "〈〉";
+
+// パース済みの穴抜け問題行。id が空文字なら新規追加、非空なら既存id照合の対象。
+export type ParsedBlankQuestionRow = Omit<BlankQuestion, "id" | "createdAt" | "lastUpdated"> & { id: string };
+
+export interface BlankCsvParseResult {
+  rows: ParsedBlankQuestionRow[];
+  errors: CsvRowError[];
+  hasIdColumn: boolean; // 「編集用CSV」（id列あり=往復編集・削除反映対象）かどうか
+}
+
+// 穴抜け問題CSVを取り込む（ヘッダー行方式）。
+// id 列は「追加用CSV」（新規テンプレ）には無く、「編集用CSV」（書き出し）には有る。
+// どちらの形式でも読めるよう、id 列が無ければ空文字として扱う（＝常に新規追加になる）。
+export function parseBlankQuestionsCsv(csvText: string): BlankCsvParseResult {
+  const parsed = Papa.parse<Record<string, string>>(csvText.trim(), {
+    header: true,
+    skipEmptyLines: true,
+  });
+  const hasIdColumn = (parsed.meta.fields ?? []).includes("id");
+
+  const rows: ParsedBlankQuestionRow[] = [];
+  const errors: CsvRowError[] = [];
+
+  parsed.data.forEach((row, i) => {
+    const rowNo = i + 1;
+    const sentence = (row["文"] ?? "").replace(/^﻿/, "").trim();
+    if (!sentence) { errors.push({ row: rowNo, reason: "「文」列が空" }); return; }
+    if (!sentence.includes(PLACEHOLDER)) { errors.push({ row: rowNo, reason: `「文」に ${PLACEHOLDER} がありません` }); return; }
+    const japaneseText = (row["日本語訳"] ?? "").trim();
+    const answer = (row["正解"] ?? "").trim();
+    const w1 = (row["誤答1"] ?? "").trim();
+    const w2 = (row["誤答2"] ?? "").trim();
+    const w3 = (row["誤答3"] ?? "").trim();
+    if (!japaneseText || !answer || !w1 || !w2 || !w3) {
+      errors.push({ row: rowNo, reason: "日本語訳・正解・誤答1〜3のいずれかが空" });
+      return;
+    }
+    rows.push({
+      id: (row["id"] ?? "").trim(),
+      sentence,
+      japaneseText,
+      answer,
+      wrongChoices: [w1, w2, w3],
+      explanation: (row["解説"] ?? "").trim(),
+      genre: (row["ジャンル"] ?? "").trim() || "未分類",
+    });
+  });
+
+  return { rows, errors, hasIdColumn };
 }

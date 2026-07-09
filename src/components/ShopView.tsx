@@ -153,7 +153,7 @@ export default function ShopView() {
 
       {/* 3種ガチャ（要求 #7） */}
       <div className="space-y-2">
-        <div className="text-xs font-bold text-glow">🎰 おさかなガチャ（水槽 {currentTankFishCount}/{user.tankCapacity}）</div>
+        <div className="text-xs font-bold text-glow">🎰 おさかなガチャ</div>
         {TIER_KEYS.map((tier) => {
           const info = GACHA_TIERS[tier];
           const afford = user.gold >= info.price;

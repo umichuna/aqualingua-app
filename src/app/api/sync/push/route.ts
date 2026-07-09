@@ -47,6 +47,13 @@ async function ensureBlankTables(pool: sql.ConnectionPool) {
   `);
 }
 
+// sql.Request のコンストラクタは ConnectionPool | Transaction のユニオン型を
+// そのまま受け付けるオーバーロードが無いため、instanceof で分岐して呼び分ける
+function makeRequest(executor: sql.ConnectionPool | sql.Transaction): sql.Request {
+  if (executor instanceof sql.Transaction) return new sql.Request(executor);
+  return new sql.Request(executor);
+}
+
 // 各行を { key, data(オブジェクト全体), lastUpdated } に整形して JSON 文字列にする
 function buildRowsJson(rows: Row[], keyCol: string): string {
   return JSON.stringify(
@@ -59,16 +66,16 @@ function buildRowsJson(rows: Row[], keyCol: string): string {
 }
 
 // LWW 条件付きの一括 MERGE（テーブル1つにつきクエリ1回）
+// tx を渡した場合はトランザクション内で実行（push 全体をアトミックにするため）
 async function mergeTable(
-  pool: sql.ConnectionPool,
+  executor: sql.ConnectionPool | sql.Transaction,
   userId: string,
   table: string,
   keyCol: string,
   rows: Row[]
 ) {
   if (!rows?.length) return;
-  await pool
-    .request()
+  await makeRequest(executor)
     .input("userId", userId)
     .input("rows", buildRowsJson(rows, keyCol))
     .query(`
@@ -82,7 +89,7 @@ async function mergeTable(
         ) j
       ) AS s
         ON t.userId = s.userId AND t.${keyCol} = s.${keyCol}
-      WHEN MATCHED THEN
+      WHEN MATCHED AND s.lastUpdated >= t.lastUpdated THEN
         UPDATE SET data = s.data, lastUpdated = s.lastUpdated
       WHEN NOT MATCHED THEN
         INSERT (userId, ${keyCol}, data, lastUpdated)
@@ -90,18 +97,17 @@ async function mergeTable(
     `);
 }
 
-// DELETE → 一括 INSERT（削除済みが残らないようにする words / fish 用）
+// DELETE → 一括 INSERT（削除済みが残らないようにする words / fish / blank_questions 用）
 async function replaceTable(
-  pool: sql.ConnectionPool,
+  executor: sql.ConnectionPool | sql.Transaction,
   userId: string,
   table: string,
   keyCol: string,
   rows: Row[]
 ) {
-  await pool.request().input("userId", userId).query(`DELETE FROM ${table} WHERE userId = @userId`);
+  await makeRequest(executor).input("userId", userId).query(`DELETE FROM ${table} WHERE userId = @userId`);
   if (!rows?.length) return;
-  await pool
-    .request()
+  await makeRequest(executor)
     .input("userId", userId)
     .input("rows", buildRowsJson(rows, keyCol))
     .query(`
@@ -123,40 +129,57 @@ export async function POST(req: NextRequest) {
   try {
     const body: PushPayload = await req.json();
     const pool = await getPool();
+    // テーブル作成はDDLのため、トランザクション開始前に済ませる
     await ensureBlankTables(pool);
 
-    // words / fish は clear+rewrite（削除した分がクラウドに残り続けるのを防ぐ）
-    await replaceTable(pool, userId, "words", "id", body.words ?? []);
-    await replaceTable(pool, userId, "fish", "fishId", body.fish ?? []);
-    // 穴抜け問題も削除反映のため clear+rewrite
-    await replaceTable(pool, userId, "blank_questions", "id", body.blankQuestions ?? []);
+    // push 全体を1トランザクションに包む: Azure SQL のコールドスタート等で
+    // 途中のテーブルだけ書けて残りが失敗すると「Gだけ消費され、実績・拡張・メモは
+    // 巻き戻る」というデータ不整合が起きるため、全部成功 or 全部ロールバックにする。
+    const transaction = new sql.Transaction(pool);
+    await transaction.begin();
+    let userStatusStale = false;
+    try {
+      // words / fish / blank_questions は clear+rewrite（削除した分がクラウドに残り続けるのを防ぐ）
+      await replaceTable(transaction, userId, "words", "id", body.words ?? []);
+      await replaceTable(transaction, userId, "fish", "fishId", body.fish ?? []);
+      await replaceTable(transaction, userId, "blank_questions", "id", body.blankQuestions ?? []);
 
-    // 他テーブルは LWW 条件付き MERGE
-    await mergeTable(pool, userId, "word_stats", "wordId", body.wordStats ?? []);
-    await mergeTable(pool, userId, "encyclopedia", "fishType", body.encyclopedia ?? []);
-    await mergeTable(pool, userId, "study_sessions", "sessionId", body.studySessions ?? []);
-    await mergeTable(pool, userId, "gold_ledger", "entryId", body.goldLedger ?? []);
-    await mergeTable(pool, userId, "fish_history", "entryId", body.fishHistory ?? []);
-    await mergeTable(pool, userId, "blank_question_stats", "id", body.blankQuestionStats ?? []);
+      // 他テーブルは LWW 条件付き MERGE
+      await mergeTable(transaction, userId, "word_stats", "wordId", body.wordStats ?? []);
+      await mergeTable(transaction, userId, "encyclopedia", "fishType", body.encyclopedia ?? []);
+      await mergeTable(transaction, userId, "study_sessions", "sessionId", body.studySessions ?? []);
+      await mergeTable(transaction, userId, "gold_ledger", "entryId", body.goldLedger ?? []);
+      await mergeTable(transaction, userId, "fish_history", "entryId", body.fishHistory ?? []);
+      await mergeTable(transaction, userId, "blank_question_stats", "id", body.blankQuestionStats ?? []);
 
-    if (body.userStatus) {
-      const us = body.userStatus;
-      await pool
-        .request()
-        .input("userId", userId)
-        .input("data", JSON.stringify(us))
-        .input("lastUpdated", typeof us.lastUpdated === "number" ? us.lastUpdated : 0)
-        .query(`
-          MERGE user_status AS t
-          USING (SELECT @userId AS userId) AS s ON t.userId = s.userId
-          WHEN MATCHED THEN
-            UPDATE SET data = @data, lastUpdated = @lastUpdated
-          WHEN NOT MATCHED THEN
-            INSERT (userId, data, lastUpdated) VALUES (@userId, @data, @lastUpdated);
-        `);
+      if (body.userStatus) {
+        const us = body.userStatus;
+        const lastUpdated = typeof us.lastUpdated === "number" ? us.lastUpdated : 0;
+        const result = await new sql.Request(transaction)
+          .input("userId", userId)
+          .input("data", JSON.stringify(us))
+          .input("lastUpdated", lastUpdated)
+          .query(`
+            MERGE user_status AS t
+            USING (SELECT @userId AS userId) AS s ON t.userId = s.userId
+            WHEN MATCHED AND @lastUpdated >= t.lastUpdated THEN
+              UPDATE SET data = @data, lastUpdated = @lastUpdated
+            WHEN NOT MATCHED THEN
+              INSERT (userId, data, lastUpdated) VALUES (@userId, @data, @lastUpdated)
+            OUTPUT $action AS action;
+          `);
+        // クラウド側の方が新しく、今回の userStatus 書き込みがスキップされた場合を検出
+        // （古い端末が後からセーブして新しいクラウドデータを黙って潰すのを防ぐ）
+        userStatusStale = result.recordset.length === 0;
+      }
+
+      await transaction.commit();
+    } catch (err) {
+      await transaction.rollback();
+      throw err;
     }
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, userStatusStale });
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[Sync] push failed:", err);

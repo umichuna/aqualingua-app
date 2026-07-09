@@ -44,6 +44,7 @@ import {
   createInitialUserStatus,
   deleteFish as dbDeleteFish,
   deleteBlankQuestion,
+  deleteBlankQuestions,
   deleteWord as dbDeleteWord,
   discoverFishType,
   getAllBlankQuestions,
@@ -191,7 +192,9 @@ interface GameContextValue {
   updateBlankQuestion: (q: BlankQuestion) => void;
   upsertBlankQuestions: (rows: BlankQuestion[]) => void;
   removeBlankQuestion: (id: string) => void;
+  removeBlankQuestions: (ids: string[]) => void;
   recordBlankAnswer: (id: string, correct: boolean) => void;
+  resetBlankQuestionWeak: (id: string) => void;
 
   // 実績
   claimAchievementReward: (achievementId: string) => void;
@@ -212,6 +215,40 @@ export function useGame(): GameContextValue {
 
 
 let noticeSeq = 1;
+
+// ---- 拡張パック(容量)の復旧 ----
+// 同期バグで tankCapacity/boxCapacity が巻き戻ることがある。
+// 通帳（購入記録は消えない）から本来の容量を計算し、現在値が下回っていたら戻す。
+// 初期ロード時だけでなく、☁️同期（pull）でクラウドの古い値を取り込んだ直後にも
+// 呼び出せるよう、コンポーネント外の純粋関数として切り出す。
+function recoverExpansionCapacity(
+  user: UserStatus,
+  ledger: GoldLedgerEntry[]
+): { user: UserStatus; changed: boolean } {
+  const tankBuys = ledger.filter((e) => e.reason === "水槽拡張キット").length;
+  const boxBuys = ledger.filter((e) => e.reason === "ボックス拡張キット").length;
+  const expectedTank = Math.min(MAX_TANK_CAPACITY, 4 + tankBuys * 2);
+  const expectedBox = BOX_CAPACITY_INITIAL + boxBuys * 5;
+  let next = user;
+  let changed = false;
+  if (next.tankCapacity < expectedTank) {
+    console.warn(`[Recover] tankCapacity ${next.tankCapacity} → ${expectedTank}（通帳の拡張購入 ${tankBuys}回から復旧）`);
+    next = { ...next, tankCapacity: expectedTank };
+    changed = true;
+  }
+  const curBox = next.boxCapacity ?? BOX_CAPACITY_INITIAL;
+  if (curBox < expectedBox) {
+    console.warn(`[Recover] boxCapacity ${curBox} → ${expectedBox}（通帳の拡張購入 ${boxBuys}回から復旧）`);
+    next = { ...next, boxCapacity: expectedBox };
+    changed = true;
+  }
+  if (changed) {
+    // 補正・復旧したデータは「新しい変更」として扱う（古い日時のまま保存すると
+    // 同期で巻き戻る原因になるため、lastUpdated を現在時刻に更新する）
+    next = { ...next, lastUpdated: Date.now() };
+  }
+  return { user: next, changed };
+}
 
 export function GameProvider({ children }: { children: ReactNode }) {
   const { data: session } = useSession();
@@ -435,37 +472,21 @@ export function GameProvider({ children }: { children: ReactNode }) {
       }
 
       // ---- 拡張パック(容量)の復旧 ----
-      // 同期バグで tankCapacity/boxCapacity が巻き戻ることがある。
-      // 通帳（購入記録は消えない）から本来の容量を計算し、現在値が下回っていたら戻す。
-      {
-        const tankBuys = ledger.filter((e) => e.reason === "水槽拡張キット").length;
-        const boxBuys = ledger.filter((e) => e.reason === "ボックス拡張キット").length;
-        const expectedTank = Math.min(MAX_TANK_CAPACITY, 4 + tankBuys * 2);
-        const expectedBox = BOX_CAPACITY_INITIAL + boxBuys * 5;
-        if (loadedUser.tankCapacity < expectedTank) {
-          console.warn(`[Recover] tankCapacity ${loadedUser.tankCapacity} → ${expectedTank}（通帳の拡張購入 ${tankBuys}回から復旧）`);
-          loadedUser.tankCapacity = expectedTank;
-          needsSave = true;
-        }
-        const curBox = loadedUser.boxCapacity ?? BOX_CAPACITY_INITIAL;
-        if (curBox < expectedBox) {
-          console.warn(`[Recover] boxCapacity ${curBox} → ${expectedBox}（通帳の拡張購入 ${boxBuys}回から復旧）`);
-          loadedUser.boxCapacity = expectedBox;
-          needsSave = true;
-        }
-      }
+      const recovery = recoverExpansionCapacity(loadedUser, ledger);
+      let finalUser = recovery.user;
+      if (recovery.changed) needsSave = true;
 
       // 補正・復旧したデータは「新しい変更」として扱う（古い日時のまま保存すると
       // 同期で巻き戻る原因になるため、lastUpdated を現在時刻に更新する）
       if (needsSave) {
-        loadedUser.lastUpdated = now;
-        void putUserStatus(loadedUser);
+        finalUser = { ...finalUser, lastUpdated: now };
+        void putUserStatus(finalUser);
       }
 
       if (u) {
-        applyOfflineEffects(loadedUser, fish, now);
+        applyOfflineEffects(finalUser, fish, now);
       } else {
-        setUser(loadedUser);
+        setUser(finalUser);
         setFishList(fish);
       }
 
@@ -1450,6 +1471,22 @@ export function GameProvider({ children }: { children: ReactNode }) {
     []
   );
 
+  // CSV再取込で「絞込書出CSVに無い＝削除された」問題をまとめて消すために使う
+  const removeBlankQuestions = useCallback(
+    (ids: string[]) => {
+      if (ids.length === 0) return;
+      const idSet = new Set(ids);
+      setBlankQuestions((prev) => prev.filter((q) => !idSet.has(q.id)));
+      setBlankQuestionStats((prev) => {
+        const next = { ...prev };
+        for (const id of ids) delete next[id];
+        return next;
+      });
+      void deleteBlankQuestions(ids);
+    },
+    []
+  );
+
   const recordBlankAnswer = useCallback(
     (id: string, correct: boolean) => {
       setBlankQuestionStats((prev) => {
@@ -1468,6 +1505,17 @@ export function GameProvider({ children }: { children: ReactNode }) {
     []
   );
 
+  // 単語の resetWordWeak と同じ役割: 苦手カウントを0に戻す（次セッション初回正解時に使用）
+  const resetBlankQuestionWeak = useCallback((id: string) => {
+    setBlankQuestionStats((prev) => {
+      const existing = prev[id];
+      if (!existing || existing.incorrectCount === 0) return prev;
+      const next: BlankQuestionStats = { ...existing, incorrectCount: 0, lastUpdated: Date.now() };
+      void putBlankQuestionStats(next);
+      return { ...prev, [id]: next };
+    });
+  }, []);
+
   // ---------- その他 ----------
   const resetAllData = useCallback(async () => {
     await clearAllData();
@@ -1479,6 +1527,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
     setEncyclopedia([]);
     setStudySessions([]);
     setGoldLedger([]);
+    setBlankQuestions([]);
+    setBlankQuestionStats({});
   }, []);
 
   // ☁️ 同期ボタン: クラウド→ローカル（pull のみ）
@@ -1495,8 +1545,18 @@ export function GameProvider({ children }: { children: ReactNode }) {
       const [updatedFish, updatedUser, updatedWords, updatedStats, updatedEncy, updatedHistory, updatedSessions, updatedLedger, updatedBlanks, updatedBlankStats] = await Promise.all([
         getAllFish(), getUserStatus(), getAllWords(), getAllWordStats(), getAllEncyclopedia(), getAllFishHistory(), getAllStudySessions(), getAllGoldLedger(), getAllBlankQuestions(), getAllBlankQuestionStats()
       ]);
+      // クラウドの古い userStatus を取り込んだ直後に容量が巻き戻っていないか、
+      // 通帳（削除されないログ）を基準にその場で復旧する（初期ロード時と同じロジック）。
+      let finalUser = updatedUser;
+      if (updatedUser) {
+        const recovery = recoverExpansionCapacity(updatedUser, updatedLedger);
+        if (recovery.changed) {
+          finalUser = recovery.user;
+          void putUserStatus(finalUser);
+        }
+      }
       setFishList(updatedFish);
-      if (updatedUser) setUser(updatedUser);
+      if (finalUser) setUser(finalUser);
       setWords(updatedWords);
       setWordStats(Object.fromEntries(updatedStats.map((s) => [s.wordId, s])));
       setEncyclopedia(updatedEncy);
@@ -1518,7 +1578,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const pushNow = useCallback(async () => {
     const email = session?.user?.email;
     if (!email) throw new Error("not-logged-in");
-    await pushToCloud(email);
+    const { userStatusStale } = await pushToCloud(email);
+    if (userStatusStale) throw new Error("cloud-status-stale");
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user?.email]);
 
@@ -1585,7 +1646,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
         updateBlankQuestion,
         upsertBlankQuestions,
         removeBlankQuestion,
+        removeBlankQuestions,
         recordBlankAnswer,
+        resetBlankQuestionWeak,
         claimAchievementReward,
         resetAllData,
         syncNow,

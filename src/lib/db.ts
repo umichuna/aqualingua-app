@@ -337,6 +337,8 @@ const ALL_STORES = [
   "goldLedger",
   "fishHistory",
   "companions",
+  "blankQuestions",
+  "blankQuestionStats",
 ] as const;
 
 export async function clearAllData(): Promise<void> {
@@ -359,6 +361,8 @@ export interface BackupData {
   goldLedger: GoldLedgerEntry[];
   fishHistory: FishHistoryEntry[];
   companions: Fish[];
+  blankQuestions?: BlankQuestion[];
+  blankQuestionStats?: BlankQuestionStats[];
 }
 
 export async function exportAllData(): Promise<BackupData> {
@@ -375,12 +379,19 @@ export async function exportAllData(): Promise<BackupData> {
     goldLedger: await db.getAll("goldLedger"),
     fishHistory: await db.getAll("fishHistory"),
     companions: await db.getAll("companions"),
+    blankQuestions: await db.getAll("blankQuestions"),
+    blankQuestionStats: await db.getAll("blankQuestionStats"),
   };
 }
 
 // バックアップJSONを取り込む（既存データはすべて置き換え）
+// 注意: 旧形式バックアップ（blankQuestions/blankQuestionStats フィールドが無い）を
+// 読み込んだ場合、そのまま clearAllData すると穴抜け問題が全消失してしまうため、
+// フィールド自体が未定義（≠空配列）のときは取り込み前の既存データを退避して残す。
 export async function importAllData(data: BackupData): Promise<void> {
   const db = await getLocalDB();
+  const keepBlankQuestions = data.blankQuestions === undefined ? await db.getAll("blankQuestions") : null;
+  const keepBlankQuestionStats = data.blankQuestionStats === undefined ? await db.getAll("blankQuestionStats") : null;
   await clearAllData();
   for (const w of data.words ?? []) await db.put("words", w);
   for (const s of data.wordStats ?? []) await db.put("wordStats", s);
@@ -391,6 +402,8 @@ export async function importAllData(data: BackupData): Promise<void> {
   for (const g of data.goldLedger ?? []) await db.put("goldLedger", g);
   for (const h of data.fishHistory ?? []) await db.put("fishHistory", h);
   for (const c of data.companions ?? []) await db.put("companions", c);
+  for (const q of data.blankQuestions ?? keepBlankQuestions ?? []) await db.put("blankQuestions", q);
+  for (const st of data.blankQuestionStats ?? keepBlankQuestionStats ?? []) await db.put("blankQuestionStats", st);
 }
 
 // ---------- FishOverrides（組み込み魚編集用） ----------
@@ -459,6 +472,13 @@ export async function putBlankQuestions(qs: BlankQuestion[]): Promise<void> {
 
 export async function deleteBlankQuestion(id: string): Promise<void> {
   await (await getLocalDB()).delete("blankQuestions", id);
+}
+
+export async function deleteBlankQuestions(ids: string[]): Promise<void> {
+  const db = await getLocalDB();
+  const tx = db.transaction("blankQuestions", "readwrite");
+  await Promise.all(ids.map((id) => tx.store.delete(id)));
+  await tx.done;
 }
 
 // ---------- BlankQuestionStats（穴抜け問題苦手統計） ----------
