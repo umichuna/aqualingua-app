@@ -65,9 +65,12 @@ export function QuizPlay({
   const [queueIdx, setQueueIdx] = useState(0);
   const [picked, setPicked] = useState<string | null>(null);
   const [score, setScore] = useState(0);
-  const firstAttempted = useRef<Set<string>>(new Set()); // 初回挑戦済みID（スコアの二重加算防止）
-  // 単語帳の苦手判定（セッション内3回ミスで登録）と統一するためのカウンタ
+  const firstAttempted = useRef<Set<string>>(new Set()); // 正解済みID（スコアの二重加算防止・進捗表示用）
+  // 単語帳の苦手判定（セッション内3回ミスで登録・初回正解で解除）と統一するためのカウンタ
   const sessionWrongRef = useRef<Record<string, number>>({});
+  // 正誤に関わらず「本当にこの問題を初めて見た挑戦か」を判定する（firstAttempted は
+  // 正解時にしかマークされないため、3回ミス後に正解した際の苦手解除判定には使えない）
+  const everAttemptedRef = useRef<Set<string>>(new Set());
 
   const q = queue[queueIdx];
   const choices = useMemo(
@@ -162,6 +165,9 @@ export function QuizPlay({
                 setPicked(c);
                 const ok = c === q.answer;
                 if (ok) sfx.correct(); else sfx.wrong();
+                // 「本当にこの問題を初めて見た挑戦か」（正誤に関わらず一度きり判定）
+                const isVeryFirstAttempt = !everAttemptedRef.current.has(q.id);
+                everAttemptedRef.current.add(q.id);
                 const isFirst = !firstAttempted.current.has(q.id);
                 if (ok && isFirst) {
                   setScore((s) => s + 1);
@@ -169,7 +175,9 @@ export function QuizPlay({
                 }
                 if (ok) {
                   onRecord(q.id, true);
-                  if (isFirst) onResetWeak(q.id); // 1発正解で苦手リセット（セッションをまたいでもOK）
+                  // 苦手リセットは「初回挑戦で正解」の場合のみ（3回ミス後に正解した場合は
+                  // 直前に登録した苦手フラグを打ち消してしまうため対象外にする）
+                  if (isVeryFirstAttempt) onResetWeak(q.id);
                 } else {
                   const cnt = (sessionWrongRef.current[q.id] ?? 0) + 1;
                   sessionWrongRef.current[q.id] = cnt;
