@@ -88,6 +88,8 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
       const msg = err instanceof Error ? err.message : "";
       const errorMsg = msg === "not-logged-in"
         ? "⚠️ 未ログイン（クラウド保存にはログインが必要）"
+        : msg === "cloud-status-stale"
+        ? "⚠️ クラウドに他端末からのより新しいデータがあります。先に「☁️復元」で最新化してから保存してください（単語・魚などは保存済みです）"
         : `⚠️ クラウド保存失敗（${msg || "原因不明"}）`;
       setIoMsg(errorMsg);
       console.error("[Cloud Save] push failed:", err);

@@ -470,26 +470,18 @@ export default function StudyView({ onPhaseChange }: { onPhaseChange?: (inPlay: 
           </button>
         </div>
 
-        {/* ジャンル絞り込み */}
+        {/* ジャンル（複数選択・単語帳と同じUI） */}
         {(() => {
           const blankGenreList = Array.from(new Set(blankQuestions.map((q) => q.genre ?? "未分類")));
-          if (blankGenreList.length <= 1) return null;
           return (
             <div>
-              <div className="text-xs font-bold text-glow mb-1.5">ジャンル（空=すべて）</div>
-              <div className="flex flex-wrap gap-1.5">
+              <div className="text-xs font-bold text-glow mb-1.5">
+                ジャンル（複数選択可・未選択=すべて）
+              </div>
+              <div className="flex gap-1.5 flex-wrap">
                 {blankGenreList.map((g) => (
-                  <button
-                    key={g}
-                    onClick={() => setBlankGenres((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(g)) next.delete(g); else next.add(g);
-                      return next;
-                    })}
-                    className={`text-xs px-2.5 py-1 rounded-full font-bold ${blankGenres.has(g) ? "bg-sand text-deep" : "bg-white/10 text-dim"}`}
-                  >
-                    {g}
-                  </button>
+                  <Chip key={g} active={blankGenres.has(g)} label={g}
+                    onClick={() => setBlankGenres((prev) => toggleSet(prev, g))} />
                 ))}
               </div>
             </div>
@@ -553,6 +545,7 @@ export default function StudyView({ onPhaseChange }: { onPhaseChange?: (inPlay: 
           questions={blankQuizQs}
           stats={blankQuestionStats}
           onRecord={recordBlankAnswer}
+          onResetWeak={game.resetBlankQuestionWeak}
           onQuit={(n, s) => requestQuit(n, s)}
           onFinish={(finalScore, total) => {
             const res = game.completeStudy("blank", total, finalScore);

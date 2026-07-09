@@ -1,5 +1,33 @@
 import * as db from "./db";
-import type { Fish } from "./types";
+import type { Fish, UserStatus } from "./types";
+
+// クラウドの userStatus がローカルより古い場合に無条件で上書きすると、
+// 「PCで実績報酬を受け取り→クラウドセーブ→スマホで同期」のような手順で
+// スマホ側のローカルデータ（未セーブ）が新しくても巻き戻ってしまう。
+// 単調増加・集合系のフィールドは「大きい方/和集合」を採用し、
+// それ以外は新しい方（ローカル）を優先して安全にマージする。
+function mergeUserStatus(local: UserStatus, cloud: UserStatus): UserStatus {
+  if (cloud.lastUpdated >= local.lastUpdated) {
+    // クラウドの方が新しい通常ケース: そのまま採用
+    return cloud;
+  }
+  // ローカルの方が新しい: クラウド上書きで消えると困る項目を救済しつつ
+  // ベースはローカル（新しい方）を採用する
+  const unionArr = <T,>(a?: T[], b?: T[]): T[] => Array.from(new Set([...(a ?? []), ...(b ?? [])]));
+  return {
+    ...local,
+    tankCapacity: Math.max(local.tankCapacity ?? 0, cloud.tankCapacity ?? 0),
+    boxCapacity: Math.max(local.boxCapacity ?? 0, cloud.boxCapacity ?? 0),
+    lifetimeGoldEarned: Math.max(local.lifetimeGoldEarned ?? 0, cloud.lifetimeGoldEarned ?? 0),
+    lifetimeWordsAnswered: Math.max(local.lifetimeWordsAnswered ?? 0, cloud.lifetimeWordsAnswered ?? 0),
+    claimedAchievementRewards: unionArr(local.claimedAchievementRewards, cloud.claimedAchievementRewards),
+    unlockedAchievements: unionArr(local.unlockedAchievements, cloud.unlockedAchievements),
+    achievedTitles: unionArr(local.achievedTitles, cloud.achievedTitles),
+    customGenres: unionArr(local.customGenres, cloud.customGenres),
+    deletedWordIds: unionArr(local.deletedWordIds, cloud.deletedWordIds),
+    lastUpdated: Date.now(),
+  };
+}
 
 // サーバーが返した実エラー文言（{ error } JSON）を読み取る。無ければ statusText。
 async function readError(response: Response): Promise<string> {
@@ -14,7 +42,10 @@ async function readError(response: Response): Promise<string> {
 
 /**
  * クラウド（Azure SQL）から「復元」する。
- * 方針: クラウドを正としてローカルを置き換える（ユーザー決定）。
+ * 方針: クラウドを正としてローカルを置き換える。ただし userStatus のみ、
+ *   ローカルの方が新しい場合は安全マージする（mergeUserStatus 参照）。
+ *   これは「PCでセーブ→スマホで同期」の間にスマホ側でローカル変更が
+ *   発生していた場合に、その変更が黙って消し飛ぶ事故を防ぐため。
  * 安全策: クラウドにデータがある種類だけ置き換える。
  *   → まだ一度もセーブしていない（クラウドが空の）状態で手元を全消ししないため。
  * @returns 何か1つでも復元したら true。クラウドが完全に空なら false。
@@ -39,18 +70,20 @@ export async function pullFromCloud(userId: string): Promise<boolean> {
 
     // userStatus（所持金・累計・カスタム魚・onboardingDone などを含む単一レコード）
     if (cloudData.userStatus) {
-      // ---- 調査ログ: pull がローカルの userStatus を何で上書きするか ----
       const localBefore = await db.getUserStatus();
-      const c = cloudData.userStatus;
+      const c = cloudData.userStatus as UserStatus;
+      const willRollback = !!localBefore && c.lastUpdated < localBefore.lastUpdated;
       console.warn(
-        "[SyncDebug] PULL userStatus overwrite",
+        "[SyncDebug] PULL userStatus",
         {
           local: localBefore && { tankCapacity: localBefore.tankCapacity, boxCapacity: localBefore.boxCapacity, gold: localBefore.gold, items: localBefore.items, lastUpdated: localBefore.lastUpdated },
           cloud: { tankCapacity: c.tankCapacity, boxCapacity: c.boxCapacity, gold: c.gold, items: c.items, lastUpdated: c.lastUpdated },
-          willRollback: !!localBefore && c.lastUpdated < localBefore.lastUpdated,
+          willRollback,
+          action: willRollback ? "merge（ローカル優先+救済フィールド合成）" : "cloud採用",
         }
       );
-      await db.putUserStatus(cloudData.userStatus);
+      const merged = localBefore ? mergeUserStatus(localBefore, c) : c;
+      await db.putUserStatus(merged);
       restored = true;
     }
 
@@ -107,8 +140,10 @@ export async function pullFromCloud(userId: string): Promise<boolean> {
 /**
  * ローカル（IndexedDB）の変更データをクラウド（Azure SQL）に push
  * 変更前後の差分を検出して push
+ * @returns userStatusStale: true の場合、クラウド側に自分より新しい userStatus が
+ *   既にあり、今回の userStatus 書き込みはスキップされた（＝先に☁️同期が必要）。
  */
-export async function pushToCloud(userId: string): Promise<void> {
+export async function pushToCloud(userId: string): Promise<{ userStatusStale: boolean }> {
   try {
     console.log(`[Sync] Pushing to cloud for userId: ${userId}`);
 
@@ -161,7 +196,9 @@ export async function pushToCloud(userId: string): Promise<void> {
       throw new Error(`Push failed: ${await readError(response)}`);
     }
 
+    const result = await response.json().catch(() => ({}));
     console.log(`[Sync] Push completed for userId: ${userId}`);
+    return { userStatusStale: !!result.userStatusStale };
   } catch (error) {
     console.error("[Sync] Push failed:", error);
     throw error;

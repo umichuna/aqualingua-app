@@ -178,8 +178,24 @@ export default function WordManager() {
     setCsvPreview(parseVocabularyCsv(text, game.user.customGenres ?? []));
   };
 
+  // id列がある「書き出し→編集→取込」の往復編集のときだけ、CSVに無い既存単語を削除候補にする
+  // （id列が無い新規登録テンプレは常に追加のみ）
+  const deleteCandidateIds = useMemo(() => {
+    if (!csvPreview || !csvPreview.hasIdColumn) return [];
+    const csvIds = new Set([...csvPreview.words, ...csvPreview.pendingWords].map((w) => w.id));
+    return words.filter((w) => !csvIds.has(w.id)).map((w) => w.id);
+  }, [csvPreview, words]);
+
   const confirmImport = async () => {
     if (!csvPreview) return;
+    if (csvPreview.hasIdColumn || deleteCandidateIds.length > 0) {
+      const ok = window.confirm(
+        `CSV取り込み内容を反映します。\n\n追加・更新: ${csvPreview.words.length}件\n削除: ${deleteCandidateIds.length}件\n\n` +
+        (deleteCandidateIds.length > 0 ? "※CSVに無い単語は削除されます。絞り込んで書き出したCSVの場合はご注意ください。\n\n" : "") +
+        "よろしいですか？"
+      );
+      if (!ok) return;
+    }
     setImporting(true);
     const allWords = csvPreview.words;
     const chunks: Word[][] = [];
@@ -192,9 +208,13 @@ export default function WordManager() {
       setImportProgress(Math.round((done / allWords.length) * 100));
       await new Promise((r) => setTimeout(r, 50));
     }
+    if (deleteCandidateIds.length > 0) game.removeWords(deleteCandidateIds);
     setImporting(false);
     setImportProgress(0);
-    game.pushNotice("📄", `${allWords.length}件の単語を取り込んだ！`);
+    game.pushNotice(
+      "📄",
+      `${allWords.length}件を取り込${deleteCandidateIds.length > 0 ? `み・${deleteCandidateIds.length}件を削除した` : "んだ"}！`
+    );
     setCsvPreview(null);
   };
 
@@ -446,6 +466,14 @@ export default function WordManager() {
                 <span className="text-dim">取り込み可能</span>
                 <span className="font-bold text-glow">{csvPreview.words.length}件</span>
               </div>
+              {csvPreview.hasIdColumn && (
+                <div className="flex justify-between px-3 py-2 bg-black/30">
+                  <span className="text-dim">削除される単語（CSVに無いid）</span>
+                  <span className={`font-bold ${deleteCandidateIds.length > 0 ? "text-coral" : "text-dim"}`}>
+                    {deleteCandidateIds.length}件
+                  </span>
+                </div>
+              )}
               {csvPreview.unknownGenres.length > 0 && (
                 <div className="px-3 py-2 bg-black/30 text-xs border border-sand/40">
                   <div className="flex justify-between mb-1">

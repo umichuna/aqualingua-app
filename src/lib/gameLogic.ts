@@ -155,12 +155,12 @@ export const SHOP_PRICES = {
   baitBasic10: 50, // ベーシック餌×10
   baitPremium5: 180, // 高級フレーク×5
   medicine: 300, // おくすり
-  tankExpansion: 1200, // 水槽拡張キット（初回価格。実価格は tankExpansionPrice() で計算）
-  boxExpansion: 800, // ボックス拡張キット（初回価格。実価格は boxExpansionPrice() で計算）
+  tankExpansion: 1200, // 水槽拡張キット（実価格は tankExpansionPrice() で計算。常に固定）
+  boxExpansion: 800, // ボックス拡張キット（常に800G固定）
   freshwaterTank: 3000, // 淡水水槽
 } as const;
 
-export const MAX_TANK_CAPACITY = 15;
+export const MAX_TANK_CAPACITY = 16;
 
 // 水槽拡張キットは常に1200G固定
 export function tankExpansionPrice(_tankCapacity?: number): number {
@@ -170,8 +170,7 @@ export function tankExpansionPrice(_tankCapacity?: number): number {
 // ---------- ボックス ----------
 export const BOX_CAPACITY_INITIAL = 5;
 
-// ボックス拡張キットも2倍ずつ値上がり（初期5匹→800G）
-export function boxExpansionPrice(boxCapacity: number): number {
-  const purchases = Math.max(0, Math.floor((boxCapacity - BOX_CAPACITY_INITIAL) / 5));
-  return 800 * 2 ** purchases;
+// ボックス拡張キットは常に800G固定（上限なし）
+export function boxExpansionPrice(_boxCapacity?: number): number {
+  return SHOP_PRICES.boxExpansion;
 }

@@ -5,12 +5,11 @@
 // - 〈〉プレースホルダーを選択肢で埋める形式
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import Papa from "papaparse";
 import type { BlankQuestion, WordGenre } from "@/lib/types";
 import { useGame } from "./GameProvider";
 import { sfx } from "@/lib/sound";
 import { speak, cancelSpeech } from "@/lib/speech";
-import { blankQuestionsToCsv } from "@/lib/csv";
+import { blankQuestionsToCsv, parseBlankQuestionsCsv } from "@/lib/csv";
 
 const PLACEHOLDER = "〈〉";
 
@@ -50,12 +49,14 @@ export function QuizPlay({
   questions,
   stats,
   onRecord,
+  onResetWeak,
   onFinish,
   onQuit,
 }: {
   questions: BlankQuestion[];
   stats: Record<string, { incorrectCount: number }>;
   onRecord: (id: string, correct: boolean) => void;
+  onResetWeak: (id: string) => void;
   onFinish: (score: number, total: number) => void;
   onQuit?: (completedCount: number, score: number) => void;
 }) {
@@ -65,6 +66,8 @@ export function QuizPlay({
   const [picked, setPicked] = useState<string | null>(null);
   const [score, setScore] = useState(0);
   const firstAttempted = useRef<Set<string>>(new Set()); // 初回挑戦済みID（スコアの二重加算防止）
+  // 単語帳の苦手判定（セッション内3回ミスで登録）と統一するためのカウンタ
+  const sessionWrongRef = useRef<Record<string, number>>({});
 
   const q = queue[queueIdx];
   const choices = useMemo(
@@ -164,7 +167,14 @@ export function QuizPlay({
                   setScore((s) => s + 1);
                   firstAttempted.current.add(q.id);
                 }
-                onRecord(q.id, ok);
+                if (ok) {
+                  onRecord(q.id, true);
+                  if (isFirst) onResetWeak(q.id); // 1発正解で苦手リセット（セッションをまたいでもOK）
+                } else {
+                  const cnt = (sessionWrongRef.current[q.id] ?? 0) + 1;
+                  sessionWrongRef.current[q.id] = cnt;
+                  if (cnt === 3) onRecord(q.id, false); // セッション内3回目で苦手登録
+                }
               }}
               className={`py-3 px-4 rounded-xl font-bold text-sm text-center transition-all active:scale-95 ${cls}`}
             >
@@ -315,41 +325,65 @@ export default function BlankQuestionView() {
     URL.revokeObjectURL(url);
   };
 
-  const importCsv = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const importCsv = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = "";
 
-    Papa.parse<string[]>(file, {
-      encoding: "UTF-8",
-      skipEmptyLines: true,
-      complete: (result) => {
-        const rows = result.data.filter((r) => {
-          const first = (r[0] ?? "").replace(/^﻿/, "").trim();
-          return first !== "文" && first !== "";
-        });
-        const parsed: Omit<BlankQuestion, "id" | "createdAt" | "lastUpdated">[] = [];
-        const errors: string[] = [];
-        rows.forEach((cols, i) => {
-          if (cols.length < 6) { errors.push(`行${i + 2}: 列が足りません`); return; }
-          const sentence = cols[0].replace(/^﻿/, "").trim();
-          const [, japaneseText, answer, w1, w2, w3, explanation = "", genre = "未分類"] = cols;
-          if (!sentence.includes(PLACEHOLDER)) { errors.push(`行${i + 2}: 〈〉がありません`); return; }
-          parsed.push({
-            sentence: sentence.trim(),
-            japaneseText: japaneseText.trim(),
-            answer: answer.trim(),
-            wrongChoices: [w1.trim(), w2.trim(), w3.trim()],
-            explanation: explanation.trim(),
-            genre: genre.trim() || "未分類",
-          });
-        });
-        if (errors.length > 0) { setCsvError(errors.slice(0, 3).join(" / ")); return; }
-        game.importBlankQuestions(parsed);
-        setCsvError(`${parsed.length}件を取り込みました`);
-      },
-      error: () => setCsvError("CSVの読み込みに失敗しました"),
-    });
+    let text: string;
+    try {
+      text = await file.text();
+    } catch {
+      setCsvError("CSVの読み込みに失敗しました");
+      return;
+    }
+
+    const { rows, errors, hasIdColumn } = parseBlankQuestionsCsv(text);
+    if (errors.length > 0) {
+      setCsvError(errors.slice(0, 3).map((er) => `行${er.row + 1}: ${er.reason}`).join(" / "));
+      return;
+    }
+    if (rows.length === 0) {
+      setCsvError("取り込める行がありませんでした");
+      return;
+    }
+
+    const existingById = new Map(blankQuestions.map((q) => [q.id, q]));
+    const toAdd: Omit<BlankQuestion, "id" | "createdAt" | "lastUpdated">[] = [];
+    const toUpdate: BlankQuestion[] = [];
+    const csvIds = new Set<string>();
+
+    for (const row of rows) {
+      const { id, ...data } = row;
+      const existing = id ? existingById.get(id) : undefined;
+      if (existing) {
+        csvIds.add(id);
+        toUpdate.push({ ...existing, ...data, lastUpdated: Date.now() });
+      } else {
+        toAdd.push(data);
+      }
+    }
+
+    // id 列がある「編集用CSV」の再取込のときだけ、CSVに無い既存問題を削除候補にする
+    // （id 列が無い「追加用CSV」は常に追加のみ。絞込書出の再取込による誤削除を防ぐ）
+    const toDeleteIds = hasIdColumn
+      ? blankQuestions.filter((q) => !csvIds.has(q.id)).map((q) => q.id)
+      : [];
+
+    if (toUpdate.length > 0 || toDeleteIds.length > 0) {
+      const ok = window.confirm(
+        `CSV取り込み内容を反映します。\n\n追加: ${toAdd.length}件\n更新: ${toUpdate.length}件\n削除: ${toDeleteIds.length}件\n\n` +
+        (toDeleteIds.length > 0 ? "※CSVに無い問題は削除されます。絞り込んで書き出したCSVの場合はご注意ください。\n\n" : "") +
+        "よろしいですか？"
+      );
+      if (!ok) { setCsvError("取り込みをキャンセルしました"); return; }
+    }
+
+    if (toAdd.length > 0) game.importBlankQuestions(toAdd);
+    if (toUpdate.length > 0) game.upsertBlankQuestions(toUpdate);
+    if (toDeleteIds.length > 0) game.removeBlankQuestions(toDeleteIds);
+
+    setCsvError(`追加${toAdd.length}件・更新${toUpdate.length}件・削除${toDeleteIds.length}件を取り込みました`);
   };
 
   const exportCsv = () => {
@@ -395,18 +429,18 @@ export default function BlankQuestionView() {
       {/* CSV操作 */}
       <div className="flex gap-2">
         <button onClick={downloadTemplate} className="flex-1 text-xs py-2 rounded-xl bg-mid text-foam font-bold">
-          📥 CSVテンプレ
+          📥 追加用CSV
         </button>
         <label className="flex-1 text-xs py-2 rounded-xl bg-mid text-foam font-bold text-center cursor-pointer">
           📤 CSV取り込み
           <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={importCsv} />
         </label>
         <button onClick={exportCsv} className="flex-1 text-xs py-2 rounded-xl bg-mid text-foam font-bold">
-          📦 書き出し
+          📦 編集用CSV
         </button>
       </div>
       <p className="text-[10px] text-dim text-center -mt-1">
-        「書き出し」は選択中のジャンル（{filterGenre}）の問題だけ出力します
+        「追加用CSV」は新規登録の雛形（id無し=常に追加）。「編集用CSV」は選択中のジャンル（{filterGenre}）をid付きで書き出し、再取込で更新・削除も反映されます
       </p>
       {csvError && <p className="text-xs text-center text-glow">{csvError}</p>}
 
@@ -451,6 +485,7 @@ export default function BlankQuestionView() {
                   {s?.incorrectCount ? (
                     <span className="text-[10px] text-coral">⚠️ 苦手 {s.incorrectCount}回</span>
                   ) : null}
+                  <span className="text-[10px] text-dim/60 ml-auto shrink-0">#{q.id.slice(0, 8)}</span>
                 </div>
               </div>
               <div className="flex flex-col gap-1 shrink-0">
