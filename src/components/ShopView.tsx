@@ -80,7 +80,16 @@ export default function ShopView() {
     if (!gacha) return;
     const name = nameInput.trim() || gacha.fish.type;
     const boxCap = user.boxCapacity ?? BOX_CAPACITY_INITIAL;
-    if (currentTankFishCount >= user.tankCapacity) {
+    // 獲得した魚の水の種類が今見ている水槽と違う場合、実際に入るのは別の水槽
+    // （同じ水の種類の水槽）なので、満杯判定もその水槽の匹数で行う
+    const fishWaterType = gacha.fish.waterType ?? "saltwater";
+    const currentTank = game.tanks?.find((t) => t.id === currentTankId);
+    const targetTankId =
+      currentTank && currentTank.type === fishWaterType
+        ? currentTankId
+        : (game.tanks?.find((t) => t.type === fishWaterType)?.id ?? currentTankId);
+    const targetTankFishCount = fishList.filter((f) => (f.tankId ?? "sw-1") === targetTankId).length;
+    if (targetTankFishCount >= user.tankCapacity) {
       if ((user.boxFish ?? []).length >= boxCap) {
         flash(false, "水槽もボックスも満杯！ボックス拡張キットを買おう");
         return;

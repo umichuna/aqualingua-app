@@ -331,6 +331,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
     for (let i = 1; i <= fwCount; i++) result.push({ id: `fw-${i}`, type: "freshwater", name: `淡水 ${i}` });
     return result;
   }, [user.tanks, user.saltwaterTankCount, user.freshwaterTankCount, user.hasFreshwaterTank]);
+  const tanksRef = useRef<Tank[]>(tanks);
+  useEffect(() => { tanksRef.current = tanks; }, [tanks]);
 
   const pushNotice = useCallback((icon: string, text: string) => {
     const id = noticeSeq++;
@@ -751,6 +753,14 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const addFishToTank = useCallback(
     (master: FishMaster, name: string) => {
       const now = Date.now();
+      // 現在表示中の水槽が魚の水の種類と合わない場合（例: 淡水水槽を見ている時に
+      // 海水魚を獲得）は、同じ水の種類の水槽に入れる（無ければ現在の水槽のまま）。
+      const fishWaterType = master.waterType ?? "saltwater";
+      const currentTank = tanksRef.current.find(t => t.id === currentTankIdRef.current);
+      const targetTankId =
+        currentTank && currentTank.type === fishWaterType
+          ? currentTankIdRef.current
+          : (tanksRef.current.find(t => t.type === fishWaterType)?.id ?? currentTankIdRef.current);
       const fish: Fish = {
         fishId: crypto.randomUUID(),
         name,
@@ -763,7 +773,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         isSick: false,
         sickStartTime: null,
         lastUpdated: now,
-        tankId: currentTankIdRef.current,
+        tankId: targetTankId,
       };
       // 関数型更新：同一同期パスで複数実績の魚を続けて付与しても消えない（B3対策）
       setFishList((list) => [...list, fish]);
@@ -1205,13 +1215,13 @@ export function GameProvider({ children }: { children: ReactNode }) {
       // ローカルも更新
       const u = userRef.current;
       persistUser({ ...u, customFish: (u.customFish ?? []).map((f) => (f.type === def.type ? def : f)) });
-      // クラウド更新（一度削除してから再登録）
-      void deleteSharedCustomFish(def.type)
-        .then(() => postSharedCustomFish(def))
-        .catch((e) => {
-          console.error("[CustomFish] update failed", e);
-          pushNotice("⚠️", "共有おさかなの更新に失敗しました（通信状況をご確認ください）");
-        });
+      // クラウド更新: POST は fishType(=type) 主キーの MERGE（upsert）なので直接呼べば良い。
+      // 以前は「削除してから再登録」の2リクエスト構成だったため、削除成功後に
+      // 再登録がタイムアウト/失敗すると共有プールから魚が消えたまま戻らないバグがあった。
+      void postSharedCustomFish(def).catch((e) => {
+        console.error("[CustomFish] update failed", e);
+        pushNotice("⚠️", "共有おさかなの更新に失敗しました（通信状況をご確認ください）");
+      });
     },
     [persistUser, pushNotice]
   );
@@ -1396,9 +1406,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
     (fishId: string, targetTankId: string) => {
       const fish = fishRef.current.find(f => f.fishId === fishId);
       if (!fish) return;
-      // 水の種類チェック：海水魚は海水水槽、淡水魚は淡水水槽にしか引越しできない
-      // （moveBoxFishToTank と同じ判定。旧データ互換のため導出済みの tanks を参照）
-      const targetTank = tanks.find(t => t.id === targetTankId);
+      // 対象タンク・魚の水の種類を確認し、海水魚は海水水槽・淡水魚は淡水水槽にのみ移動できる
+      const targetTank = tanksRef.current.find(t => t.id === targetTankId);
       if (!targetTank) return;
       const fishMaster = allFishMasterRef.current.find(m => m.type === fish.type);
       const fishWaterType = fishMaster?.waterType ?? "saltwater";
@@ -1411,7 +1420,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       void putFish(updated);
       schedulePush();
     },
-    [schedulePush, pushNotice, tanks]
+    [schedulePush, pushNotice]
   );
 
   // 旧 buyTankSlot — 互換のためにエイリアスを残す（ShopView 移行後は削除可）

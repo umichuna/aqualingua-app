@@ -207,6 +207,12 @@ export default function EncyclopediaView() {
       (user.customFish ?? []).find((f) => f.type === type) ??
       allFishMaster.find((f) => f.type === type);
     if (!fish) return;
+    // 既存のパレットに一致するプリセットを探す（見つからなければ0番目のまま）。
+    // これをしないと保存時に常にプリセット0（青）で上書きされてしまう。
+    const existingPalette = (fish as CustomFishDef).palette;
+    const matchedPaletteIdx = existingPalette
+      ? PALETTE_PRESETS.findIndex((p) => p.palette.body === existingPalette.body)
+      : -1;
     setCustomForm({
       type: fish.type,
       rarity: fish.rarity,
@@ -214,7 +220,7 @@ export default function EncyclopediaView() {
       layer: (fish as CustomFishDef).layer ?? "middle",
       waterType: (fish as CustomFishDef).waterType ?? fish.waterType ?? "saltwater",
       displaySize: fish.displaySize ?? "medium",
-      paletteIdx: 0,
+      paletteIdx: matchedPaletteIdx >= 0 ? matchedPaletteIdx : 0,
       imageUrl: fish.imageUrl ?? "",
       rewardOnly: (fish as CustomFishDef).rewardOnly ?? false,
       linkedAchievementId: (fish as CustomFishDef).linkedAchievementId ?? "",
