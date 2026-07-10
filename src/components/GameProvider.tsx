@@ -321,6 +321,13 @@ export function GameProvider({ children }: { children: ReactNode }) {
     userRef.current = user;
     fishRef.current = fishList;
   }, [user, fishList]);
+  const sharedCustomFishRef = useRef<CustomFishDef[]>(sharedCustomFish);
+  useEffect(() => { sharedCustomFishRef.current = sharedCustomFish; }, [sharedCustomFish]);
+  // ログイン直後の「全員共有カスタム魚を取得」は数十秒かかることがある（Azure SQL
+  // コールドスタート）。その最中にユーザーが自分のカスタム魚を編集・追加・削除すると、
+  // 後から届く古いフェッチ結果で上書きされ、編集が消えたように見えるバグがあった。
+  // 編集した type を記録しておき、フェッチ結果の反映時に上書きしないようにする。
+  const locallyModifiedFishTypesRef = useRef<Set<string>>(new Set());
 
   const tanks = useMemo<Tank[]>(() => {
     if (user.tanks?.length) return user.tanks;
@@ -563,11 +570,36 @@ export function GameProvider({ children }: { children: ReactNode }) {
           }
         }
         if (cancelled) return;
-        // 共有 + 移行分をマージして state に反映
-        const merged = [...shared];
-        const mergedTypes = new Set(merged.map((f) => f.type));
+        // 共有 + 移行分をマージして state に反映。
+        // ただし、このフェッチが進行中にユーザーが自分のカスタム魚を編集・追加・削除
+        // していた場合、フェッチ結果は古い可能性があるため、そちらを優先しない
+        // （編集済み type は現在のローカル state を採用。削除済みなら含めない）。
+        const modifiedTypes = locallyModifiedFishTypesRef.current;
+        const currentLocalMap = new Map(sharedCustomFishRef.current.map((f) => [f.type, f]));
+        const merged: CustomFishDef[] = [];
+        const mergedTypes = new Set<string>();
+        for (const f of shared) {
+          if (modifiedTypes.has(f.type)) {
+            const localVer = currentLocalMap.get(f.type);
+            if (localVer) {
+              merged.push(localVer);
+              mergedTypes.add(f.type);
+            }
+            // ローカルに無ければフェッチ中に削除された魚なので含めない
+          } else {
+            merged.push(f);
+            mergedTypes.add(f.type);
+          }
+        }
         for (const f of localOnly) {
           if (!mergedTypes.has(f.type)) {
+            merged.push(f);
+            mergedTypes.add(f.type);
+          }
+        }
+        // フェッチ中にローカルで新規追加された魚（上のいずれにも含まれない場合）も保持
+        for (const f of sharedCustomFishRef.current) {
+          if (modifiedTypes.has(f.type) && !mergedTypes.has(f.type)) {
             merged.push(f);
             mergedTypes.add(f.type);
           }
@@ -1187,6 +1219,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
   const addCustomFish = useCallback(
     (def: CustomFishDef) => {
+      locallyModifiedFishTypesRef.current.add(def.type);
       // 全員共有へ即時反映（楽観的更新）
       setSharedCustomFish((prev) =>
         prev.some((f) => f.type === def.type) ? prev : [...prev, def]
@@ -1208,6 +1241,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
   const updateCustomFish = useCallback(
     (def: CustomFishDef) => {
+      locallyModifiedFishTypesRef.current.add(def.type);
       // 全員共有を更新
       setSharedCustomFish((prev) =>
         prev.map((f) => (f.type === def.type ? def : f))
@@ -1228,6 +1262,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
   const removeCustomFish = useCallback(
     (fishType: string) => {
+      locallyModifiedFishTypesRef.current.add(fishType);
       // 全員共有から削除
       setSharedCustomFish((prev) => prev.filter((f) => f.type !== fishType));
       const u = userRef.current;
