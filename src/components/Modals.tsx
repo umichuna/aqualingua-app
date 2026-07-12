@@ -6,7 +6,15 @@
 import { useRef, useState } from "react";
 import { signIn, signOut, useSession } from "next-auth/react";
 import { exportAllData, importAllData, type BackupData } from "@/lib/db";
-import { todayString } from "@/lib/gameLogic";
+import {
+  DEFAULT_WEAK_CLEAR_STREAK,
+  DEFAULT_WEAK_THRESHOLD,
+  MAX_WEAK_CLEAR_STREAK,
+  MAX_WEAK_THRESHOLD,
+  MIN_WEAK_CLEAR_STREAK,
+  MIN_WEAK_THRESHOLD,
+  todayString,
+} from "@/lib/gameLogic";
 import { friendlySyncErrorMessage } from "@/lib/sync";
 import {
   getBgmVolume,
@@ -147,6 +155,50 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
             </div>
           </div>
         )}
+
+        <div className="text-[10px] font-bold tracking-widest mb-1 text-glow">苦手判定</div>
+        <div className="rounded-xl px-3 py-2.5 mb-3 bg-mid space-y-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <div className="text-sm font-bold text-foam">苦手登録の間違い回数</div>
+              <div className="text-[10px] text-dim">同じセッション内でこの回数間違えたら苦手登録（単語帳・穴抜け問題共通）</div>
+            </div>
+            <input
+              type="number"
+              min={MIN_WEAK_THRESHOLD}
+              max={MAX_WEAK_THRESHOLD}
+              value={game.user.weakThreshold ?? DEFAULT_WEAK_THRESHOLD}
+              onChange={(e) => {
+                const raw = Math.round(Number(e.target.value));
+                const n = Number.isFinite(raw)
+                  ? Math.min(MAX_WEAK_THRESHOLD, Math.max(MIN_WEAK_THRESHOLD, raw))
+                  : DEFAULT_WEAK_THRESHOLD;
+                game.updateUser({ weakThreshold: n });
+              }}
+              className="w-14 px-2 py-1.5 rounded-lg bg-black/30 text-foam text-center font-bold outline-none shrink-0"
+            />
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <div className="text-sm font-bold text-foam">苦手解除の連続正解セッション数</div>
+              <div className="text-[10px] text-dim">別セッションで最初の挑戦が正解、をこの回数連続したら解除</div>
+            </div>
+            <input
+              type="number"
+              min={MIN_WEAK_CLEAR_STREAK}
+              max={MAX_WEAK_CLEAR_STREAK}
+              value={game.user.weakClearStreak ?? DEFAULT_WEAK_CLEAR_STREAK}
+              onChange={(e) => {
+                const raw = Math.round(Number(e.target.value));
+                const n = Number.isFinite(raw)
+                  ? Math.min(MAX_WEAK_CLEAR_STREAK, Math.max(MIN_WEAK_CLEAR_STREAK, raw))
+                  : DEFAULT_WEAK_CLEAR_STREAK;
+                game.updateUser({ weakClearStreak: n });
+              }}
+              className="w-14 px-2 py-1.5 rounded-lg bg-black/30 text-foam text-center font-bold outline-none shrink-0"
+            />
+          </div>
+        </div>
 
         <div className="text-[10px] font-bold tracking-widest mb-1 text-glow">サウンド</div>
         <div className="rounded-xl px-3 py-2.5 mb-2 bg-mid flex items-center justify-between">

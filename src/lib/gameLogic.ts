@@ -24,6 +24,17 @@ export function dailyGoldReward(mode: StudyMode, jobLevel?: number): number {
   return sessionGold(mode, 1, jobLevel);
 }
 
+// ---------- 苦手判定（単語帳・穴抜け問題 共通） ----------
+// 登録: セッション内でこの回数だけ間違えた時点で苦手登録
+export const DEFAULT_WEAK_THRESHOLD = 3;
+export const MIN_WEAK_THRESHOLD = 1;
+export const MAX_WEAK_THRESHOLD = 10;
+// 解除: 「新しいセッションで最初の挑戦が正解」がこの回数連続したら苦手解除
+// （間に1回でも最初の挑戦が不正解のセッションを挟むと連続カウントは0に戻る）
+export const DEFAULT_WEAK_CLEAR_STREAK = 1;
+export const MIN_WEAK_CLEAR_STREAK = 1;
+export const MAX_WEAK_CLEAR_STREAK = 10;
+
 // ---------- 好感度バランス（レア度別上限・上昇倍率） ----------
 export const MAX_AFFECTION: Record<Rarity, number> = {
   激安: 100,

@@ -27,6 +27,7 @@ import {
   BOX_CAPACITY_INITIAL,
   boxExpansionPrice,
   calculateOfflineEffects,
+  DEFAULT_WEAK_CLEAR_STREAK,
   type GachaTier,
   GACHA_TIERS,
   jobLevelFor,
@@ -169,7 +170,7 @@ interface GameContextValue {
   removeWord: (id: string) => void;
   removeWords: (ids: string[]) => void;
   recordAnswer: (wordId: string, correct: boolean) => void;
-  resetWordWeak: (wordId: string) => void;
+  registerWordFirstTryOutcome: (wordId: string, correct: boolean) => void;
   allGenres: string[]; // 単語データ + customGenres から自動生成
   addCustomGenre: (genre: string) => void;
   addCustomGenres: (genres: string[]) => void;
@@ -194,7 +195,7 @@ interface GameContextValue {
   removeBlankQuestion: (id: string) => void;
   removeBlankQuestions: (ids: string[]) => void;
   recordBlankAnswer: (id: string, correct: boolean) => void;
-  resetBlankQuestionWeak: (id: string) => void;
+  registerBlankFirstTryOutcome: (id: string, correct: boolean) => void;
 
   // 実績
   claimAchievementReward: (achievementId: string) => void;
@@ -1034,13 +1035,28 @@ export function GameProvider({ children }: { children: ReactNode }) {
     schedulePush();
   }, [schedulePush]);
 
-  const resetWordWeak = useCallback((wordId: string) => {
+  // 「新しいセッションでの最初の挑戦」の正誤を渡す。設定の解除条件（連続正解セッション数）
+  // に達したら苦手解除。不正解なら連続カウントを0に戻す。苦手でない単語には何もしない。
+  const registerWordFirstTryOutcome = useCallback((wordId: string, correct: boolean) => {
+    const clearStreak = userRef.current.weakClearStreak ?? DEFAULT_WEAK_CLEAR_STREAK;
     setWordStats((s) => {
       const prev = s[wordId];
       if (!prev || prev.incorrectCount === 0) return s;
-      const next: WordStats = { ...prev, incorrectCount: 0, lastUpdated: Date.now() };
-      void putWordStats(next);
-      return { ...s, [wordId]: next };
+      const now = Date.now();
+      if (correct) {
+        const streak = (prev.correctStreak ?? 0) + 1;
+        const next: WordStats =
+          streak >= clearStreak
+            ? { ...prev, incorrectCount: 0, correctStreak: 0, lastUpdated: now }
+            : { ...prev, correctStreak: streak, lastUpdated: now };
+        void putWordStats(next);
+        return { ...s, [wordId]: next };
+      } else {
+        if (!prev.correctStreak) return s;
+        const next: WordStats = { ...prev, correctStreak: 0, lastUpdated: now };
+        void putWordStats(next);
+        return { ...s, [wordId]: next };
+      }
     });
     schedulePush();
   }, [schedulePush]);
@@ -1585,14 +1601,27 @@ export function GameProvider({ children }: { children: ReactNode }) {
     []
   );
 
-  // 単語の resetWordWeak と同じ役割: 苦手カウントを0に戻す（次セッション初回正解時に使用）
-  const resetBlankQuestionWeak = useCallback((id: string) => {
+  // 単語の registerWordFirstTryOutcome と同じ役割・同じ設定（weakClearStreak）を使う
+  const registerBlankFirstTryOutcome = useCallback((id: string, correct: boolean) => {
+    const clearStreak = userRef.current.weakClearStreak ?? DEFAULT_WEAK_CLEAR_STREAK;
     setBlankQuestionStats((prev) => {
       const existing = prev[id];
       if (!existing || existing.incorrectCount === 0) return prev;
-      const next: BlankQuestionStats = { ...existing, incorrectCount: 0, lastUpdated: Date.now() };
-      void putBlankQuestionStats(next);
-      return { ...prev, [id]: next };
+      const now = Date.now();
+      if (correct) {
+        const streak = (existing.correctStreak ?? 0) + 1;
+        const next: BlankQuestionStats =
+          streak >= clearStreak
+            ? { ...existing, incorrectCount: 0, correctStreak: 0, lastUpdated: now }
+            : { ...existing, correctStreak: streak, lastUpdated: now };
+        void putBlankQuestionStats(next);
+        return { ...prev, [id]: next };
+      } else {
+        if (!existing.correctStreak) return prev;
+        const next: BlankQuestionStats = { ...existing, correctStreak: 0, lastUpdated: now };
+        void putBlankQuestionStats(next);
+        return { ...prev, [id]: next };
+      }
     });
   }, []);
 
@@ -1701,7 +1730,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         removeWord,
         removeWords,
         recordAnswer,
-        resetWordWeak,
+        registerWordFirstTryOutcome,
         allGenres,
         addCustomGenre,
         addCustomGenres,
@@ -1729,7 +1758,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         removeBlankQuestion,
         removeBlankQuestions,
         recordBlankAnswer,
-        resetBlankQuestionWeak,
+        registerBlankFirstTryOutcome,
         claimAchievementReward,
         resetAllData,
         syncNow,

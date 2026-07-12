@@ -49,14 +49,16 @@ export function QuizPlay({
   questions,
   stats,
   onRecord,
-  onResetWeak,
+  onFirstTryOutcome,
+  weakThreshold,
   onFinish,
   onQuit,
 }: {
   questions: BlankQuestion[];
   stats: Record<string, { incorrectCount: number }>;
   onRecord: (id: string, correct: boolean) => void;
-  onResetWeak: (id: string) => void;
+  onFirstTryOutcome: (id: string, correct: boolean) => void;
+  weakThreshold: number;
   onFinish: (score: number, total: number) => void;
   onQuit?: (completedCount: number, score: number) => void;
 }) {
@@ -173,15 +175,17 @@ export function QuizPlay({
                   setScore((s) => s + 1);
                   firstAttempted.current.add(q.id);
                 }
+                if (isVeryFirstAttempt) {
+                  // 苦手解除の判定（連続正解セッション数が設定値に達したら解除。
+                  // 不正解ならその連続カウントを0に戻す）
+                  onFirstTryOutcome(q.id, ok);
+                }
                 if (ok) {
                   onRecord(q.id, true);
-                  // 苦手リセットは「初回挑戦で正解」の場合のみ（3回ミス後に正解した場合は
-                  // 直前に登録した苦手フラグを打ち消してしまうため対象外にする）
-                  if (isVeryFirstAttempt) onResetWeak(q.id);
                 } else {
                   const cnt = (sessionWrongRef.current[q.id] ?? 0) + 1;
                   sessionWrongRef.current[q.id] = cnt;
-                  if (cnt === 3) onRecord(q.id, false); // セッション内3回目で苦手登録
+                  if (cnt === weakThreshold) onRecord(q.id, false); // セッション内で設定回数間違えたら苦手登録
                 }
               }}
               className={`py-3 px-4 rounded-xl font-bold text-sm text-center transition-all active:scale-95 ${cls}`}
