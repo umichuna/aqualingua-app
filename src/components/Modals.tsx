@@ -164,7 +164,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
               <div className="text-[10px] text-dim">同じセッション内でこの回数間違えたら苦手登録（単語帳・穴抜け問題共通）</div>
             </div>
             <select
-              value={game.user.weakThreshold ?? DEFAULT_WEAK_THRESHOLD}
+              value={String(game.user.weakThreshold ?? DEFAULT_WEAK_THRESHOLD)}
               onChange={(e) => {
                 const n = Number(e.target.value);
                 game.updateUser({ weakThreshold: n });
@@ -172,7 +172,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
               className="px-2 py-1.5 rounded-lg bg-black/30 text-foam text-center font-bold outline-none shrink-0"
             >
               {Array.from({ length: MAX_WEAK_THRESHOLD - MIN_WEAK_THRESHOLD + 1 }, (_, i) => MIN_WEAK_THRESHOLD + i).map((n) => (
-                <option key={n} value={n}>{n}</option>
+                <option key={n} value={String(n)}>{n}</option>
               ))}
             </select>
           </div>
@@ -182,7 +182,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
               <div className="text-[10px] text-dim">別セッションで最初の挑戦が正解、をこの回数連続したら解除</div>
             </div>
             <select
-              value={game.user.weakClearStreak ?? DEFAULT_WEAK_CLEAR_STREAK}
+              value={String(game.user.weakClearStreak ?? DEFAULT_WEAK_CLEAR_STREAK)}
               onChange={(e) => {
                 const n = Number(e.target.value);
                 game.updateUser({ weakClearStreak: n });
@@ -190,7 +190,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
               className="px-2 py-1.5 rounded-lg bg-black/30 text-foam text-center font-bold outline-none shrink-0"
             >
               {Array.from({ length: MAX_WEAK_CLEAR_STREAK - MIN_WEAK_CLEAR_STREAK + 1 }, (_, i) => MIN_WEAK_CLEAR_STREAK + i).map((n) => (
-                <option key={n} value={n}>{n}</option>
+                <option key={n} value={String(n)}>{n}</option>
               ))}
             </select>
           </div>
