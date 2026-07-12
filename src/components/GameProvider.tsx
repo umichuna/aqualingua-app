@@ -896,8 +896,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
     if (u.gold < info.price) return null;
     persistUser({ ...u, gold: u.gold - info.price });
     recordLedger(-info.price, info.label, u.gold - info.price);
-    // 共有カスタム魚を含む最新の一覧から抽選する
-    return rollGachaWithWeights(info.weights, allFishMasterRef.current);
+    // 共有カスタム魚を含む最新の一覧から抽選する（海水/淡水ガチャは水の種類で絞り込み）
+    return rollGachaWithWeights(info.weights, allFishMasterRef.current, info.waterType);
   }, [persistUser, recordLedger]);
 
   // ---------- ショップ ----------

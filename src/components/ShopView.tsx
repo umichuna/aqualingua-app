@@ -154,13 +154,20 @@ export default function ShopView() {
   const swCount = tanks ? tanks.filter(t => t.type === "saltwater").length : (user.saltwaterTankCount ?? 1);
   const fwCount = tanks ? tanks.filter(t => t.type === "freshwater").length : (user.freshwaterTankCount ?? (user.hasFreshwaterTank ? 1 : 0));
 
-  const TIER_KEYS: GachaTier[] = ["cheap", "normal", "premium"];
+  const TIER_KEYS: GachaTier[] = ["cheap", "normal", "premium", "saltwater", "freshwater"];
+  const TIER_GRADIENT: Record<GachaTier, string> = {
+    cheap: "linear-gradient(135deg, #1A3040, #0E2A4F)",
+    normal: "linear-gradient(135deg, var(--aqua-mid), #1E5288)",
+    premium: "linear-gradient(135deg, #1E3A5F, #2D1B6B)",
+    saltwater: "linear-gradient(135deg, #0E4C6B, #08324F)",
+    freshwater: "linear-gradient(135deg, #1F6B3A, #0E3F24)",
+  };
 
   return (
     <div className="p-4 flex flex-col gap-3">
       <h2 className="font-bold text-lg text-foam">ショップ</h2>
 
-      {/* 3種ガチャ（要求 #7） */}
+      {/* 5種ガチャ（要求 #7） */}
       <div className="space-y-2">
         <div className="text-xs font-bold text-glow">🎰 おさかなガチャ</div>
         {TIER_KEYS.map((tier) => {
@@ -170,14 +177,7 @@ export default function ShopView() {
             <div
               key={tier}
               className="flex items-center gap-3 rounded-xl p-3"
-              style={{
-                background:
-                  tier === "premium"
-                    ? "linear-gradient(135deg, #1E3A5F, #2D1B6B)"
-                    : tier === "normal"
-                      ? "linear-gradient(135deg, var(--aqua-mid), #1E5288)"
-                      : "linear-gradient(135deg, #1A3040, #0E2A4F)",
-              }}
+              style={{ background: TIER_GRADIENT[tier] }}
             >
               <span className="text-2xl">{info.icon}</span>
               <div className="flex-1 min-w-0">

@@ -126,8 +126,8 @@ export function todayString(d: Date = new Date()): string {
 }
 
 // ---------- ガチャの種類（要求 #7） ----------
-// 3種類のガチャ。価格が高いほどレアが出やすい重みテーブルを持つ。
-export type GachaTier = "cheap" | "normal" | "premium";
+// 価格が高いほどレアが出やすい重みテーブルを持つ。海水/淡水ガチャは水の種類を限定する。
+export type GachaTier = "cheap" | "normal" | "premium" | "saltwater" | "freshwater";
 
 export interface GachaInfo {
   label: string;
@@ -135,6 +135,7 @@ export interface GachaInfo {
   icon: string;
   weights: Record<"激安" | "普通" | "高級" | "ロマン", number>;
   desc: string;
+  waterType?: import("./types").WaterType; // 指定時はその水の種類の魚だけが出る
 }
 
 export const GACHA_TIERS: Record<GachaTier, GachaInfo> = {
@@ -158,6 +159,22 @@ export const GACHA_TIERS: Record<GachaTier, GachaInfo> = {
     icon: "💎",
     weights: { 激安: 0, 普通: 10, 高級: 50, ロマン: 40 },
     desc: "高価だが高級・ロマンが大幅アップ！",
+  },
+  saltwater: {
+    label: "海水ガチャ",
+    price: 700,
+    icon: "🌊",
+    weights: { 激安: 0, 普通: 60, 高級: 35, ロマン: 15 },
+    desc: "海水魚だけが出る。高級・ロマンも狙える。",
+    waterType: "saltwater",
+  },
+  freshwater: {
+    label: "淡水ガチャ",
+    price: 700,
+    icon: "🌿",
+    weights: { 激安: 0, 普通: 60, 高級: 35, ロマン: 15 },
+    desc: "淡水魚だけが出る。高級・ロマンも狙える。",
+    waterType: "freshwater",
   },
 };
 

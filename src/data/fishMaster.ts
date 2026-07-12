@@ -521,7 +521,8 @@ export function getFishMaster(type: string): FishMaster | undefined {
 // rewardOnly: true の魚はガチャ対象外。
 export function rollGachaWithWeights(
   weights: Record<Rarity, number>,
-  allFish: FishMaster[] = FISH_MASTER
+  allFish: FishMaster[] = FISH_MASTER,
+  waterType?: WaterType
 ): FishMaster {
   const total = Object.values(weights).reduce((s, w) => s + w, 0);
   let roll = Math.random() * total;
@@ -533,10 +534,14 @@ export function rollGachaWithWeights(
       break;
     }
   }
-  const pool = allFish.filter((f) => f.rarity === rarity && !f.rewardOnly);
+  const matchesWater = (f: FishMaster) => !waterType || (f.waterType ?? "saltwater") === waterType;
+  const pool = allFish.filter((f) => f.rarity === rarity && !f.rewardOnly && matchesWater(f));
   if (pool.length === 0) {
-    // ロマンが0重みの激安ガチャ等でPoolが空になった場合のフォールバック
-    // rewardOnly でない魚で再度選び直す
+    // 指定レア度に該当魚が無い場合のフォールバック。水の種類の縛りは維持したまま
+    // rarity 縛りだけ外して選び直す（海水/淡水専用ガチャで特定レアの在庫が無いケース向け）。
+    const sameWater = allFish.filter((f) => !f.rewardOnly && matchesWater(f));
+    if (sameWater.length > 0) return sameWater[Math.floor(Math.random() * sameWater.length)];
+    // それでも空なら（該当する水の種類の魚が1匹も居ない）水の種類の縛りも外す
     const nonReward = allFish.filter((f) => !f.rewardOnly);
     return nonReward.length > 0 ? nonReward[Math.floor(Math.random() * nonReward.length)] : allFish[0];
   }
