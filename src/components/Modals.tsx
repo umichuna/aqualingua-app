@@ -163,40 +163,36 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
               <div className="text-sm font-bold text-foam">苦手登録の間違い回数</div>
               <div className="text-[10px] text-dim">同じセッション内でこの回数間違えたら苦手登録（単語帳・穴抜け問題共通）</div>
             </div>
-            <input
-              type="number"
-              min={MIN_WEAK_THRESHOLD}
-              max={MAX_WEAK_THRESHOLD}
+            <select
               value={game.user.weakThreshold ?? DEFAULT_WEAK_THRESHOLD}
               onChange={(e) => {
-                const raw = Math.round(Number(e.target.value));
-                const n = Number.isFinite(raw)
-                  ? Math.min(MAX_WEAK_THRESHOLD, Math.max(MIN_WEAK_THRESHOLD, raw))
-                  : DEFAULT_WEAK_THRESHOLD;
+                const n = Number(e.target.value);
                 game.updateUser({ weakThreshold: n });
               }}
-              className="w-14 px-2 py-1.5 rounded-lg bg-black/30 text-foam text-center font-bold outline-none shrink-0"
-            />
+              className="px-2 py-1.5 rounded-lg bg-black/30 text-foam text-center font-bold outline-none shrink-0"
+            >
+              {Array.from({ length: MAX_WEAK_THRESHOLD - MIN_WEAK_THRESHOLD + 1 }, (_, i) => MIN_WEAK_THRESHOLD + i).map((n) => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
           </div>
           <div className="flex items-center justify-between gap-2">
             <div>
               <div className="text-sm font-bold text-foam">苦手解除の連続正解セッション数</div>
               <div className="text-[10px] text-dim">別セッションで最初の挑戦が正解、をこの回数連続したら解除</div>
             </div>
-            <input
-              type="number"
-              min={MIN_WEAK_CLEAR_STREAK}
-              max={MAX_WEAK_CLEAR_STREAK}
+            <select
               value={game.user.weakClearStreak ?? DEFAULT_WEAK_CLEAR_STREAK}
               onChange={(e) => {
-                const raw = Math.round(Number(e.target.value));
-                const n = Number.isFinite(raw)
-                  ? Math.min(MAX_WEAK_CLEAR_STREAK, Math.max(MIN_WEAK_CLEAR_STREAK, raw))
-                  : DEFAULT_WEAK_CLEAR_STREAK;
+                const n = Number(e.target.value);
                 game.updateUser({ weakClearStreak: n });
               }}
-              className="w-14 px-2 py-1.5 rounded-lg bg-black/30 text-foam text-center font-bold outline-none shrink-0"
-            />
+              className="px-2 py-1.5 rounded-lg bg-black/30 text-foam text-center font-bold outline-none shrink-0"
+            >
+              {Array.from({ length: MAX_WEAK_CLEAR_STREAK - MIN_WEAK_CLEAR_STREAK + 1 }, (_, i) => MIN_WEAK_CLEAR_STREAK + i).map((n) => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
           </div>
         </div>
 
