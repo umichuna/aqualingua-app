@@ -7,7 +7,7 @@
 // - 正解するまで間違えた問題を繰り返すオプション
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { MODE_BASE_GOLD, sessionGold } from "@/lib/gameLogic";
+import { DEFAULT_WEAK_THRESHOLD, MODE_BASE_GOLD, sessionGold } from "@/lib/gameLogic";
 import { playBgmForScene, sfx } from "@/lib/sound";
 import { cancelSpeech, releaseWakeLock, requestWakeLock, speak } from "@/lib/speech";
 import { fetchTtsAudio, playTtsAudio } from "@/lib/tts";
@@ -120,6 +120,8 @@ export default function StudyView({ onPhaseChange }: { onPhaseChange?: (inPlay: 
   const game = useGame();
   const { words, wordStats, user, blankQuestions, blankQuestionStats, recordBlankAnswer } = game;
   const GENRES = game.allGenres;
+  // 苦手登録に必要な間違い回数（セッション内）。単語帳・穴抜け問題共通の設定
+  const weakThreshold = user.weakThreshold ?? DEFAULT_WEAK_THRESHOLD;
   const weakCount = useMemo(
     () => Object.values(wordStats).filter((s) => s.incorrectCount > 0).length,
     [wordStats]
@@ -545,7 +547,8 @@ export default function StudyView({ onPhaseChange }: { onPhaseChange?: (inPlay: 
           questions={blankQuizQs}
           stats={blankQuestionStats}
           onRecord={recordBlankAnswer}
-          onResetWeak={game.resetBlankQuestionWeak}
+          onFirstTryOutcome={game.registerBlankFirstTryOutcome}
+          weakThreshold={weakThreshold}
           onQuit={(n, s) => requestQuit(n, s)}
           onFinish={(finalScore, total) => {
             const res = game.completeStudy("blank", total, finalScore);
@@ -771,17 +774,18 @@ export default function StudyView({ onPhaseChange }: { onPhaseChange?: (inPlay: 
           attemptedRef.current.add(q.word.id);
           if (correct) sfx.correct();
           else sfx.wrong();
+          if (firstTry) {
+            // 苦手解除の判定（連続正解セッション数が設定値に達したら解除）
+            game.registerWordFirstTryOutcome(q.word.id, correct);
+            if (correct) setScore((s) => s + 1);
+          }
           if (correct) {
-            if (firstTry) {
-              setScore((s) => s + 1);
-              game.resetWordWeak(q.word.id); // 1発正解で苦手リセット（セッションをまたいでもOK）
-            }
             game.recordAnswer(q.word.id, true);
           } else {
             const cnt = (sessionWrongRef.current[q.word.id] ?? 0) + 1;
             sessionWrongRef.current[q.word.id] = cnt;
-            if (cnt === 3) {
-              game.recordAnswer(q.word.id, false); // セッション内3回目で苦手登録
+            if (cnt === weakThreshold) {
+              game.recordAnswer(q.word.id, false); // セッション内で設定回数間違えたら苦手登録
             }
           }
           // 間違えた問題を末尾に追加（繰り返しオプション）
@@ -823,17 +827,18 @@ export default function StudyView({ onPhaseChange }: { onPhaseChange?: (inPlay: 
             attemptedRef.current.add(w.id);
             if (ok) sfx.correct();
             else sfx.wrong();
+            if (firstTry) {
+              // 苦手解除の判定（連続正解セッション数が設定値に達したら解除）
+              game.registerWordFirstTryOutcome(w.id, ok);
+              if (ok) setScore((s) => s + 1);
+            }
             if (ok) {
-              if (firstTry) {
-                setScore((s) => s + 1);
-                game.resetWordWeak(w.id); // 1発正解で苦手リセット（セッションをまたいでもOK）
-              }
               game.recordAnswer(w.id, true);
             } else {
               const cnt = (sessionWrongRef.current[w.id] ?? 0) + 1;
               sessionWrongRef.current[w.id] = cnt;
-              if (cnt === 3) {
-                game.recordAnswer(w.id, false); // セッション内3回目で苦手登録
+              if (cnt === weakThreshold) {
+                game.recordAnswer(w.id, false); // セッション内で設定回数間違えたら苦手登録
               }
             }
             let queue = quizWords;

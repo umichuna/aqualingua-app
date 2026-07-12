@@ -24,6 +24,17 @@ export function dailyGoldReward(mode: StudyMode, jobLevel?: number): number {
   return sessionGold(mode, 1, jobLevel);
 }
 
+// ---------- 苦手判定（単語帳・穴抜け問題 共通） ----------
+// 登録: セッション内でこの回数だけ間違えた時点で苦手登録
+export const DEFAULT_WEAK_THRESHOLD = 3;
+export const MIN_WEAK_THRESHOLD = 1;
+export const MAX_WEAK_THRESHOLD = 10;
+// 解除: 「新しいセッションで最初の挑戦が正解」がこの回数連続したら苦手解除
+// （間に1回でも最初の挑戦が不正解のセッションを挟むと連続カウントは0に戻る）
+export const DEFAULT_WEAK_CLEAR_STREAK = 1;
+export const MIN_WEAK_CLEAR_STREAK = 1;
+export const MAX_WEAK_CLEAR_STREAK = 10;
+
 // ---------- 好感度バランス（レア度別上限・上昇倍率） ----------
 export const MAX_AFFECTION: Record<Rarity, number> = {
   激安: 100,
@@ -115,8 +126,8 @@ export function todayString(d: Date = new Date()): string {
 }
 
 // ---------- ガチャの種類（要求 #7） ----------
-// 3種類のガチャ。価格が高いほどレアが出やすい重みテーブルを持つ。
-export type GachaTier = "cheap" | "normal" | "premium";
+// 価格が高いほどレアが出やすい重みテーブルを持つ。海水/淡水ガチャは水の種類を限定する。
+export type GachaTier = "cheap" | "normal" | "premium" | "saltwater" | "freshwater";
 
 export interface GachaInfo {
   label: string;
@@ -124,6 +135,7 @@ export interface GachaInfo {
   icon: string;
   weights: Record<"激安" | "普通" | "高級" | "ロマン", number>;
   desc: string;
+  waterType?: import("./types").WaterType; // 指定時はその水の種類の魚だけが出る
 }
 
 export const GACHA_TIERS: Record<GachaTier, GachaInfo> = {
@@ -147,6 +159,22 @@ export const GACHA_TIERS: Record<GachaTier, GachaInfo> = {
     icon: "💎",
     weights: { 激安: 0, 普通: 10, 高級: 50, ロマン: 40 },
     desc: "高価だが高級・ロマンが大幅アップ！",
+  },
+  saltwater: {
+    label: "海水ガチャ",
+    price: 700,
+    icon: "🌊",
+    weights: { 激安: 0, 普通: 60, 高級: 35, ロマン: 15 },
+    desc: "海水魚だけが出る。高級・ロマンも狙える。",
+    waterType: "saltwater",
+  },
+  freshwater: {
+    label: "淡水ガチャ",
+    price: 700,
+    icon: "🌿",
+    weights: { 激安: 0, 普通: 60, 高級: 35, ロマン: 15 },
+    desc: "淡水魚だけが出る。高級・ロマンも狙える。",
+    waterType: "freshwater",
   },
 };
 

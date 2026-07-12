@@ -53,10 +53,11 @@ async function ensureBlankTables(pool: sql.ConnectionPool) {
 }
 
 // sql.Request のコンストラクタは ConnectionPool | Transaction のユニオン型を
-// そのまま受け付けるオーバーロードが無いため、instanceof で分岐して呼び分ける
+// そのまま受け付けるオーバーロードが無いため型アサーションで型検査を通す
+// （mssql の Request は実行時の型で pool/transaction を判別するため、この
+//  アサーションは実際の分岐を変えない・安全）
 function makeRequest(executor: sql.ConnectionPool | sql.Transaction): sql.Request {
-  if (executor instanceof sql.Transaction) return new sql.Request(executor);
-  return new sql.Request(executor);
+  return new sql.Request(executor as sql.ConnectionPool);
 }
 
 // 各行を { key, data(オブジェクト全体), lastUpdated } に整形して JSON 文字列にする

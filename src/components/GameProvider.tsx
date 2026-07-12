@@ -27,6 +27,7 @@ import {
   BOX_CAPACITY_INITIAL,
   boxExpansionPrice,
   calculateOfflineEffects,
+  DEFAULT_WEAK_CLEAR_STREAK,
   type GachaTier,
   GACHA_TIERS,
   jobLevelFor,
@@ -169,7 +170,7 @@ interface GameContextValue {
   removeWord: (id: string) => void;
   removeWords: (ids: string[]) => void;
   recordAnswer: (wordId: string, correct: boolean) => void;
-  resetWordWeak: (wordId: string) => void;
+  registerWordFirstTryOutcome: (wordId: string, correct: boolean) => void;
   allGenres: string[]; // 単語データ + customGenres から自動生成
   addCustomGenre: (genre: string) => void;
   addCustomGenres: (genres: string[]) => void;
@@ -194,7 +195,7 @@ interface GameContextValue {
   removeBlankQuestion: (id: string) => void;
   removeBlankQuestions: (ids: string[]) => void;
   recordBlankAnswer: (id: string, correct: boolean) => void;
-  resetBlankQuestionWeak: (id: string) => void;
+  registerBlankFirstTryOutcome: (id: string, correct: boolean) => void;
 
   // 実績
   claimAchievementReward: (achievementId: string) => void;
@@ -321,6 +322,13 @@ export function GameProvider({ children }: { children: ReactNode }) {
     userRef.current = user;
     fishRef.current = fishList;
   }, [user, fishList]);
+  const sharedCustomFishRef = useRef<CustomFishDef[]>(sharedCustomFish);
+  useEffect(() => { sharedCustomFishRef.current = sharedCustomFish; }, [sharedCustomFish]);
+  // ログイン直後の「全員共有カスタム魚を取得」は数十秒かかることがある（Azure SQL
+  // コールドスタート）。その最中にユーザーが自分のカスタム魚を編集・追加・削除すると、
+  // 後から届く古いフェッチ結果で上書きされ、編集が消えたように見えるバグがあった。
+  // 編集した type を記録しておき、フェッチ結果の反映時に上書きしないようにする。
+  const locallyModifiedFishTypesRef = useRef<Set<string>>(new Set());
 
   const tanks = useMemo<Tank[]>(() => {
     if (user.tanks?.length) return user.tanks;
@@ -331,6 +339,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
     for (let i = 1; i <= fwCount; i++) result.push({ id: `fw-${i}`, type: "freshwater", name: `淡水 ${i}` });
     return result;
   }, [user.tanks, user.saltwaterTankCount, user.freshwaterTankCount, user.hasFreshwaterTank]);
+  const tanksRef = useRef<Tank[]>(tanks);
+  useEffect(() => { tanksRef.current = tanks; }, [tanks]);
 
   const pushNotice = useCallback((icon: string, text: string) => {
     const id = noticeSeq++;
@@ -561,11 +571,36 @@ export function GameProvider({ children }: { children: ReactNode }) {
           }
         }
         if (cancelled) return;
-        // 共有 + 移行分をマージして state に反映
-        const merged = [...shared];
-        const mergedTypes = new Set(merged.map((f) => f.type));
+        // 共有 + 移行分をマージして state に反映。
+        // ただし、このフェッチが進行中にユーザーが自分のカスタム魚を編集・追加・削除
+        // していた場合、フェッチ結果は古い可能性があるため、そちらを優先しない
+        // （編集済み type は現在のローカル state を採用。削除済みなら含めない）。
+        const modifiedTypes = locallyModifiedFishTypesRef.current;
+        const currentLocalMap = new Map(sharedCustomFishRef.current.map((f) => [f.type, f]));
+        const merged: CustomFishDef[] = [];
+        const mergedTypes = new Set<string>();
+        for (const f of shared) {
+          if (modifiedTypes.has(f.type)) {
+            const localVer = currentLocalMap.get(f.type);
+            if (localVer) {
+              merged.push(localVer);
+              mergedTypes.add(f.type);
+            }
+            // ローカルに無ければフェッチ中に削除された魚なので含めない
+          } else {
+            merged.push(f);
+            mergedTypes.add(f.type);
+          }
+        }
         for (const f of localOnly) {
           if (!mergedTypes.has(f.type)) {
+            merged.push(f);
+            mergedTypes.add(f.type);
+          }
+        }
+        // フェッチ中にローカルで新規追加された魚（上のいずれにも含まれない場合）も保持
+        for (const f of sharedCustomFishRef.current) {
+          if (modifiedTypes.has(f.type) && !mergedTypes.has(f.type)) {
             merged.push(f);
             mergedTypes.add(f.type);
           }
@@ -751,6 +786,14 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const addFishToTank = useCallback(
     (master: FishMaster, name: string) => {
       const now = Date.now();
+      // 現在表示中の水槽が魚の水の種類と合わない場合（例: 淡水水槽を見ている時に
+      // 海水魚を獲得）は、同じ水の種類の水槽に入れる（無ければ現在の水槽のまま）。
+      const fishWaterType = master.waterType ?? "saltwater";
+      const currentTank = tanksRef.current.find(t => t.id === currentTankIdRef.current);
+      const targetTankId =
+        currentTank && currentTank.type === fishWaterType
+          ? currentTankIdRef.current
+          : (tanksRef.current.find(t => t.type === fishWaterType)?.id ?? currentTankIdRef.current);
       const fish: Fish = {
         fishId: crypto.randomUUID(),
         name,
@@ -763,7 +806,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         isSick: false,
         sickStartTime: null,
         lastUpdated: now,
-        tankId: currentTankIdRef.current,
+        tankId: targetTankId,
       };
       // 関数型更新：同一同期パスで複数実績の魚を続けて付与しても消えない（B3対策）
       setFishList((list) => [...list, fish]);
@@ -853,8 +896,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
     if (u.gold < info.price) return null;
     persistUser({ ...u, gold: u.gold - info.price });
     recordLedger(-info.price, info.label, u.gold - info.price);
-    // 共有カスタム魚を含む最新の一覧から抽選する
-    return rollGachaWithWeights(info.weights, allFishMasterRef.current);
+    // 共有カスタム魚を含む最新の一覧から抽選する（海水/淡水ガチャは水の種類で絞り込み）
+    return rollGachaWithWeights(info.weights, allFishMasterRef.current, info.waterType);
   }, [persistUser, recordLedger]);
 
   // ---------- ショップ ----------
@@ -992,13 +1035,28 @@ export function GameProvider({ children }: { children: ReactNode }) {
     schedulePush();
   }, [schedulePush]);
 
-  const resetWordWeak = useCallback((wordId: string) => {
+  // 「新しいセッションでの最初の挑戦」の正誤を渡す。設定の解除条件（連続正解セッション数）
+  // に達したら苦手解除。不正解なら連続カウントを0に戻す。苦手でない単語には何もしない。
+  const registerWordFirstTryOutcome = useCallback((wordId: string, correct: boolean) => {
+    const clearStreak = userRef.current.weakClearStreak ?? DEFAULT_WEAK_CLEAR_STREAK;
     setWordStats((s) => {
       const prev = s[wordId];
       if (!prev || prev.incorrectCount === 0) return s;
-      const next: WordStats = { ...prev, incorrectCount: 0, lastUpdated: Date.now() };
-      void putWordStats(next);
-      return { ...s, [wordId]: next };
+      const now = Date.now();
+      if (correct) {
+        const streak = (prev.correctStreak ?? 0) + 1;
+        const next: WordStats =
+          streak >= clearStreak
+            ? { ...prev, incorrectCount: 0, correctStreak: 0, lastUpdated: now }
+            : { ...prev, correctStreak: streak, lastUpdated: now };
+        void putWordStats(next);
+        return { ...s, [wordId]: next };
+      } else {
+        if (!prev.correctStreak) return s;
+        const next: WordStats = { ...prev, correctStreak: 0, lastUpdated: now };
+        void putWordStats(next);
+        return { ...s, [wordId]: next };
+      }
     });
     schedulePush();
   }, [schedulePush]);
@@ -1177,6 +1235,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
   const addCustomFish = useCallback(
     (def: CustomFishDef) => {
+      locallyModifiedFishTypesRef.current.add(def.type);
       // 全員共有へ即時反映（楽観的更新）
       setSharedCustomFish((prev) =>
         prev.some((f) => f.type === def.type) ? prev : [...prev, def]
@@ -1198,6 +1257,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
   const updateCustomFish = useCallback(
     (def: CustomFishDef) => {
+      locallyModifiedFishTypesRef.current.add(def.type);
       // 全員共有を更新
       setSharedCustomFish((prev) =>
         prev.map((f) => (f.type === def.type ? def : f))
@@ -1205,19 +1265,20 @@ export function GameProvider({ children }: { children: ReactNode }) {
       // ローカルも更新
       const u = userRef.current;
       persistUser({ ...u, customFish: (u.customFish ?? []).map((f) => (f.type === def.type ? def : f)) });
-      // クラウド更新（一度削除してから再登録）
-      void deleteSharedCustomFish(def.type)
-        .then(() => postSharedCustomFish(def))
-        .catch((e) => {
-          console.error("[CustomFish] update failed", e);
-          pushNotice("⚠️", "共有おさかなの更新に失敗しました（通信状況をご確認ください）");
-        });
+      // クラウド更新: POST は fishType(=type) 主キーの MERGE（upsert）なので直接呼べば良い。
+      // 以前は「削除してから再登録」の2リクエスト構成だったため、削除成功後に
+      // 再登録がタイムアウト/失敗すると共有プールから魚が消えたまま戻らないバグがあった。
+      void postSharedCustomFish(def).catch((e) => {
+        console.error("[CustomFish] update failed", e);
+        pushNotice("⚠️", "共有おさかなの更新に失敗しました（通信状況をご確認ください）");
+      });
     },
     [persistUser, pushNotice]
   );
 
   const removeCustomFish = useCallback(
     (fishType: string) => {
+      locallyModifiedFishTypesRef.current.add(fishType);
       // 全員共有から削除
       setSharedCustomFish((prev) => prev.filter((f) => f.type !== fishType));
       const u = userRef.current;
@@ -1396,9 +1457,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
     (fishId: string, targetTankId: string) => {
       const fish = fishRef.current.find(f => f.fishId === fishId);
       if (!fish) return;
-      // 水の種類チェック：海水魚は海水水槽、淡水魚は淡水水槽にしか引越しできない
-      // （moveBoxFishToTank と同じ判定。旧データ互換のため導出済みの tanks を参照）
-      const targetTank = tanks.find(t => t.id === targetTankId);
+      // 対象タンク・魚の水の種類を確認し、海水魚は海水水槽・淡水魚は淡水水槽にのみ移動できる
+      const targetTank = tanksRef.current.find(t => t.id === targetTankId);
       if (!targetTank) return;
       const fishMaster = allFishMasterRef.current.find(m => m.type === fish.type);
       const fishWaterType = fishMaster?.waterType ?? "saltwater";
@@ -1411,7 +1471,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       void putFish(updated);
       schedulePush();
     },
-    [schedulePush, pushNotice, tanks]
+    [schedulePush, pushNotice]
   );
 
   // 旧 buyTankSlot — 互換のためにエイリアスを残す（ShopView 移行後は削除可）
@@ -1541,14 +1601,27 @@ export function GameProvider({ children }: { children: ReactNode }) {
     []
   );
 
-  // 単語の resetWordWeak と同じ役割: 苦手カウントを0に戻す（次セッション初回正解時に使用）
-  const resetBlankQuestionWeak = useCallback((id: string) => {
+  // 単語の registerWordFirstTryOutcome と同じ役割・同じ設定（weakClearStreak）を使う
+  const registerBlankFirstTryOutcome = useCallback((id: string, correct: boolean) => {
+    const clearStreak = userRef.current.weakClearStreak ?? DEFAULT_WEAK_CLEAR_STREAK;
     setBlankQuestionStats((prev) => {
       const existing = prev[id];
       if (!existing || existing.incorrectCount === 0) return prev;
-      const next: BlankQuestionStats = { ...existing, incorrectCount: 0, lastUpdated: Date.now() };
-      void putBlankQuestionStats(next);
-      return { ...prev, [id]: next };
+      const now = Date.now();
+      if (correct) {
+        const streak = (existing.correctStreak ?? 0) + 1;
+        const next: BlankQuestionStats =
+          streak >= clearStreak
+            ? { ...existing, incorrectCount: 0, correctStreak: 0, lastUpdated: now }
+            : { ...existing, correctStreak: streak, lastUpdated: now };
+        void putBlankQuestionStats(next);
+        return { ...prev, [id]: next };
+      } else {
+        if (!existing.correctStreak) return prev;
+        const next: BlankQuestionStats = { ...existing, correctStreak: 0, lastUpdated: now };
+        void putBlankQuestionStats(next);
+        return { ...prev, [id]: next };
+      }
     });
   }, []);
 
@@ -1657,7 +1730,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         removeWord,
         removeWords,
         recordAnswer,
-        resetWordWeak,
+        registerWordFirstTryOutcome,
         allGenres,
         addCustomGenre,
         addCustomGenres,
@@ -1685,7 +1758,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         removeBlankQuestion,
         removeBlankQuestions,
         recordBlankAnswer,
-        resetBlankQuestionWeak,
+        registerBlankFirstTryOutcome,
         claimAchievementReward,
         resetAllData,
         syncNow,

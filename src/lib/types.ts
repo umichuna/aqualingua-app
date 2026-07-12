@@ -35,6 +35,7 @@ export interface WordStats {
   incorrectCount: number;
   lastReviewedAt: number;
   lastUpdated: number;
+  correctStreak?: number; // 苦手解除の連続正解セッション数カウンタ（設定の解除条件に到達したら0に戻しincorrectCountも0に）
 }
 
 export type Rarity = "激安" | "普通" | "高級" | "ロマン";
@@ -157,6 +158,8 @@ export interface UserStatus {
   lifetimeGoldEarned?: number; // 累計獲得ゴールド（実績判定用）
   unlockedAchievements?: string[]; // 解除済み実績ID（AchievementDef.id）
   claimedAchievementRewards?: string[]; // 報酬魚を受け取り済みの実績ID（後追い付与の重複防止）
+  weakThreshold?: number; // 苦手登録に必要な間違い回数（セッション内。デフォルト3）。単語帳・穴抜け問題共通
+  weakClearStreak?: number; // 苦手解除に必要な連続正解セッション数（デフォルト1）。単語帳・穴抜け問題共通
 }
 
 export type StudyMode = "self" | "choice" | "listen" | "blank";
@@ -179,6 +182,7 @@ export interface BlankQuestionStats {
   incorrectCount: number;
   lastReviewedAt: number;
   lastUpdated: number;
+  correctStreak?: number; // 苦手解除の連続正解セッション数カウンタ（単語帳と同じ仕組み）
 }
 
 // しごとセッションの記録（記録画面の統計・カレンダーに使用）
