@@ -6,7 +6,7 @@
 // - ✏️ ボタン → 編集モーダル（組み込み魚=発見済みのみ / カスタム魚=全魚）
 // - ＋ カスタム魚追加ボタン（ヘッダー右）
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ACHIEVEMENTS } from "@/data/achievements";
 import { FISH_MASTER, RARITY_INFO, RARITY_STARS, type FishDisplaySize } from "@/data/fishMaster";
 import { MAX_FISH_LEVEL, todayString } from "@/lib/gameLogic";
@@ -51,6 +51,36 @@ const EMPTY_CUSTOM_FORM = {
 };
 
 const RARITY_ORDER: Record<Rarity, number> = { 激安: 0, 普通: 1, 高級: 2, ロマン: 3 };
+
+// Set のトグル（複数選択チップ用。StudyView と同じパターン）
+function toggleSet<T>(set: Set<T>, item: T): Set<T> {
+  const next = new Set(set);
+  if (next.has(item)) next.delete(item);
+  else next.add(item);
+  return next;
+}
+
+// 複数選択チップ
+function Chip({
+  active,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`text-xs px-3 py-1.5 rounded-full whitespace-nowrap font-bold ${
+        active ? "bg-sand text-deep" : "bg-white/10 text-dim"
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
 
 function resizeToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -152,13 +182,54 @@ function FishHistoryModal({
 export default function EncyclopediaView() {
   const game = useGame();
   const { encyclopedia, fishHistory, fishList, allFishMaster, user } = game;
-  const discovered = new Set(encyclopedia.map((e) => e.fishType));
+  const discovered = useMemo(
+    () => new Set(encyclopedia.map((e) => e.fishType)),
+    [encyclopedia]
+  );
 
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [secretUnlocked, setSecretUnlocked] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [passwordInput, setPasswordInput] = useState("");
   const [passwordError, setPasswordError] = useState(false);
+
+  // ---- 検索・絞り込み ----
+  const [showFilters, setShowFilters] = useState(false);
+  const [searchText, setSearchText] = useState("");
+  const [rarityFilters, setRarityFilters] = useState<Set<Rarity>>(new Set());
+  const [waterFilters, setWaterFilters] = useState<Set<WaterType>>(new Set());
+  // 発見状況は排他選択（すべて / 発見済み / 未発見）
+  const [discoveryFilter, setDiscoveryFilter] = useState<"all" | "found" | "unfound">("all");
+
+  // 有効なフィルタ数（バッジ表示・絞り込み中の判定に使う）
+  const activeFilterCount =
+    (searchText.trim() ? 1 : 0) +
+    rarityFilters.size +
+    waterFilters.size +
+    (discoveryFilter !== "all" ? 1 : 0);
+
+  const resetFilters = () => {
+    setSearchText("");
+    setRarityFilters(new Set());
+    setWaterFilters(new Set());
+    setDiscoveryFilter("all");
+  };
+
+  // 全条件を AND で結合して絞り込む（未選択の条件はスルー）
+  const filteredFish = useMemo(() => {
+    const q = searchText.trim().toLowerCase();
+    return allFishMaster.filter((f) => {
+      if (q) {
+        const name = (f.displayName ?? f.type).toLowerCase();
+        if (!name.includes(q) && !f.type.toLowerCase().includes(q)) return false;
+      }
+      if (rarityFilters.size > 0 && !rarityFilters.has(f.rarity)) return false;
+      if (waterFilters.size > 0 && !waterFilters.has(f.waterType ?? "saltwater")) return false;
+      if (discoveryFilter === "found" && !discovered.has(f.type)) return false;
+      if (discoveryFilter === "unfound" && discovered.has(f.type)) return false;
+      return true;
+    });
+  }, [allFishMaster, searchText, rarityFilters, waterFilters, discoveryFilter, discovered]);
 
   // 編集モーダル
   const [editTarget, setEditTarget] = useState<{ type: string; isCustom: boolean } | null>(null);
@@ -308,6 +379,20 @@ export default function EncyclopediaView() {
         </h2>
         <div className="flex gap-2 items-center">
           <button
+            onClick={() => setShowFilters((v) => !v)}
+            className={`relative text-xs px-3 py-1.5 rounded-xl font-bold ${
+              showFilters || activeFilterCount > 0 ? "bg-sand text-deep" : "bg-white/10 text-dim"
+            }`}
+            title="検索・絞り込み"
+          >
+            🔍 けんさく
+            {activeFilterCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 min-w-4 h-4 px-1 rounded-full bg-coral text-deep text-[9px] leading-4 text-center font-bold">
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
+          <button
             onClick={() => {
               if (secretUnlocked) { setSecretUnlocked(false); return; }
               setPasswordInput("");
@@ -328,9 +413,98 @@ export default function EncyclopediaView() {
         </div>
       </div>
 
+      {/* 検索・絞り込みパネル */}
+      {showFilters && (
+        <div className="rounded-xl bg-mid p-3 flex flex-col gap-3 shrink-0">
+          {/* テキスト検索 */}
+          <input
+            type="text"
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            placeholder="🔍 名前で検索…"
+            className="w-full px-3 py-2 rounded-xl bg-black/30 text-foam outline-none text-sm"
+          />
+
+          {/* レア度 */}
+          <div>
+            <div className="text-[10px] font-bold text-glow mb-1.5">レア度</div>
+            <div className="flex gap-1.5 flex-wrap">
+              {RARITIES.map((r) => (
+                <Chip
+                  key={r}
+                  active={rarityFilters.has(r)}
+                  label={RARITY_STARS[r]}
+                  onClick={() => setRarityFilters((s) => toggleSet(s, r))}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* 水の種類 */}
+          <div>
+            <div className="text-[10px] font-bold text-glow mb-1.5">水の種類</div>
+            <div className="flex gap-1.5 flex-wrap">
+              <Chip
+                active={waterFilters.has("saltwater")}
+                label="🌊 海水"
+                onClick={() => setWaterFilters((s) => toggleSet(s, "saltwater"))}
+              />
+              <Chip
+                active={waterFilters.has("freshwater")}
+                label="🌿 淡水"
+                onClick={() => setWaterFilters((s) => toggleSet(s, "freshwater"))}
+              />
+            </div>
+          </div>
+
+          {/* 発見状況 */}
+          <div>
+            <div className="text-[10px] font-bold text-glow mb-1.5">発見状況</div>
+            <div className="flex gap-1.5 flex-wrap">
+              {([
+                ["all", "すべて"],
+                ["found", "✓ 発見済み"],
+                ["unfound", "？ 未発見"],
+              ] as const).map(([key, label]) => (
+                <Chip
+                  key={key}
+                  active={discoveryFilter === key}
+                  label={label}
+                  onClick={() => setDiscoveryFilter(key)}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* 件数とリセット */}
+          <div className="flex items-center justify-between pt-1">
+            <div className="text-xs text-dim">
+              <span className="text-sand font-bold">{filteredFish.length}</span> / {allFishMaster.length} 種
+            </div>
+            <button
+              onClick={resetFilters}
+              disabled={activeFilterCount === 0}
+              className={`text-xs px-3 py-1.5 rounded-lg font-bold ${
+                activeFilterCount > 0 ? "bg-white/10 text-foam active:bg-white/20" : "bg-white/5 text-dim/50"
+              }`}
+            >
+              🔄 リセット
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 魚グリッド */}
       <div className="flex-1 overflow-y-auto grid grid-cols-2 gap-2 content-start">
-        {[...allFishMaster]
+        {filteredFish.length === 0 && (
+          <div className="col-span-2 text-center text-dim text-sm py-10">
+            条件に合うおさかながいないよ🐟<br />
+            <button onClick={resetFilters} className="mt-2 text-glow underline text-xs">
+              絞り込みをリセット
+            </button>
+          </div>
+        )}
+        {[...filteredFish]
           .sort((a, b) => (RARITY_ORDER[a.rarity] ?? 0) - (RARITY_ORDER[b.rarity] ?? 0))
           .map((f) => {
             const found = discovered.has(f.type);
