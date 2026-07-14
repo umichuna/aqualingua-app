@@ -965,7 +965,7 @@ export default function EncyclopediaView() {
                 <input
                   value={customForm.type}
                   onChange={(e) => setCustomForm((f) => ({ ...f, type: e.target.value }))}
-                  maxLength={12}
+                  maxLength={20}
                   placeholder="例: タツノオトシゴ"
                   className="w-full px-3 py-2 rounded-xl bg-black/30 text-foam outline-none text-sm"
                 />
