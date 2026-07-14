@@ -11,6 +11,7 @@ import {
   boxExpansionPrice,
   GACHA_TIERS,
   MAX_TANK_CAPACITY,
+  MAX_TOTAL_TANKS,
   SHOP_PRICES,
   tankExpansionPrice,
   type GachaTier,
@@ -29,7 +30,6 @@ const SHOP_ITEMS = [
   { key: "boxExpansion" as const, name: "ボックス拡張キット", desc: "ボックス +5匹", price: SHOP_PRICES.boxExpansion, icon: "📦" },
 ];
 
-const MAX_TANK_TYPE_COUNT = 3;
 
 // ガチャのレア度確率を表示用テキストに変換
 function rarityRateText(weights: Record<string, number>): string {
@@ -117,9 +117,8 @@ export default function ShopView() {
   };
 
   const buyTankAction = (type: "saltwater" | "freshwater") => {
-    const count = type === "saltwater" ? swCount : fwCount;
-    if (count >= MAX_TANK_TYPE_COUNT) {
-      flash(false, `${type === "saltwater" ? "海水" : "淡水"}水槽は最大${MAX_TANK_TYPE_COUNT}槽までだよ`);
+    if (swCount + fwCount >= MAX_TOTAL_TANKS) {
+      flash(false, `水槽は合計${MAX_TOTAL_TANKS}槽までだよ`);
       return;
     }
     if (user.gold < SHOP_PRICES.freshwaterTank) {
@@ -200,17 +199,18 @@ export default function ShopView() {
 
       {/* 水槽追加 */}
       <div className="space-y-2">
-        <div className="text-xs font-bold text-glow">🐠 水槽を追加（各最大{MAX_TANK_TYPE_COUNT}槽・{SHOP_PRICES.freshwaterTank}G）</div>
+        <div className="text-xs font-bold text-glow">🐠 水槽を追加（合計最大{MAX_TOTAL_TANKS}槽・内訳自由・{SHOP_PRICES.freshwaterTank}G）</div>
+        <div className="text-[10px] text-dim">合計 {swCount + fwCount}/{MAX_TOTAL_TANKS} 槽</div>
         {(["saltwater", "freshwater"] as const).map((type) => {
           const count = type === "saltwater" ? swCount : fwCount;
-          const isFull = count >= MAX_TANK_TYPE_COUNT;
+          const isFull = swCount + fwCount >= MAX_TOTAL_TANKS;
           const afford = user.gold >= SHOP_PRICES.freshwaterTank;
           return (
             <div key={type} className="flex items-center gap-3 rounded-xl p-3 bg-mid">
               <span className="text-2xl">{type === "saltwater" ? "🌊" : "🌿"}</span>
               <div className="flex-1">
                 <div className="font-bold text-sm text-foam">{type === "saltwater" ? "海水水槽" : "淡水水槽"}</div>
-                <div className="text-xs text-dim">現在 {count}/{MAX_TANK_TYPE_COUNT} 槽</div>
+                <div className="text-xs text-dim">現在 {count} 槽</div>
               </div>
               <button
                 onClick={() => buyTankAction(type)}
