@@ -190,6 +190,9 @@ export const SHOP_PRICES = {
 
 export const MAX_TANK_CAPACITY = 16;
 
+// 所持できる水槽の合計数（海水・淡水の内訳は自由）
+export const MAX_TOTAL_TANKS = 10;
+
 // 水槽拡張キットは常に1200G固定
 export function tankExpansionPrice(_tankCapacity?: number): number {
   return SHOP_PRICES.tankExpansion;

@@ -34,6 +34,7 @@ import {
   MAX_AFFECTION,
   MAX_FISH_LEVEL,
   MAX_TANK_CAPACITY,
+  MAX_TOTAL_TANKS,
   sessionGold,
   SHOP_PRICES,
   tankExpansionPrice,
@@ -1407,7 +1408,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
           return r;
         })();
         const sameTanks = currentTanks.filter(t => t.type === type);
-        if (sameTanks.length >= 3) return u; // 上限 3 槽
+        if (currentTanks.length >= MAX_TOTAL_TANKS) return u; // 合計上限 10 槽（内訳は自由）
         const price = SHOP_PRICES.freshwaterTank; // 海水・淡水共通 3000G
         if (u.gold < price) return u;
         const idx = sameTanks.length + 1;
