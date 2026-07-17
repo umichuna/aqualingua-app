@@ -39,6 +39,7 @@ const BUILTIN_TYPES = new Set(FISH_MASTER.map((f) => f.type));
 
 const EMPTY_CUSTOM_FORM = {
   type: "",
+  displayName: "",
   rarity: "普通" as Rarity,
   description: "",
   layer: "middle" as "bottom" | "middle" | "top",
@@ -286,6 +287,7 @@ export default function EncyclopediaView() {
       : -1;
     setCustomForm({
       type: fish.type,
+      displayName: fish.displayName ?? "",
       rarity: fish.rarity,
       description: fish.description,
       layer: (fish as CustomFishDef).layer ?? "middle",
@@ -320,6 +322,7 @@ export default function EncyclopediaView() {
     if (!editTarget) return;
     const def: CustomFishDef = {
       type: editTarget.type,
+      displayName: customForm.displayName.trim() || undefined,
       rarity: customForm.rarity,
       description: customForm.description.trim(),
       palette: PALETTE_PRESETS[customForm.paletteIdx].palette,
@@ -754,6 +757,18 @@ export default function EncyclopediaView() {
               </button>
             </div>
             <div className="overflow-y-auto flex-1 p-4 flex flex-col gap-3">
+              {/* 表示名 */}
+              <div>
+                <div className="text-xs font-bold text-glow mb-1">表示名（空欄でデフォルト名）</div>
+                <input
+                  value={customForm.displayName}
+                  onChange={(e) => setCustomForm((f) => ({ ...f, displayName: e.target.value }))}
+                  placeholder={editTarget.type}
+                  maxLength={30}
+                  className="w-full px-3 py-2 rounded-xl bg-black/30 text-foam outline-none text-sm"
+                />
+              </div>
+
               {/* レア度 */}
               <div>
                 <div className="text-xs font-bold text-glow mb-1">レア度</div>

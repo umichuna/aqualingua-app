@@ -95,7 +95,8 @@ export interface UserItems {
 }
 
 export interface CustomFishDef {
-  type: string;
+  type: string; // 図鑑のキー（作成後は変更不可）
+  displayName?: string; // 表示名（未設定なら type をそのまま表示。後から変更可能）
   rarity: Rarity;
   description: string;
   palette: { body: string; stripe: string; fin: string; eye: string };
