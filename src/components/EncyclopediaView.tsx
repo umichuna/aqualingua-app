@@ -216,6 +216,17 @@ export default function EncyclopediaView() {
     setDiscoveryFilter("all");
   };
 
+  // ★（最大レベル到達）を表示する魚種の集合。
+  // 図鑑エントリに永続記録された到達フラグに加え、現在所持している最大レベルの魚
+  // （水槽＋ボックス）も含める（フラグ導入前から育てていた魚のフォールバック）。
+  const maxLevelTypes = useMemo(() => {
+    const s = new Set<string>();
+    for (const e of encyclopedia) if (e.maxLevelReachedAt) s.add(e.fishType);
+    for (const f of fishList) if (f.level >= MAX_FISH_LEVEL) s.add(f.type);
+    for (const f of user.boxFish ?? []) if (f.level >= MAX_FISH_LEVEL) s.add(f.type);
+    return s;
+  }, [encyclopedia, fishList, user.boxFish]);
+
   // 全条件を AND で結合して絞り込む（未選択の条件はスルー）
   const filteredFish = useMemo(() => {
     const q = searchText.trim().toLowerCase();
@@ -513,7 +524,7 @@ export default function EncyclopediaView() {
             const found = discovered.has(f.type);
             const isCustom = !BUILTIN_TYPES.has(f.type);
             const canEdit = isCustom || found || secretUnlocked;
-            const maxLevelReached = fishList.some((fi) => fi.type === f.type && fi.level >= MAX_FISH_LEVEL);
+            const maxLevelReached = maxLevelTypes.has(f.type);
 
             return (
               <div
