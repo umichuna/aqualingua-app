@@ -72,6 +72,7 @@ import {
   deleteFishOverride,
   putFishOverride,
   putGoldLedgerEntry,
+  putEncyclopediaEntry,
   putStudySession,
   putUserStatus,
   putWord,
@@ -702,6 +703,25 @@ export function GameProvider({ children }: { children: ReactNode }) {
   );
 
   // ---------- 水槽 ----------
+  // その種類の魚を最大レベルまで育てたことを図鑑に永続記録する（★表示用）。
+  // 一度記録したら二度と消えないので、ボックス移動・出荷・逃走後も★が残る。
+  const markMaxLevelReached = useCallback((fishType: string) => {
+    setEncyclopedia((enc) => {
+      const idx = enc.findIndex((e) => e.fishType === fishType);
+      const now = Date.now();
+      if (idx === -1) {
+        const entry: EncyclopediaEntry = { fishType, discoveredAt: now, maxLevelReachedAt: now, lastUpdated: now };
+        void putEncyclopediaEntry(entry);
+        return [...enc, entry];
+      }
+      if (enc[idx].maxLevelReachedAt) return enc; // すでに記録済みなら何もしない（冪等）
+      const updated: EncyclopediaEntry = { ...enc[idx], maxLevelReachedAt: now, lastUpdated: now };
+      void putEncyclopediaEntry(updated);
+      return enc.map((e, i) => (i === idx ? updated : e));
+    });
+    schedulePush();
+  }, [schedulePush]);
+
   const feedAllFish = useCallback(
     (kind: BaitKind): boolean => {
       const u = userRef.current;
@@ -714,9 +734,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
       const baseGain = kind === "basic" ? BAIT_EFFECT.basic : BAIT_EFFECT.premium;
       const affection_boost = 0;
       const targetTankId = currentTankIdRef.current;
+      const reachedMaxTypes = new Set<string>();
       const next = fishRef.current.map((f) => {
         if ((f.tankId ?? "sw-1") !== targetTankId) return f; // 今見ている水槽の魚だけに餌を反映
         const level = Math.min(MAX_FISH_LEVEL, f.level + 1);
+        if (level >= MAX_FISH_LEVEL && f.level < MAX_FISH_LEVEL) reachedMaxTypes.add(f.type); // 今回で最大到達
         const grew = f.growthStage === "幼魚" && level >= ADULT_LEVEL;
         if (grew) pushNotice("✨", `${f.name} が成魚に成長した！`);
         const gain = Math.max(1, Math.floor(baseGain * AFFECTION_GAIN_RATE[f.rarity])) + affection_boost;
@@ -728,9 +750,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
         };
       });
       persistFishList(next);
+      reachedMaxTypes.forEach((t) => markMaxLevelReached(t));
       return true;
     },
-    [persistUser, persistFishList, pushNotice]
+    [persistUser, persistFishList, pushNotice, markMaxLevelReached]
   );
 
   const useMedicine = useCallback(

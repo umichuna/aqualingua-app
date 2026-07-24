@@ -84,6 +84,7 @@ export interface Fish {
 export interface EncyclopediaEntry {
   fishType: string;
   discoveredAt: number;
+  maxLevelReachedAt?: number; // その種類の魚を最大レベルまで育てた日時（★表示用。一度到達すると永続）
   lastUpdated: number;
 }
 
