@@ -12,6 +12,7 @@ import {
   GACHA_TIERS,
   MAX_TANK_CAPACITY,
   MAX_TOTAL_TANKS,
+  resolveTankId,
   SHOP_PRICES,
   tankExpansionPrice,
   type GachaTier,
@@ -44,7 +45,9 @@ export default function ShopView() {
   const game = useGame();
   const { user, fishList, allFishMaster, currentTankId } = game;
   // ガチャ・水槽満杯判定は「今見ている水槽」の匹数だけを対象にする（口座全体ではない）
-  const currentTankFishCount = fishList.filter((f) => (f.tankId ?? "sw-1") === currentTankId).length;
+  const currentTankFishCount = fishList.filter(
+    (f) => resolveTankId(f, game.tanks, allFishMaster) === currentTankId
+  ).length;
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [gacha, setGacha] = useState<{
     phase: GachaPhase;
@@ -88,7 +91,9 @@ export default function ShopView() {
       currentTank && currentTank.type === fishWaterType
         ? currentTankId
         : (game.tanks?.find((t) => t.type === fishWaterType)?.id ?? currentTankId);
-    const targetTankFishCount = fishList.filter((f) => (f.tankId ?? "sw-1") === targetTankId).length;
+    const targetTankFishCount = fishList.filter(
+      (f) => resolveTankId(f, game.tanks, allFishMaster) === targetTankId
+    ).length;
     if (targetTankFishCount >= user.tankCapacity) {
       if ((user.boxFish ?? []).length >= boxCap) {
         flash(false, "水槽もボックスも満杯！ボックス拡張キットを買おう");

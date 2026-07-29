@@ -37,6 +37,13 @@ export default function PixelFish({
     transform: `scaleX(${facing})`,
     filter: cssFilter,
     display: "block",
+    // width を CSS で明示し、max-width も解除する。
+    // Tailwind preflight の `img { max-width: 100% }` があるため、幅 auto の親
+    // （水槽の絶対配置ラッパー等）の内側では親の幅に合わせて画像が縮んでしまう。
+    // 水槽の右端では「端までの残り幅」がラッパー幅になるので、魚が端に行くほど
+    // 小さく表示されるバグの原因になっていた。
+    width: size,
+    maxWidth: "none" as const,
   };
 
   // base64画像（カスタム魚）またはstaticファイル（imageId）を優先表示
