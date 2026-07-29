@@ -268,6 +268,35 @@ function recoverExpansionCapacity(
     next = { ...next, boxCapacity: expectedBox };
     changed = true;
   }
+
+  // 水槽そのもの（3000G）も通帳から復旧する。容量と違い、消えると購入分が丸損になるため。
+  // 通帳の文言は現行が「海水 2水槽追加」、旧実装が「海水水槽追加」なので、
+  // 末尾一致＋先頭の水種で両方を拾う。
+  // tanks が未設定の旧データは、水種別カウント（saltwaterTankCount 等）から
+  // 既定の水槽リストが導出される仕組みなのでここでは触らない。
+  if (next.tanks?.length) {
+    const tankAdds = ledger.filter((e) => e.reason.endsWith("水槽追加"));
+    const expected: Record<WaterType, number> = {
+      saltwater: 1 + tankAdds.filter((e) => e.reason.startsWith("海水")).length, // 初期1槽 + 購入分
+      freshwater: tankAdds.filter((e) => e.reason.startsWith("淡水")).length,
+    };
+    const restored = [...next.tanks];
+    for (const type of ["saltwater", "freshwater"] as const) {
+      for (let i = restored.filter((t) => t.type === type).length; i < expected[type]; i++) {
+        if (restored.length >= MAX_TOTAL_TANKS) break; // 合計上限は超えない
+        const idx = i + 1;
+        const id = `${type === "saltwater" ? "sw" : "fw"}-${idx}`;
+        if (restored.some((t) => t.id === id)) continue; // 同じIDは作らない
+        const name = type === "saltwater" ? `海水 ${idx}` : `淡水 ${idx}`;
+        console.warn(`[Recover] 水槽 ${name} を通帳の購入記録から復旧`);
+        restored.push({ id, type, name });
+      }
+    }
+    if (restored.length !== next.tanks.length) {
+      next = { ...next, tanks: restored };
+      changed = true;
+    }
+  }
   if (changed) {
     // 補正・復旧したデータは「新しい変更」として扱う（古い日時のまま保存すると
     // 同期で巻き戻る原因になるため、lastUpdated を現在時刻に更新する）
@@ -332,6 +361,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
   // 後から届く古いフェッチ結果で上書きされ、編集が消えたように見えるバグがあった。
   // 編集した type を記録しておき、フェッチ結果の反映時に上書きしないようにする。
   const locallyModifiedFishTypesRef = useRef<Set<string>>(new Set());
+  // 実績報酬の受け取り処理中のID（同一tick内の二度押しによる魚の重複付与を防ぐ）
+  const claimingAchievementsRef = useRef<Set<string>>(new Set());
 
   const tanks = useMemo<Tank[]>(() => {
     if (user.tanks?.length) return user.tanks;
@@ -1232,6 +1263,14 @@ export function GameProvider({ children }: { children: ReactNode }) {
       const achievement = ACHIEVEMENTS.find((a) => a.id === achievementId);
       const rewardFish = allFishMasterRef.current.find((f) => f.linkedAchievementId === achievementId);
       if (!rewardFish) return;
+
+      // 二重受け取りの防止。
+      // 受取済み判定を setUser の更新関数の中だけに置くと、state 更新は非同期のため
+      // GETボタンを素早く2回押したときに魚だけ2匹追加されてしまう。
+      // そこで「永続化済みの受取記録」と「同じtick内の実行中フラグ」の2段構えで弾く。
+      if ((userRef.current.claimedAchievementRewards ?? []).includes(achievementId)) return;
+      if (claimingAchievementsRef.current.has(achievementId)) return;
+      claimingAchievementsRef.current.add(achievementId);
 
       const name = rewardFish.displayName ?? rewardFish.type;
       const tankCount = fishRef.current.filter(

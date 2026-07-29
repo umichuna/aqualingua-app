@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { ACHIEVEMENTS, buildAchievementStats } from "@/data/achievements";
 import { useGame } from "./GameProvider";
 import PixelFish from "./PixelFish";
@@ -8,6 +8,8 @@ import PixelFish from "./PixelFish";
 export default function AchievementView() {
   const game = useGame();
   const { user, encyclopedia, allFishMaster } = game;
+  // 受け取り操作中の実績ID。state 反映までのわずかな間の二度押しでボタンを無効化する
+  const [claiming, setClaiming] = useState<Set<string>>(new Set());
 
   // AchievementStats を構築
   const stats = useMemo(
@@ -85,8 +87,13 @@ export default function AchievementView() {
 
                   {showGetButton && (
                     <button
-                      onClick={() => game.claimAchievementReward(achievement.id)}
-                      className="w-full py-2 rounded-xl bg-glow text-deep text-sm font-bold font-pixel active:scale-95 transition-transform"
+                      onClick={() => {
+                        if (claiming.has(achievement.id)) return;
+                        setClaiming((s) => new Set(s).add(achievement.id));
+                        game.claimAchievementReward(achievement.id);
+                      }}
+                      disabled={claiming.has(achievement.id)}
+                      className="w-full py-2 rounded-xl bg-glow text-deep text-sm font-bold font-pixel active:scale-95 transition-transform disabled:opacity-50"
                     >
                       🎁 GET
                     </button>

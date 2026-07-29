@@ -270,6 +270,8 @@ export default function StudyView({ onPhaseChange }: { onPhaseChange?: (inPlay: 
     sfx.tap();
   };
 
+  // 引数の順は (モード, 正解数, 問題数)。第2が正解数・第3が問題数である点に注意。
+  // 取り違えると報酬G（問題数×単価）と記録が食い違うため、呼び出し時は必ずこの順で渡す。
   const finishQuiz = useCallback(
     (m: StudyMode, finalScore: number, countOverride?: number) => {
       const count = countOverride ?? originalCount;
@@ -565,7 +567,7 @@ export default function StudyView({ onPhaseChange }: { onPhaseChange?: (inPlay: 
             void playBgmForScene("home");
           }}
         />
-        <QuitConfirmOverlay quitConfirm={quitConfirm} onConfirm={() => finishQuiz(quitConfirm!.mode as StudyMode, quitConfirm!.count, quitConfirm!.score)} onCancel={() => setQuitConfirm(null)} />
+        <QuitConfirmOverlay quitConfirm={quitConfirm} onConfirm={() => finishQuiz(quitConfirm!.mode as StudyMode, quitConfirm!.score, quitConfirm!.count)} onCancel={() => setQuitConfirm(null)} />
       </>
     );
   }
@@ -807,7 +809,7 @@ export default function StudyView({ onPhaseChange }: { onPhaseChange?: (inPlay: 
         }}
         onQuit={() => requestQuit(qIndex, score)}
       />
-      <QuitConfirmOverlay quitConfirm={quitConfirm} onConfirm={() => finishQuiz(quitConfirm!.mode as StudyMode, quitConfirm!.count, quitConfirm!.score)} onCancel={() => setQuitConfirm(null)} />
+      <QuitConfirmOverlay quitConfirm={quitConfirm} onConfirm={() => finishQuiz(quitConfirm!.mode as StudyMode, quitConfirm!.score, quitConfirm!.count)} onCancel={() => setQuitConfirm(null)} />
     </>
     );
   }
@@ -856,7 +858,7 @@ export default function StudyView({ onPhaseChange }: { onPhaseChange?: (inPlay: 
           }}
           onQuit={() => requestQuit(qIndex, score)}
         />
-        <QuitConfirmOverlay quitConfirm={quitConfirm} onConfirm={() => finishQuiz(quitConfirm!.mode as StudyMode, quitConfirm!.count, quitConfirm!.score)} onCancel={() => setQuitConfirm(null)} />
+        <QuitConfirmOverlay quitConfirm={quitConfirm} onConfirm={() => finishQuiz(quitConfirm!.mode as StudyMode, quitConfirm!.score, quitConfirm!.count)} onCancel={() => setQuitConfirm(null)} />
       </>
     );
   }
@@ -869,7 +871,7 @@ export default function StudyView({ onPhaseChange }: { onPhaseChange?: (inPlay: 
         onFinish={(playedCount) => finishQuiz("listen", playedCount, playedCount)}
         onQuit={(n) => requestQuit(n, n)}
       />
-      <QuitConfirmOverlay quitConfirm={quitConfirm} onConfirm={() => finishQuiz(quitConfirm!.mode as StudyMode, quitConfirm!.count, quitConfirm!.score)} onCancel={() => setQuitConfirm(null)} />
+      <QuitConfirmOverlay quitConfirm={quitConfirm} onConfirm={() => finishQuiz(quitConfirm!.mode as StudyMode, quitConfirm!.score, quitConfirm!.count)} onCancel={() => setQuitConfirm(null)} />
     </>
   );
 }

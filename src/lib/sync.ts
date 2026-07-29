@@ -1,5 +1,5 @@
 import * as db from "./db";
-import type { Fish, UserStatus } from "./types";
+import type { Fish, Tank, UserStatus } from "./types";
 
 // Azure SQL 無料枠（月10万vCore秒、毎月1日リセット）を使い切ったときのエラーを検知して、
 // 非エンジニアにも分かる日本語メッセージに変換する。該当しなければ null。
@@ -23,8 +23,19 @@ function mergeUserStatus(local: UserStatus, cloud: UserStatus): UserStatus {
   // ローカルの方が新しい: クラウド上書きで消えると困る項目を救済しつつ
   // ベースはローカル（新しい方）を採用する
   const unionArr = <T,>(a?: T[], b?: T[]): T[] => Array.from(new Set([...(a ?? []), ...(b ?? [])]));
+  // 水槽（1槽3000G）は id 基準の和集合で救済する。
+  // 単純にローカル優先にすると、別端末で買った水槽が消えてしまうため。
+  // 同じ id が両方にある場合は、名前・背景画像の編集を尊重してローカル側を採用する。
+  const mergeTanks = (a?: Tank[], b?: Tank[]): Tank[] | undefined => {
+    if (!a && !b) return undefined;
+    const byId = new Map<string, Tank>();
+    for (const t of b ?? []) byId.set(t.id, t);
+    for (const t of a ?? []) byId.set(t.id, t);
+    return Array.from(byId.values());
+  };
   return {
     ...local,
+    tanks: mergeTanks(local.tanks, cloud.tanks),
     tankCapacity: Math.max(local.tankCapacity ?? 0, cloud.tankCapacity ?? 0),
     boxCapacity: Math.max(local.boxCapacity ?? 0, cloud.boxCapacity ?? 0),
     lifetimeGoldEarned: Math.max(local.lifetimeGoldEarned ?? 0, cloud.lifetimeGoldEarned ?? 0),
