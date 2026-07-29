@@ -35,6 +35,7 @@ import {
   MAX_FISH_LEVEL,
   MAX_TANK_CAPACITY,
   MAX_TOTAL_TANKS,
+  resolveTankId,
   sessionGold,
   SHOP_PRICES,
   tankExpansionPrice,
@@ -736,7 +737,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
       const targetTankId = currentTankIdRef.current;
       const reachedMaxTypes = new Set<string>();
       const next = fishRef.current.map((f) => {
-        if ((f.tankId ?? "sw-1") !== targetTankId) return f; // 今見ている水槽の魚だけに餌を反映
+        // 今見ている水槽の魚だけに餌を反映（所属判定は表示側と同じ resolveTankId に統一）
+        if (resolveTankId(f, tanksRef.current, allFishMasterRef.current) !== targetTankId) return f;
         const level = Math.min(MAX_FISH_LEVEL, f.level + 1);
         if (level >= MAX_FISH_LEVEL && f.level < MAX_FISH_LEVEL) reachedMaxTypes.add(f.type); // 今回で最大到達
         const grew = f.growthStage === "幼魚" && level >= ADULT_LEVEL;
@@ -901,7 +903,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
         return false;
       }
       // タンクの容量をチェック（上限は口座共通の tankCapacity を各水槽で参照）
-      const tankFishCount = fishRef.current.filter(f => (f.tankId ?? "sw-1") === targetTankId).length;
+      const tankFishCount = fishRef.current.filter(
+        (f) => resolveTankId(f, tanksRef.current, allFishMasterRef.current) === targetTankId
+      ).length;
       if (tankFishCount >= u.tankCapacity) return false;
       const newBoxFish = (u.boxFish ?? []).filter((f) => f.fishId !== fishId);
       persistUser({ ...u, boxFish: newBoxFish });
@@ -1231,7 +1235,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
       const name = rewardFish.displayName ?? rewardFish.type;
       const tankCount = fishRef.current.filter(
-        (f) => (f.tankId ?? "sw-1") === currentTankIdRef.current
+        (f) => resolveTankId(f, tanksRef.current, allFishMasterRef.current) === currentTankIdRef.current
       ).length;
 
       if (tankCount < userRef.current.tankCapacity) {

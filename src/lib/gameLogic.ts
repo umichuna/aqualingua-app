@@ -1,7 +1,22 @@
 // ゲームルール・経済バランス（仕様書 aqualingua_spec.md §3〜§5 準拠）
 
 import { TITLE_MILESTONES } from "@/data/titles";
-import type { Fish, Rarity, StudyMode } from "./types";
+import type { Fish, Rarity, StudyMode, WaterType } from "./types";
+
+// 魚が属する水槽ID を解決する。
+// tankId 未設定の旧データは「その魚の水種の最初の水槽」にフォールバックする。
+// 表示（水槽ビュー）と餌やり・容量計算でフォールバックがずれると、
+// 「見えている魚に餌が届かない」「別水槽の匹数で満杯判定される」等の不整合が起きるため、
+// 水槽の所属判定は必ずこの関数を通す。
+export function resolveTankId(
+  fish: { type: string; tankId?: string },
+  tanks: { id: string; type: WaterType }[],
+  fishMasters: { type: string; waterType?: WaterType }[]
+): string {
+  if (fish.tankId) return fish.tankId;
+  const waterType = fishMasters.find((m) => m.type === fish.type)?.waterType ?? "saltwater";
+  return tanks.find((t) => t.type === waterType)?.id ?? "sw-1";
+}
 
 // ---------- しごと報酬（1問あたりの金額） ----------
 export const MODE_BASE_GOLD: Record<StudyMode, number> = {

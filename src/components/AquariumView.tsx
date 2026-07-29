@@ -6,7 +6,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { RARITY_INFO, RARITY_STARS, type FishDisplaySize } from "@/data/fishMaster";
-import { BOX_CAPACITY_INITIAL, MAX_AFFECTION } from "@/lib/gameLogic";
+import { BOX_CAPACITY_INITIAL, MAX_AFFECTION, resolveTankId } from "@/lib/gameLogic";
 import { sfx, playBgmForTankType } from "@/lib/sound";
 import type { Fish } from "@/lib/types";
 import { useGame, type BaitKind } from "./GameProvider";
@@ -39,12 +39,7 @@ export default function AquariumView() {
 
   // 現在の水槽IDに対応する魚だけを表示（tankId未設定の旧データは水種別の最初の水槽にフォールバック）
   const displayFish = useMemo(
-    () => fishList.filter((f) => {
-      if (f.tankId) return f.tankId === currentTankId;
-      const waterType = allFishMaster.find((m) => m.type === f.type)?.waterType ?? "saltwater";
-      const firstTankOfType = tanks.find((t) => t.type === waterType);
-      return (firstTankOfType?.id ?? "sw-1") === currentTankId;
-    }),
+    () => fishList.filter((f) => resolveTankId(f, tanks, allFishMaster) === currentTankId),
     [fishList, allFishMaster, currentTankId, tanks]
   );
   const tankRef = useRef<HTMLDivElement>(null);
@@ -90,15 +85,51 @@ export default function AquariumView() {
     });
   };
 
+  // 魚の表示サイズ（px）。幼魚は 0.7 倍（表示側と同じ計算）
+  const fishSizePx = (f: Fish): number =>
+    Math.round(
+      (SIZE_PX[allFishMaster.find((m) => m.type === f.type)?.displaySize ?? "medium"] || 48) *
+        (f.growthStage === "幼魚" ? 0.7 : 1)
+    );
+
+  // 水槽の実寸（px）。魚の位置は translate(-50%,-50%) の中心座標なので、
+  // 魚の半分のサイズを % に換算して移動範囲を内側に狭めないと端で見切れる。
+  const [tankSize, setTankSize] = useState({ w: 360, h: 320 });
+  useEffect(() => {
+    const el = tankRef.current;
+    if (!el) return;
+    const update = () => {
+      const r = el.getBoundingClientRect();
+      if (r.width <= 0 || r.height <= 0) return;
+      // 同値なら更新しない（ResizeObserver の無限ループ防止）
+      setTankSize((prev) => (prev.w === r.width && prev.h === r.height ? prev : { w: r.width, h: r.height }));
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // その魚が水槽内に収まる中心座標の範囲（%）
+  const boundsFor = (f: Fish) => {
+    const size = fishSizePx(f);
+    const { w, h } = tankSize;
+    // 極端に大きい魚でも範囲が反転しないよう、内側の寄せは 45% までに制限する
+    const halfX = Math.min(45, (size / 2 / w) * 100);
+    const halfY = Math.min(45, (size / 2 / h) * 100);
+    return { xMin: halfX, xMax: 100 - halfX, yPad: halfY };
+  };
+
   // 底生魚は y 65〜80%、その他は 15〜60% の範囲で泳ぐ
   const defaultPos = (f: Fish, i: number): Pos => {
     const master = allFishMaster.find((m) => m.type === f.type);
     const isBottom = master?.layer === "bottom";
-    const yMin = isBottom ? 65 : 15;
-    const yMax = isBottom ? 80 : 60;
+    const { xMin, xMax, yPad } = boundsFor(f);
+    const yMin = Math.max(isBottom ? 65 : 15, yPad);
+    const yMax = Math.min(isBottom ? 80 : 60, 100 - yPad);
     return {
-      x: 15 + ((i * 25) % 65),
-      y: yMin + ((i % 3) * (yMax - yMin)) / 2,
+      x: Math.max(xMin, Math.min(xMax, 15 + ((i * 25) % 65))),
+      y: yMin + ((i % 3) * Math.max(0, yMax - yMin)) / 2,
       facing: 1,
     };
   };
@@ -111,15 +142,17 @@ export default function AquariumView() {
         displayFish.forEach((f, i) => {
           const master = allFishMaster.find((m) => m.type === f.type);
           const isBottom = master?.layer === "bottom";
-          const yMin = isBottom ? 65 : 8;
-          const yMax = isBottom ? 82 : 62;
+          // 魚のサイズぶん内側に寄せた移動範囲（端で見切れないように）
+          const { xMin, xMax, yPad } = boundsFor(f);
+          const yMin = Math.max(isBottom ? 65 : 8, yPad);
+          const yMax = Math.min(isBottom ? 82 : 62, 100 - yPad);
           const pos = next[f.fishId] ?? defaultPos(f, i);
           if (eatingIds.has(f.fishId) && baitRef.current) {
             const tx = baitRef.current.x;
             const rawTy = baitRef.current.y - 3;
-            const ty = isBottom ? Math.max(yMin, Math.min(yMax, rawTy)) : rawTy;
+            const ty = Math.max(yMin, Math.min(yMax, rawTy));
             next[f.fishId] = {
-              x: tx - 4,
+              x: Math.max(xMin, Math.min(xMax, tx - 4)),
               y: ty,
               facing: tx >= pos.x ? 1 : -1,
             };
@@ -129,8 +162,8 @@ export default function AquariumView() {
             let nx = pos.x + dx;
             let ny = pos.y + dy;
             let facing: 1 | -1 = dx >= 0 ? 1 : -1;
-            if (nx < 4) { nx = 4; facing = 1; }
-            if (nx > 82) { nx = 82; facing = -1; }
+            if (nx < xMin) { nx = xMin; facing = 1; }
+            if (nx > xMax) { nx = xMax; facing = -1; }
             ny = Math.max(yMin, Math.min(yMax, ny));
             next[f.fishId] = { x: nx, y: ny, facing };
           }
@@ -193,7 +226,9 @@ export default function AquariumView() {
     }
   }, [currentTankId, tanks]);
 
-  const sel = fishList.find((f) => f.fishId === selected) ?? null;
+  // 表示中の水槽の魚のみ対象。水槽を切り替えたときに、別水槽の魚の詳細パネルが
+  // residual で残り続けるのを防ぐ
+  const sel = displayFish.find((f) => f.fishId === selected) ?? null;
   const boxFish = user.boxFish ?? [];
   const boxCapacity = user.boxCapacity ?? BOX_CAPACITY_INITIAL;
 
@@ -253,11 +288,7 @@ export default function AquariumView() {
                 type={f.type}
                 facing={pos.facing}
                 sick={f.isSick}
-                size={Math.round(
-                  (SIZE_PX[
-                    allFishMaster.find((m) => m.type === f.type)?.displaySize ?? "medium"
-                  ] || 48) * (f.growthStage === "幼魚" ? 0.7 : 1)
-                )}
+                size={fishSizePx(f)}
                 imageUrl={allFishMaster.find((m) => m.type === f.type)?.imageUrl}
               />
               {f.isSick && (
