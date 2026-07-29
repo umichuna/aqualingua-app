@@ -339,6 +339,11 @@ const ALL_STORES = [
   "companions",
   "blankQuestions",
   "blankQuestionStats",
+  // 組み込み魚の編集内容・全員共有カスタム魚のローカルキャッシュ。
+  // ここに入れ忘れると「JSONロードしても魚の編集が戻らない」「全データ初期化しても残る」
+  // という取りこぼしになる（どちらも共有APIから再取得はされる）。
+  "fishOverrides",
+  "sharedCustomFish",
 ] as const;
 
 export async function clearAllData(): Promise<void> {
@@ -363,6 +368,8 @@ export interface BackupData {
   companions: Fish[];
   blankQuestions?: BlankQuestion[];
   blankQuestionStats?: BlankQuestionStats[];
+  fishOverrides?: FishOverride[];
+  sharedCustomFish?: CustomFishDef[];
 }
 
 export async function exportAllData(): Promise<BackupData> {
@@ -381,17 +388,22 @@ export async function exportAllData(): Promise<BackupData> {
     companions: await db.getAll("companions"),
     blankQuestions: await db.getAll("blankQuestions"),
     blankQuestionStats: await db.getAll("blankQuestionStats"),
+    fishOverrides: await db.getAll("fishOverrides"),
+    sharedCustomFish: await db.getAll("sharedCustomFish"),
   };
 }
 
 // バックアップJSONを取り込む（既存データはすべて置き換え）
-// 注意: 旧形式バックアップ（blankQuestions/blankQuestionStats フィールドが無い）を
-// 読み込んだ場合、そのまま clearAllData すると穴抜け問題が全消失してしまうため、
-// フィールド自体が未定義（≠空配列）のときは取り込み前の既存データを退避して残す。
+// 注意: 旧形式バックアップ（blankQuestions / blankQuestionStats / fishOverrides /
+// sharedCustomFish フィールドが無い）を読み込んだ場合、そのまま clearAllData すると
+// それらが全消失してしまうため、フィールド自体が未定義（≠空配列）のときは
+// 取り込み前の既存データを退避して残す。
 export async function importAllData(data: BackupData): Promise<void> {
   const db = await getLocalDB();
   const keepBlankQuestions = data.blankQuestions === undefined ? await db.getAll("blankQuestions") : null;
   const keepBlankQuestionStats = data.blankQuestionStats === undefined ? await db.getAll("blankQuestionStats") : null;
+  const keepFishOverrides = data.fishOverrides === undefined ? await db.getAll("fishOverrides") : null;
+  const keepSharedCustomFish = data.sharedCustomFish === undefined ? await db.getAll("sharedCustomFish") : null;
   await clearAllData();
   for (const w of data.words ?? []) await db.put("words", w);
   for (const s of data.wordStats ?? []) await db.put("wordStats", s);
@@ -404,6 +416,8 @@ export async function importAllData(data: BackupData): Promise<void> {
   for (const c of data.companions ?? []) await db.put("companions", c);
   for (const q of data.blankQuestions ?? keepBlankQuestions ?? []) await db.put("blankQuestions", q);
   for (const st of data.blankQuestionStats ?? keepBlankQuestionStats ?? []) await db.put("blankQuestionStats", st);
+  for (const o of data.fishOverrides ?? keepFishOverrides ?? []) await db.put("fishOverrides", o);
+  for (const cf of data.sharedCustomFish ?? keepSharedCustomFish ?? []) await db.put("sharedCustomFish", cf);
 }
 
 // ---------- FishOverrides（組み込み魚編集用） ----------
