@@ -1,40 +1,8 @@
 import type { FishOverride } from "./types";
+import { fetchWithRetry, readError } from "./apiClient";
 
 // 組み込み魚のオーバーライド（名前・画像・サイズ等）を全ユーザー共有する API クライアント。
 // 誰かが魚を編集すると全員に反映される。
-
-async function readError(response: Response): Promise<string> {
-  try {
-    const body = await response.json();
-    if (body && typeof body.error === "string" && body.error) return body.error;
-  } catch {
-    // JSON でない場合は無視
-  }
-  return response.statusText || `HTTP ${response.status}`;
-}
-
-// DBが落ちている/無料枠切れのときに何度も起こしに行かないよう、再試行は2回まで。
-// （!res.ok は再試行せずそのまま返すので、対象はネットワーク断・タイムアウトのみ）
-async function fetchWithRetry(
-  path: string,
-  init: RequestInit = {},
-  retries = 2,
-  timeoutMs = 55_000
-): Promise<Response> {
-  const backoffMs = [5000, 10000, 20000];
-  let lastErr: unknown;
-  for (let attempt = 0; attempt < retries; attempt++) {
-    try {
-      return await fetch(path, { ...init, signal: AbortSignal.timeout(timeoutMs) });
-    } catch (e) {
-      lastErr = e;
-      if (attempt < retries - 1) {
-        await new Promise((r) => setTimeout(r, backoffMs[attempt] ?? 20000));
-      }
-    }
-  }
-  throw lastErr;
-}
 
 // 共有 FishOverride を全件取得
 export async function fetchSharedFishOverrides(): Promise<FishOverride[]> {

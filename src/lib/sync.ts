@@ -92,16 +92,6 @@ export async function pullFromCloud(userId: string): Promise<boolean> {
     if (cloudData.userStatus) {
       const localBefore = await db.getUserStatus();
       const c = cloudData.userStatus as UserStatus;
-      const willRollback = !!localBefore && c.lastUpdated < localBefore.lastUpdated;
-      console.warn(
-        "[SyncDebug] PULL userStatus",
-        {
-          local: localBefore && { tankCapacity: localBefore.tankCapacity, boxCapacity: localBefore.boxCapacity, gold: localBefore.gold, items: localBefore.items, lastUpdated: localBefore.lastUpdated },
-          cloud: { tankCapacity: c.tankCapacity, boxCapacity: c.boxCapacity, gold: c.gold, items: c.items, lastUpdated: c.lastUpdated },
-          willRollback,
-          action: willRollback ? "merge（ローカル優先+救済フィールド合成）" : "cloud採用",
-        }
-      );
       const merged = localBefore ? mergeUserStatus(localBefore, c) : c;
       await db.putUserStatus(merged);
       restored = true;
@@ -178,18 +168,6 @@ export async function pushToCloud(userId: string): Promise<{ userStatusStale: bo
     const fishHistory = await db.getAllFishHistory();
     const blankQuestions = await db.getAllBlankQuestions();
     const blankQuestionStats = await db.getAllBlankQuestionStats();
-
-    // ---- 調査ログ: push がクラウドへ送る userStatus の中身 ----
-    console.warn(
-      "[SyncDebug] PUSH userStatus",
-      userStatus && {
-        tankCapacity: userStatus.tankCapacity,
-        boxCapacity: userStatus.boxCapacity,
-        gold: userStatus.gold,
-        items: userStatus.items,
-        lastUpdated: userStatus.lastUpdated,
-      }
-    );
 
     const payload = {
       userStatus,

@@ -67,7 +67,10 @@ export function QuizPlay({
   const [queueIdx, setQueueIdx] = useState(0);
   const [picked, setPicked] = useState<string | null>(null);
   const [score, setScore] = useState(0);
-  const firstAttempted = useRef<Set<string>>(new Set()); // 正解済みID（スコアの二重加算防止・進捗表示用）
+  const firstAttempted = useRef<Set<string>>(new Set()); // 正解済みID（スコアの二重加算防止用）
+  // 上の集合のサイズを描画で使うための控え。ref を描画中に読むと React の並行描画で
+  // 表示が古いままになり得るため、値は state 側に持たせる（更新は集合への追加と同時）。
+  const [correctCount, setCorrectCount] = useState(0);
   // 単語帳の苦手判定（セッション内3回ミスで登録・初回正解で解除）と統一するためのカウンタ
   const sessionWrongRef = useRef<Record<string, number>>({});
   // 正誤に関わらず「本当にこの問題を初めて見た挑戦か」を判定する（firstAttempted は
@@ -81,17 +84,17 @@ export function QuizPlay({
     [queueIdx]
   );
 
-  if (!q) return null;
-  const isCorrect = picked === q.answer;
-  const correctCount = firstAttempted.current.size; // 初回正解済み問題数（進捗表示用）
-
-  // 回答後に完成した英文を読み上げる
+  // 回答後に完成した英文を読み上げる。
+  // フックは早期 return より前に置くこと（描画ごとにフックの数が変わると React が壊れる）。
   useEffect(() => {
-    if (picked) {
+    if (picked && q) {
       speak(fillSentence(q.sentence, q.answer), "en-US");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [picked]);
+
+  if (!q) return null;
+  const isCorrect = picked === q.answer;
 
   const next = () => {
     if (!picked) return;
@@ -174,6 +177,7 @@ export function QuizPlay({
                 if (ok && isFirst) {
                   setScore((s) => s + 1);
                   firstAttempted.current.add(q.id);
+                  setCorrectCount(firstAttempted.current.size); // 描画用の控えも同時に更新
                 }
                 if (isVeryFirstAttempt) {
                   // 苦手解除の判定（連続正解セッション数が設定値に達したら解除。

@@ -135,9 +135,15 @@ export default function WordManager() {
   const [lastGenre, setLastGenre] = useState<WordGenre>("日常会話");
   const fileRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
+  // 絞り込みが変わったら選択を解除する（画面から消えた単語を選んだまま一括削除してしまうのを防ぐ）。
+  // effect ではなく描画中に前回値と比較して更新する（React 推奨のパターン。
+  // effect 内で setState すると描画が連鎖してしまう）。
+  const filterKey = `${[...selGenres].sort()}|${[...selLevels].sort()}|${[...selTypes].sort()}|${query}`;
+  const [prevFilterKey, setPrevFilterKey] = useState(filterKey);
+  if (prevFilterKey !== filterKey) {
+    setPrevFilterKey(filterKey);
     setSelWords(new Set());
-  }, [selGenres, selLevels, selTypes, query]);
+  }
 
   const toggleSet = <T,>(set: Set<T>, val: T): Set<T> => {
     const next = new Set(set);

@@ -41,3 +41,13 @@ yarn-error.log*
 next-env.d.ts
 
 .vercel
+
+# ローカル作業用スクリプト（DB接続情報を含むことがあるためコミットしない）
+/create-db-user*.js
+/setup_azure_user.js
+/setup_azure_sql.py
+/test-azure-sql-connection.js
+/test-local-sync.js
+/debug-page-state.js
+/verify-*.js
+/filter.js
