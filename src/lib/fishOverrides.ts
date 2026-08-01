@@ -13,10 +13,12 @@ async function readError(response: Response): Promise<string> {
   return response.statusText || `HTTP ${response.status}`;
 }
 
+// DBが落ちている/無料枠切れのときに何度も起こしに行かないよう、再試行は2回まで。
+// （!res.ok は再試行せずそのまま返すので、対象はネットワーク断・タイムアウトのみ）
 async function fetchWithRetry(
   path: string,
   init: RequestInit = {},
-  retries = 4,
+  retries = 2,
   timeoutMs = 55_000
 ): Promise<Response> {
   const backoffMs = [5000, 10000, 20000];

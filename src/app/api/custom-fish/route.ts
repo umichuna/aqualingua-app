@@ -10,8 +10,13 @@ export const maxDuration = 60;
 // 全員共有のカスタム魚。userId を持たず、全ユーザーで共通のプールになる。
 // 誰かが追加すると全員のガチャ・図鑑に出る。
 
-// テーブルが無ければ作る（非エンジニアでも Azure で手作業せずに動くように）
+// テーブルが無ければ作る（非エンジニアでも Azure で手作業せずに動くように）。
+// 確認はサーバーインスタンスごとに1回で十分。毎リクエスト実行すると sys.tables の
+// クエリぶんDBを起こし続け、無料枠（月10万vCore秒）の無駄遣いになるため、
+// フラグで抑制する（sync ルートと同じ方式）。
+let tableEnsured = false;
 async function ensureTable(pool: sql.ConnectionPool) {
+  if (tableEnsured) return;
   await pool.request().query(`
     IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'shared_custom_fish')
     CREATE TABLE shared_custom_fish (
@@ -21,6 +26,7 @@ async function ensureTable(pool: sql.ConnectionPool) {
       createdAt BIGINT        NOT NULL
     );
   `);
+  tableEnsured = true;
 }
 
 function getUserId(session: Awaited<ReturnType<typeof getServerSession>>): string | null {

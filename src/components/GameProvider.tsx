@@ -222,16 +222,38 @@ let noticeSeq = 1;
 
 // ---- クラウド取得の間引き（Azure SQL 無料枠の節約） ----
 // 魚の共有データ（fishOverrides / sharedCustomFish）は起動のたびに取得すると
-// DBが毎回起こされて無料枠（月10万vCore秒）を消費するため、6時間に1回に間引く。
+// DBが毎回起こされて無料枠（月10万vCore秒）を消費するため、24時間に1回に間引く。
+// サーバーレスDBは「起きている時間」で課金され、自動一時停止までの待機時間も課金対象に
+// なるため、クエリ本数より「起こす回数」を減らすほうが効く。
 // ローカルキャッシュ（IndexedDB）があるので、間引き中も表示は正しく出る。
-// 手動の☁️同期は従来通り即時。
-const CLOUD_FISH_REFRESH_INTERVAL_MS = 6 * 60 * 60 * 1000;
+// すぐ最新にしたいときは手動の☁️同期を押せば、この間隔を無視して取り直す
+// （pull で既にDBが起きているので追加コストはほぼ無い）。
+const CLOUD_FISH_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000;
 function shouldRefreshCloudFish(key: "fishOverrides" | "customFish"): boolean {
   try {
+    // 手動同期が「次は間隔を無視して取得する」印を付けていたら、その印を消して取得する
+    if (localStorage.getItem(`cloudFishForceRefresh:${key}`)) {
+      localStorage.removeItem(`cloudFishForceRefresh:${key}`);
+      return true;
+    }
     const at = Number(localStorage.getItem(`cloudFishFetchedAt:${key}`) ?? 0);
     return Date.now() - at > CLOUD_FISH_REFRESH_INTERVAL_MS;
   } catch {
     return true; // localStorage が使えない環境では従来通り取得
+  }
+}
+
+// 手動の☁️同期で呼ぶ。次回の共有魚チェックで間隔を無視して取り直させる。
+// 取得日時（cloudFishFetchedAt）は消さないこと。消すと、取得に失敗したときに
+// 間引き自体が解除され、以後アプリを開くたびにDBを起こしに行ってしまう
+// （＝無料枠を節約したいのに逆効果になる）。フラグ1つで1回だけ取りに行かせる。
+function requestCloudFishRefresh(): void {
+  try {
+    for (const key of ["fishOverrides", "customFish"] as const) {
+      localStorage.setItem(`cloudFishForceRefresh:${key}`, "1");
+    }
+  } catch {
+    // localStorage が使えない環境では元々毎回取得するので何もしなくてよい
   }
 }
 function markCloudFishRefreshed(key: "fishOverrides" | "customFish"): void {
@@ -363,6 +385,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const locallyModifiedFishTypesRef = useRef<Set<string>>(new Set());
   // 実績報酬の受け取り処理中のID（同一tick内の二度押しによる魚の重複付与を防ぐ）
   const claimingAchievementsRef = useRef<Set<string>>(new Set());
+  // 手動の☁️同期で共有魚（fishOverrides / sharedCustomFish）を取り直させるためのカウンタ。
+  // 取得を24時間に間引いている分、「今すぐ最新にしたい」に応えられるようにする。
+  const [sharedFishTick, setSharedFishTick] = useState(0);
 
   const tanks = useMemo<Tank[]>(() => {
     if (user.tanks?.length) return user.tanks;
@@ -585,7 +610,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   // （以前は個人持ちだったものを全員共有にするため）。
   useEffect(() => {
     if (!session?.user?.email) return;
-    if (!shouldRefreshCloudFish("customFish")) return; // 6時間以内に取得済みならスキップ（無料枠節約）
+    if (!shouldRefreshCloudFish("customFish")) return; // 24時間以内に取得済みならスキップ（無料枠節約）
     let cancelled = false;
     (async () => {
       try {
@@ -649,7 +674,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.user?.email]);
+  }, [session?.user?.email, sharedFishTick]);
 
   // ---------- フォーカス復帰時にも放置チェック ----------
   useEffect(() => {
@@ -1420,7 +1445,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!session?.user?.email) return;
-    if (!shouldRefreshCloudFish("fishOverrides")) return; // 6時間以内に取得済みならスキップ（無料枠節約）
+    if (!shouldRefreshCloudFish("fishOverrides")) return; // 24時間以内に取得済みならスキップ（無料枠節約）
     let cancelled = false;
     (async () => {
       try {
@@ -1448,7 +1473,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.user?.email]);
+  }, [session?.user?.email, sharedFishTick]);
 
   // 穴抜け問題を DB から読み込み
   useEffect(() => {
@@ -1741,6 +1766,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
       setGoldLedger(updatedLedger.sort((a, b) => a.timestamp - b.timestamp));
       setBlankQuestions(updatedBlanks);
       setBlankQuestionStats(Object.fromEntries(updatedBlankStats.map((s) => [s.id, s])));
+      // 共有魚（他の人の追加・編集）もこの機会に取り直す。
+      // pull で既にDBが起きているので、ここでの追加コストはほぼ無い。
+      requestCloudFishRefresh();
+      setSharedFishTick((t) => t + 1);
       pushNotice("☁️", "クラウドから復元しました");
     } catch (err) {
       console.error("[Sync] pull failed:", err);
