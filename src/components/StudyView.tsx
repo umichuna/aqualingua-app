@@ -1303,7 +1303,10 @@ function ListenPlay({
   const playedRef = useRef(0);
   const playingRef = useRef(true);
   const rateRef = useRef(1.0);
-  const currentWordsRef = useRef<Word[]>(words);
+  // 再生対象の単語リスト。開始時のスナップショットを固定して使う（従来の useRef(words) と同じ）。
+  // 描画からはこちらの state を読む。ref を描画中に読むと並行描画で表示がずれ得るため。
+  const [playWords] = useState<Word[]>(words);
+  const currentWordsRef = useRef<Word[]>(playWords); // 非同期の再生ループ用（同じ配列を指す）
   const skipRef = useRef(false);
 
   useEffect(() => {
@@ -1454,7 +1457,7 @@ function ListenPlay({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const w = currentWordsRef.current[Math.min(index, currentWordsRef.current.length - 1)];
+  const w = playWords[Math.min(index, playWords.length - 1)];
   return (
     <div className="p-4 flex flex-col gap-4 h-full">
       <div className="flex justify-between text-xs text-dim">
@@ -1466,7 +1469,7 @@ function ListenPlay({
         <div className="text-3xl font-bold tracking-wide text-foam">{w?.spelling}</div>
         <div className="text-base font-bold text-glow">{w?.meanings.join("、")}</div>
         <div className="text-[10px] text-dim mt-1">
-          {direction === "ja2en" ? "日本語 → 英語" : "英語 → 日本語"} を2回くり返します（{index + 1} / {currentWordsRef.current.length}語目）
+          {direction === "ja2en" ? "日本語 → 英語" : "英語 → 日本語"} を2回くり返します（{index + 1} / {playWords.length}語目）
         </div>
       </div>
       <div className="flex items-center gap-2">

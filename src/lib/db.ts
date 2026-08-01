@@ -31,6 +31,8 @@ interface AppDBSchema extends DBSchema {
   studySessions: { key: string; value: StudySession };
   goldLedger: { key: string; value: GoldLedgerEntry };
   fishHistory: { key: string; value: FishHistoryEntry };
+  // companions: 相棒機能用に用意したが、アプリからは読み書きしていない（常に空）。
+  // 既存のバックアップJSON・DBバージョンと結び付いているため、消さずに残している。
   companions: { key: string; value: Fish };
   fishOverrides: { key: string; value: FishOverride };
   blankQuestions: { key: string; value: BlankQuestion };

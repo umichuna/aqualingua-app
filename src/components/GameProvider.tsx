@@ -186,7 +186,6 @@ interface GameContextValue {
   removeCustomFish: (fishType: string) => void;
   updateBuiltinFish: (override: FishOverride) => void;
   removeBuiltinFishOverride: (fishType: string) => void;
-  buyTankSlot: (type: import("@/lib/types").WaterType) => void;
 
   // 穴抜け問題
   blankQuestions: BlankQuestion[];
@@ -1566,22 +1565,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
     [schedulePush, pushNotice]
   );
 
-  // 旧 buyTankSlot — 互換のためにエイリアスを残す（ShopView 移行後は削除可）
-  const buyTankSlot = useCallback(
-    (type: WaterType) => {
-      const u = userRef.current;
-      const price = SHOP_PRICES.freshwaterTank;
-      if (u.gold < price) return;
-      if (type === "saltwater") {
-        persistUser({ ...u, gold: u.gold - price, saltwaterTankCount: (u.saltwaterTankCount ?? 1) + 1 });
-      } else {
-        persistUser({ ...u, gold: u.gold - price, freshwaterTankCount: (u.freshwaterTankCount ?? 0) + 1 });
-      }
-      recordLedger(-price, `${type === "saltwater" ? "海水" : "淡水"}水槽追加`, u.gold - price);
-    },
-    [persistUser, recordLedger]
-  );
-
   const releaseBoxFish = useCallback(
     (fishId: string) => {
       const u = userRef.current;
@@ -1837,7 +1820,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
         removeCustomFish,
         updateBuiltinFish,
         removeBuiltinFishOverride,
-        buyTankSlot,
         tanks,
         currentTankId,
         setCurrentTankId,

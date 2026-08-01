@@ -35,10 +35,6 @@ export function sessionGold(
   return count * MODE_BASE_GOLD[mode];
 }
 
-export function dailyGoldReward(mode: StudyMode, jobLevel?: number): number {
-  return sessionGold(mode, 1, jobLevel);
-}
-
 // ---------- 苦手判定（単語帳・穴抜け問題 共通） ----------
 // 登録: セッション内でこの回数だけ間違えた時点で苦手登録
 export const DEFAULT_WEAK_THRESHOLD = 3;

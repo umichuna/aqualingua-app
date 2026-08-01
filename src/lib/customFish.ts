@@ -1,40 +1,8 @@
 import type { CustomFishDef } from "./types";
+import { fetchWithRetry, readError } from "./apiClient";
 
 // 全員共有のカスタム魚 API（/api/custom-fish）クライアント。
 // 共有テーブルから取得・登録・削除する。誰かが追加すると全員のガチャ・図鑑に出る。
-
-async function readError(response: Response): Promise<string> {
-  try {
-    const body = await response.json();
-    if (body && typeof body.error === "string" && body.error) return body.error;
-  } catch {
-    // JSON でない場合は無視
-  }
-  return response.statusText || `HTTP ${response.status}`;
-}
-
-// DBが落ちている/無料枠切れのときに何度も起こしに行かないよう、再試行は2回まで。
-// （!res.ok は再試行せずそのまま返すので、対象はネットワーク断・タイムアウトのみ）
-async function fetchWithRetry(
-  path: string,
-  init: RequestInit = {},
-  retries = 2,
-  timeoutMs = 55_000
-): Promise<Response> {
-  const backoffMs = [5000, 10000, 20000];
-  let lastErr: unknown;
-  for (let attempt = 0; attempt < retries; attempt++) {
-    try {
-      return await fetch(path, { ...init, signal: AbortSignal.timeout(timeoutMs) });
-    } catch (e) {
-      lastErr = e;
-      if (attempt < retries - 1) {
-        await new Promise((r) => setTimeout(r, backoffMs[attempt] ?? 20000));
-      }
-    }
-  }
-  throw lastErr;
-}
 
 // 共有カスタム魚を全件取得
 export async function fetchSharedCustomFish(): Promise<CustomFishDef[]> {

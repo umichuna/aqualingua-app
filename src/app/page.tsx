@@ -112,12 +112,18 @@ function AppShell() {
   const [showTutorial, setShowTutorial] = useState(false);
   const [showFirstTimeCheck, setShowFirstTimeCheck] = useState(false);
 
-  // クライアント側でクエリパラメータをチェック
+  // クライアント側でクエリパラメータをチェック（?view=admin で管理者画面を直接開く）。
+  // window は描画時（サーバー側の事前描画）には存在しないため、state の初期値としては読めず、
+  // マウント後の effect で読むしかない。next/navigation の useSearchParams はこのページを
+  // Suspense で囲む必要があり、静的事前描画の構成が変わってしまうため使っていない。
+  // 初回表示はログイン判定中のローディング画面なので、ここでの更新はちらつきにならない。
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("view") === "admin") {
+      /* eslint-disable react-hooks/set-state-in-effect */
       setScreen("app");
       setTab("admin");
+      /* eslint-enable react-hooks/set-state-in-effect */
     }
   }, []);
 
