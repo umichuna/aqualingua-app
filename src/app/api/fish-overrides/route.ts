@@ -9,7 +9,12 @@ export const maxDuration = 60;
 // 組み込み魚の編集内容（FishOverride）を全ユーザー共有するテーブル。
 // 誰かが魚の名前・画像・サイズ等を変更すると全員に反映される。
 
+// テーブル存在確認はサーバーインスタンスごとに1回で十分。
+// 毎リクエスト実行すると sys.tables のクエリぶんDBを起こし続け、無料枠（月10万vCore秒）の
+// 無駄遣いになるため、フラグで抑制する（sync ルートと同じ方式）。
+let tableEnsured = false;
 async function ensureTable(pool: sql.ConnectionPool) {
+  if (tableEnsured) return;
   await pool.request().query(`
     IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'fish_overrides')
     CREATE TABLE fish_overrides (
@@ -18,6 +23,7 @@ async function ensureTable(pool: sql.ConnectionPool) {
       lastUpdated BIGINT        NOT NULL
     );
   `);
+  tableEnsured = true;
 }
 
 function getUserId(session: Awaited<ReturnType<typeof getServerSession>>): string | null {
