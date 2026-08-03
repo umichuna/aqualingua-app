@@ -809,7 +809,7 @@ function WordForm({
       const res = await fetch("/api/translate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: sp }),
+        body: JSON.stringify({ text: sp, wordType }),
       });
       const data = (await res.json()) as { translations?: string[]; error?: string };
       if (!res.ok || !data.translations?.length) throw new Error(data.error ?? "エラー");
