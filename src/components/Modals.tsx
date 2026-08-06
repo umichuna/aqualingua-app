@@ -116,6 +116,22 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
         setIoMsg("⚠️ セーブファイルの形式が正しくありません");
         return;
       }
+      // 全データの置き換えは取り消せないので、中身を見せてから確認する。
+      // （全データ初期化やクラウドセーブには確認があるのに、最も破壊的なロードだけ
+      //  即実行だったため、誤タップで手元のデータを失う恐れがあった）
+      const savedAt = data.exportedAt ? new Date(data.exportedAt).toLocaleString("ja-JP") : "不明";
+      const ok = window.confirm(
+        "このセーブファイルで、今のデータをすべて置き換えます。\n" +
+          "今の魚・単語・図鑑・通帳などは取り消せません。\n\n" +
+          `セーブ日時: ${savedAt}\n` +
+          `単語: ${data.words.length}件 / 魚: ${data.aquarium?.length ?? 0}匹 / ` +
+          `図鑑: ${data.encyclopedia?.length ?? 0}種 / 穴抜け: ${data.blankQuestions?.length ?? 0}問\n\n` +
+          "よろしいですか？"
+      );
+      if (!ok) {
+        setIoMsg("ロードをキャンセルしました");
+        return;
+      }
       await importAllData(data);
       window.location.reload();
     } catch {

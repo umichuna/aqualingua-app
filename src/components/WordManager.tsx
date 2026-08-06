@@ -181,14 +181,24 @@ export default function WordManager() {
 
   const onCsvFile = async (file: File) => {
     const text = await file.text();
-    setCsvPreview(parseVocabularyCsv(text, game.user.customGenres ?? []));
+    // 既知ジャンルの判定はアプリ全体と同じ GENRES（= allGenres: customGenres ＋
+    // 既存単語が持つジャンル）を使う。customGenres だけで判定していたため、
+    // 絞り込みに出ているジャンルなのに「未登録」と警告されることがあった。
+    setCsvPreview(parseVocabularyCsv(text, GENRES));
   };
 
   // id列がある「書き出し→編集→取込」の往復編集のときだけ、CSVに無い既存単語を削除候補にする
   // （id列が無い新規登録テンプレは常に追加のみ）
   const deleteCandidateIds = useMemo(() => {
     if (!csvPreview || !csvPreview.hasIdColumn) return [];
-    const csvIds = new Set([...csvPreview.words, ...csvPreview.pendingWords].map((w) => w.id));
+    // skippedIds も「CSVに載っていた」ものとして数える。
+    // これを入れないと、未登録ジャンルで「スキップ」を押した行が削除候補に回り、
+    // ユーザーは取り込まないだけのつもりなのに既存単語が消えてしまう。
+    const csvIds = new Set([
+      ...csvPreview.words.map((w) => w.id),
+      ...csvPreview.pendingWords.map((w) => w.id),
+      ...csvPreview.skippedIds,
+    ]);
     return words.filter((w) => !csvIds.has(w.id)).map((w) => w.id);
   }, [csvPreview, words]);
 
@@ -505,7 +515,18 @@ export default function WordManager() {
                       ジャンルを追加
                     </button>
                     <button
-                      onClick={() => setCsvPreview({ ...csvPreview, pendingWords: [], unknownGenres: [] })}
+                      onClick={() =>
+                        setCsvPreview({
+                          ...csvPreview,
+                          pendingWords: [],
+                          unknownGenres: [],
+                          // 取り込まなかった行の id を残す（既存単語を削除させないため）
+                          skippedIds: [
+                            ...csvPreview.skippedIds,
+                            ...csvPreview.pendingWords.map((w) => w.id),
+                          ],
+                        })
+                      }
                       className="flex-1 py-1 text-xs font-bold bg-white/10 text-dim"
                     >
                       スキップ

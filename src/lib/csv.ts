@@ -15,7 +15,13 @@ export interface CsvImportResult {
   unknownGenres: string[]; // CSV内に登録されていないジャンル名（重複なし）
   errors: CsvRowError[];
   hasIdColumn: boolean; // 「書き出し」CSVの再取込（id列あり=往復編集・削除反映対象）かどうか
+  // 「スキップ」で取り込みをやめた行の id。CSVには載っていたので、
+  // 往復編集の削除判定では「CSVにあった」ものとして扱い、既存単語を消さないために使う。
+  skippedIds: string[];
 }
+
+// CSVの「種別」列で受け付ける値（types.ts の WordType と対応）
+const WORD_TYPES: readonly WordType[] = ["単語", "述語", "会話文"];
 
 function mapLevel(raw: string): WordLevel | null {
   const n = parseInt(raw, 10);
@@ -55,6 +61,7 @@ export function parseVocabularyCsv(
     unknownGenres: [],
     errors: [],
     hasIdColumn: (parsed.meta.fields ?? []).includes("id"),
+    skippedIds: [],
   };
   const unknownGenreSet = new Set<string>();
 
@@ -79,8 +86,13 @@ export function parseVocabularyCsv(
       });
       return;
     }
-    const wordType: WordType =
-      (row["種別"] ?? "").trim() === "述語" ? "述語" : "単語";
+    // 種別は3種すべてを受け付ける。ここで「述語」以外を「単語」に丸めていたため、
+    // 編集用CSVを書き出して取り込む往復編集で「会話文」が「単語」に化けていた
+    // （会話文は AI翻訳の方式や選択肢クイズの誤答選びの基準にもなるため実害が出る）。
+    const rawWordType = (row["種別"] ?? "").trim();
+    const wordType: WordType = WORD_TYPES.includes(rawWordType as WordType)
+      ? (rawWordType as WordType)
+      : "単語"; // 空欄・未知の値は従来どおり「単語」扱い
 
     const meanings = [row["意味1"], row["意味2"], row["意味3"]]
       .map((m) => (m ?? "").trim())
