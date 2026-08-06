@@ -1039,6 +1039,31 @@ export function GameProvider({ children }: { children: ReactNode }) {
   );
 
   // ---------- 単語 ----------
+  // 削除済み単語の墓標。同期時に「別端末がまだ持っている単語の復活」を防ぐために使う。
+  // userStatus は1件のJSONとしてクラウドへ送るため、無制限に増やすと同期が重くなる。
+  // 古いものから捨てて上限までに収める（古い削除は他端末にも既に伝わっている想定）。
+  const MAX_DELETED_WORD_IDS = 1000;
+  const appendDeletedWordIds = useCallback(
+    (u: UserStatus, ids: string[]): string[] => {
+      const merged = [...(u.deletedWordIds ?? []), ...ids];
+      return merged.length > MAX_DELETED_WORD_IDS
+        ? merged.slice(merged.length - MAX_DELETED_WORD_IDS)
+        : merged;
+    },
+    []
+  );
+
+  // 同じIDで単語を再登録したら墓標から外す（CSV往復編集などで意図的に戻した場合に、
+  // 同期のたびに消され続けるのを防ぐ）
+  const forgetDeletedWordIds = useCallback((ids: string[]) => {
+    const u = userRef.current;
+    const tomb = u.deletedWordIds ?? [];
+    if (tomb.length === 0) return;
+    const idSet = new Set(ids);
+    const next = tomb.filter((id) => !idSet.has(id));
+    if (next.length !== tomb.length) persistUser({ ...u, deletedWordIds: next });
+  }, [persistUser]);
+
   const saveWord = useCallback((word: Word) => {
     const now = Date.now();
     // createdAt は初回のみセット。編集時は既存値を保持して登録日順ソートを正しく機能させる
@@ -1058,8 +1083,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
       return [...ws, wordToSave];
     });
     void putWord({ ...word, createdAt: word.createdAt ?? now, lastUpdated: now });
+    forgetDeletedWordIds([word.id]);
     schedulePush();
-  }, [schedulePush]);
+  }, [schedulePush, forgetDeletedWordIds]);
 
   const saveWords = useCallback((newWords: Word[]) => {
     setWords((ws) => {
@@ -1068,8 +1094,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
       return Array.from(map.values());
     });
     void putWords(newWords);
+    forgetDeletedWordIds(newWords.map((w) => w.id));
     schedulePush();
-  }, [schedulePush]);
+  }, [schedulePush, forgetDeletedWordIds]);
 
   const removeWord = useCallback((id: string) => {
     setWords((ws) => ws.filter((w) => w.id !== id));
@@ -1080,8 +1107,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
     });
     void dbDeleteWord(id);
     const u = userRef.current;
-    persistUser({ ...u, deletedWordIds: [...(u.deletedWordIds ?? []), id] });
-  }, [persistUser]);
+    persistUser({ ...u, deletedWordIds: appendDeletedWordIds(u, [id]) });
+  }, [persistUser, appendDeletedWordIds]);
 
   // 一括削除（バッチ）：state更新1回・UserStatus書き込み1回で重い再描画/書き込みループを解消
   const removeWords = useCallback((ids: string[]) => {
@@ -1095,8 +1122,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
     });
     for (const id of ids) void dbDeleteWord(id);
     const u = userRef.current;
-    persistUser({ ...u, deletedWordIds: [...(u.deletedWordIds ?? []), ...ids] });
-  }, [persistUser]);
+    persistUser({ ...u, deletedWordIds: appendDeletedWordIds(u, ids) });
+  }, [persistUser, appendDeletedWordIds]);
 
   const recordAnswer = useCallback((wordId: string, correct: boolean) => {
     setWordStats((s) => {

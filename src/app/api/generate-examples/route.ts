@@ -5,19 +5,22 @@ import { NextRequest, NextResponse } from "next/server";
 export async function POST(req: NextRequest) {
   const { spelling, meanings } = (await req.json()) as {
     spelling: string;
-    meanings: string[];
+    meanings?: string[];
   };
 
   if (!spelling?.trim()) {
     return NextResponse.json({ error: "spelling is required" }, { status: 400 });
   }
 
+  // meanings が未送信・配列以外でも落ちないようにする（try の外で参照するため）
+  const meaningList = Array.isArray(meanings) ? meanings.filter((m) => typeof m === "string" && m.trim()) : [];
+
   const key = process.env.GEMINI_API_KEY;
   if (!key) {
     return NextResponse.json({ error: "Gemini API not configured" }, { status: 503 });
   }
 
-  const meaningsText = meanings.length > 0 ? meanings.join("、") : spelling;
+  const meaningsText = meaningList.length > 0 ? meaningList.join("、") : spelling;
 
   const prompt = `You are an English teacher creating example sentences for vocabulary learning.
 Create exactly 3 natural example sentences using the word/phrase "${spelling}" (Japanese meanings: ${meaningsText}).
@@ -57,10 +60,17 @@ Respond ONLY with valid JSON array, no explanation:
     const jsonEnd = content.lastIndexOf("]");
     const jsonStr = jsonStart >= 0 ? content.slice(jsonStart, jsonEnd + 1) : "[]";
 
-    const examples = JSON.parse(jsonStr) as Array<{
-      sentence: string;
-      translation: string;
-    }>;
+    const parsed = JSON.parse(jsonStr) as unknown;
+    // モデルが想定外の形を返しても画面に undefined が出ないよう、形を検証して通す
+    const examples = (Array.isArray(parsed) ? parsed : [])
+      .filter(
+        (e): e is { sentence: string; translation: string } =>
+          !!e && typeof e === "object" &&
+          typeof (e as { sentence?: unknown }).sentence === "string" &&
+          typeof (e as { translation?: unknown }).translation === "string"
+      )
+      .map((e) => ({ sentence: e.sentence.trim(), translation: e.translation.trim() }))
+      .filter((e) => e.sentence);
 
     return NextResponse.json({ examples: examples.slice(0, 3) });
   } catch (e) {

@@ -89,21 +89,36 @@ export async function pullFromCloud(userId: string): Promise<boolean> {
     let restored = false;
 
     // userStatus（所持金・累計・カスタム魚・onboardingDone などを含む単一レコード）
+    const localBeforeStatus = await db.getUserStatus();
     if (cloudData.userStatus) {
-      const localBefore = await db.getUserStatus();
       const c = cloudData.userStatus as UserStatus;
-      const merged = localBefore ? mergeUserStatus(localBefore, c) : c;
+      const merged = localBeforeStatus ? mergeUserStatus(localBeforeStatus, c) : c;
       await db.putUserStatus(merged);
       restored = true;
     }
 
+    // 削除済み単語の墓標（ローカル・クラウド両方の和集合）。
+    // これを使わないと、別端末がまだ持っている単語を push した後にこちらが pull すると、
+    // 自分で削除した単語が復活してしまう。
+    // （クラウドが新しいと mergeUserStatus はクラウドをそのまま採用するため、
+    //   ローカル側の墓標もここで明示的に足しておく）
+    const deletedWordIds = new Set<string>([
+      ...(localBeforeStatus?.deletedWordIds ?? []),
+      ...((cloudData.userStatus as UserStatus | undefined)?.deletedWordIds ?? []),
+    ]);
+
     // 各テーブル: クラウドに1件以上あるときだけ、ローカルを丸ごと置き換える
     if (Array.isArray(cloudData.words) && cloudData.words.length > 0) {
-      await db.replaceWords(cloudData.words);
+      const words = (cloudData.words as { id: string }[]).filter((w) => !deletedWordIds.has(w.id));
+      await db.replaceWords(words as Parameters<typeof db.replaceWords>[0]);
       restored = true;
     }
     if (Array.isArray(cloudData.wordStats) && cloudData.wordStats.length > 0) {
-      await db.replaceWordStats(cloudData.wordStats);
+      // 単語を除いたのに成績だけ残ると、苦手の件数が実在しない単語ぶん増えてしまう
+      const stats = (cloudData.wordStats as { wordId: string }[]).filter(
+        (s) => !deletedWordIds.has(s.wordId)
+      );
+      await db.replaceWordStats(stats as Parameters<typeof db.replaceWordStats>[0]);
       restored = true;
     }
     {
