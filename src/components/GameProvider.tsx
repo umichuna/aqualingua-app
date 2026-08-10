@@ -411,7 +411,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // 自動同期は無効。手動同期のみ（syncNow ボタンで実行）
-  // eslint-disable-next-line @typescript-eslint/no-empty-function
   const schedulePush = useCallback(() => {}, []);
 
   // ---------- 永続化ヘルパー ----------
@@ -672,7 +671,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user?.email, sharedFishTick]);
 
   // ---------- フォーカス復帰時にも放置チェック ----------
@@ -1259,7 +1257,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
       allFishMaster.filter((f) => !f.rewardOnly).length
     );
     const alreadyUnlocked = user.unlockedAchievements ?? [];
-    const claimed = user.claimedAchievementRewards ?? [];
     // 新たに条件を満たした実績（ロック→解除）
     const newAchievements = checkNewAchievements(stats, alreadyUnlocked);
 
@@ -1498,7 +1495,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
       }
     })();
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user?.email, sharedFishTick]);
 
   // 穴抜け問題を DB から読み込み
@@ -1787,7 +1783,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
       const friendly = friendlySyncErrorMessage(msg);
       pushNotice("⚠️", friendly ?? `同期に失敗しました${msg ? `（${msg}）` : ""}`);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user?.email, pushNotice]);
 
   // 💾 セーブボタン: ローカル→クラウド（push のみ）。JSON ダウンロードは Modals 側で行う
@@ -1796,7 +1791,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
     if (!email) throw new Error("not-logged-in");
     const { userStatusStale } = await pushToCloud(email);
     if (userStatusStale) throw new Error("cloud-status-stale");
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user?.email]);
 
   return (

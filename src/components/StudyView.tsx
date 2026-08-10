@@ -312,11 +312,6 @@ export default function StudyView({ onPhaseChange }: { onPhaseChange?: (inPlay: 
 
   // ============ 穴抜けクイズ開始 ============
   const startBlankQuiz = () => {
-    const blankWeakIds = new Set(
-      Object.entries(blankQuestionStats)
-        .filter(([, s]) => s.incorrectCount > 0)
-        .map(([id]) => id)
-    );
     const pool = blankQuestions
       .filter((q) => blankGenres.size === 0 || blankGenres.has(q.genre ?? "未分類"));
     if (pool.length === 0) {
@@ -1366,7 +1361,6 @@ function ListenPlay({
       navigator.mediaSession.setActionHandler("stop", null);
       navigator.mediaSession.setActionHandler("nexttrack", null);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // 現在の単語が変わったらロック画面・通知センターのメタデータを更新
