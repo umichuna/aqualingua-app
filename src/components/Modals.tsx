@@ -91,7 +91,29 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
     }
     setSavingCloud(true);
     try {
-      await game.pushNow();
+      const skipped = await game.pushNow();
+      if (skipped.length > 0) {
+        // 手元が空だったため、サーバー側がクラウドの削除を見送ったテーブルがある。
+        // 「新しい端末で復元前に保存した」等でクラウドが消える事故を防ぐための確認。
+        const LABELS: Record<string, string> = {
+          words: "単語",
+          fish: "おさかな",
+          blankQuestions: "穴抜け問題",
+        };
+        const names = skipped.map((t) => LABELS[t] ?? t).join("・");
+        setIoMsg(`☁️ 保存しました（手元が空のため、クラウドの${names}は消さずに残しました）`);
+        const ok = window.confirm(
+          `手元の「${names}」が空でしたが、クラウドにはデータが残っています。\n\n` +
+            `安全のため今回は消さずに残しました。\n` +
+            `別の端末のデータを取り戻したい場合は、キャンセルして「☁️復元」を押してください。\n\n` +
+            `クラウド側の「${names}」も本当に空にしますか？（元に戻せません）`
+        );
+        if (ok) {
+          await game.pushNow(true);
+          setIoMsg(`☁️ クラウドの${names}も空にしました`);
+        }
+        return;
+      }
       setIoMsg("☁️ クラウド保存OK");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "";

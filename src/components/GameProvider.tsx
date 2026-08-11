@@ -205,7 +205,8 @@ interface GameContextValue {
   // その他
   resetAllData: () => Promise<void>;
   syncNow: () => Promise<void>;
-  pushNow: () => Promise<void>;
+  // 手元が空のためクラウド側を消さずに残したテーブル名を返す（空配列なら通常の保存）
+  pushNow: (allowEmpty?: boolean) => Promise<string[]>;
 }
 
 const GameContext = createContext<GameContextValue | null>(null);
@@ -1780,17 +1781,18 @@ export function GameProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       console.error("[Sync] pull failed:", err);
       const msg = err instanceof Error ? err.message : "";
-      const friendly = friendlySyncErrorMessage(msg);
+      const friendly = friendlySyncErrorMessage(msg, "pull");
       pushNotice("⚠️", friendly ?? `同期に失敗しました${msg ? `（${msg}）` : ""}`);
     }
   }, [session?.user?.email, pushNotice]);
 
   // 💾 セーブボタン: ローカル→クラウド（push のみ）。JSON ダウンロードは Modals 側で行う
-  const pushNow = useCallback(async () => {
+  const pushNow = useCallback(async (allowEmpty = false) => {
     const email = session?.user?.email;
     if (!email) throw new Error("not-logged-in");
-    const { userStatusStale } = await pushToCloud(email);
+    const { userStatusStale, skippedEmptyTables } = await pushToCloud(email, allowEmpty);
     if (userStatusStale) throw new Error("cloud-status-stale");
+    return skippedEmptyTables;
   }, [session?.user?.email]);
 
   return (

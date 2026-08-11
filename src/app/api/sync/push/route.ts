@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { getPool } from "@/lib/azure-sql";
+import { getPool, resetPool } from "@/lib/azure-sql";
 import sql from "mssql";
 
 // Vercel のサーバー実行時間上限を延長（許可プランで有効。非対応でも無害）
@@ -22,6 +22,8 @@ type PushPayload = {
   fishHistory?: Row[];
   blankQuestions?: Row[];
   blankQuestionStats?: Row[];
+  // true のときだけ「手元が空ならクラウドも空にする」を許可する（既定は守る側）
+  allowEmpty?: boolean;
 };
 
 // 穴抜け問題のテーブルは後から追加したため、無ければ自動作成する
@@ -104,15 +106,31 @@ async function mergeTable(
 }
 
 // DELETE → 一括 INSERT（削除済みが残らないようにする words / fish / blank_questions 用）
+//
+// 空配列が来たときは既定でクラウドを消さない。
+// 新しい端末でログインして復元前に 💾セーブ したり、手元の読み込みに失敗した状態で
+// 保存すると、DELETE だけが走ってクラウドのデータが丸ごと消えるため。
+// （userStatus は新旧比較で守られているのに、この3テーブルだけ無防備だった）
+// 本当に全部消したい場合は、クライアントが確認を取ったうえで allowEmpty: true を送る。
+// @returns true = 消さずにスキップした
 async function replaceTable(
   executor: sql.ConnectionPool | sql.Transaction,
   userId: string,
   table: string,
   keyCol: string,
-  rows: Row[]
-) {
+  rows: Row[],
+  allowEmpty: boolean
+): Promise<boolean> {
+  if (!rows?.length && !allowEmpty) {
+    const existing = await makeRequest(executor)
+      .input("userId", userId)
+      .query(`SELECT COUNT(*) AS c FROM ${table} WHERE userId = @userId`);
+    const count = Number(existing.recordset[0]?.c ?? 0);
+    // クラウドに残っているのに手元が空 = 消していい確証がないので触らない
+    if (count > 0) return true;
+  }
   await makeRequest(executor).input("userId", userId).query(`DELETE FROM ${table} WHERE userId = @userId`);
-  if (!rows?.length) return;
+  if (!rows?.length) return false;
   await makeRequest(executor)
     .input("userId", userId)
     .input("rows", buildRowsJson(rows, keyCol))
@@ -125,6 +143,7 @@ async function replaceTable(
         lastUpdated BIGINT        '$.lastUpdated'
       ) j;
     `);
+  return false;
 }
 
 export async function POST(req: NextRequest) {
@@ -144,11 +163,20 @@ export async function POST(req: NextRequest) {
     const transaction = new sql.Transaction(pool);
     await transaction.begin();
     let userStatusStale = false;
+    const skippedEmptyTables: string[] = [];
     try {
       // words / fish / blank_questions は clear+rewrite（削除した分がクラウドに残り続けるのを防ぐ）
-      await replaceTable(transaction, userId, "words", "id", body.words ?? []);
-      await replaceTable(transaction, userId, "fish", "fishId", body.fish ?? []);
-      await replaceTable(transaction, userId, "blank_questions", "id", body.blankQuestions ?? []);
+      // 手元が空のときはクラウドを消さずスキップし、どれをスキップしたか呼び出し元に返す
+      const allowEmpty = body.allowEmpty === true;
+      if (await replaceTable(transaction, userId, "words", "id", body.words ?? [], allowEmpty)) {
+        skippedEmptyTables.push("words");
+      }
+      if (await replaceTable(transaction, userId, "fish", "fishId", body.fish ?? [], allowEmpty)) {
+        skippedEmptyTables.push("fish");
+      }
+      if (await replaceTable(transaction, userId, "blank_questions", "id", body.blankQuestions ?? [], allowEmpty)) {
+        skippedEmptyTables.push("blankQuestions");
+      }
 
       // 他テーブルは LWW 条件付き MERGE
       await mergeTable(transaction, userId, "word_stats", "wordId", body.wordStats ?? []);
@@ -185,10 +213,14 @@ export async function POST(req: NextRequest) {
       throw err;
     }
 
-    return NextResponse.json({ ok: true, userStatusStale });
+    return NextResponse.json({ ok: true, userStatusStale, skippedEmptyTables });
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[Sync] push failed:", err);
+    // 接続が壊れていた場合に次回の呼び出しで作り直せるよう、プールを捨てる。
+    // （認証失敗などはクエリ実行時に出るため、getPool の healthy 判定だけでは
+    //   取りこぼす可能性がある）
+    await resetPool();
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

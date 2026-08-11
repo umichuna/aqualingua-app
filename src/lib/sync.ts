@@ -1,11 +1,32 @@
 import * as db from "./db";
 import type { Fish, Tank, UserStatus } from "./types";
 
-// Azure SQL 無料枠（月10万vCore秒、毎月1日リセット）を使い切ったときのエラーを検知して、
-// 非エンジニアにも分かる日本語メッセージに変換する。該当しなければ null。
-export function friendlySyncErrorMessage(rawMessage: string): string | null {
+// 同期の失敗理由を、非エンジニアにも分かる日本語メッセージに変換する。該当しなければ null。
+// mode は文言の出し分けに使う（"push" = 💾セーブ / "pull" = ☁️復元）。
+export function friendlySyncErrorMessage(
+  rawMessage: string,
+  mode: "push" | "pull" = "push"
+): string | null {
+  // Azure SQL 無料枠（月10万vCore秒、毎月1日リセット）の使い切り
   if (/free\s*(offer|limit|amount)|monthly\s*(usage\s*)?limit|reached\s+its\s+.*limit/i.test(rawMessage)) {
     return "今月のデータベース無料枠を使い切りました。毎月1日に自動リセットされるまでクラウド同期は使えません（データは端末内に保存されています）";
+  }
+  // DBのユーザー名とパスワードが一致しない。
+  // Vercel の環境変数は「変更しただけ」では動いている本番に反映されない（再デプロイが必要）ため、
+  // そこまで含めて案内する
+  if (/login failed for user/i.test(rawMessage)) {
+    return "データベースのパスワードが一致しません。Vercel の環境変数 AZURE_SQL_PASSWORD を確認し、変更後は再デプロイしてください（環境変数は再デプロイしないと反映されません）";
+  }
+  // ログインの有効期限切れ（サーバー側が 401 を返した）
+  if (/unauthorized/i.test(rawMessage)) {
+    return "ログインの有効期限が切れています。設定からログインし直してから、もう一度お試しください";
+  }
+  // 通信の打ち切り（DBの起動待ちで50秒を超えた等）。
+  // push はサーバー側の書き込みが続いて成功していることがあるため「失敗」と断定しない
+  if (/timeout|timed out|aborted|abort/i.test(rawMessage)) {
+    return mode === "push"
+      ? "時間切れになりました（データベースの起動待ちの可能性）。実際には保存できている場合があるので、少し待ってから ☁️復元 で保存内容を確かめてください"
+      : "時間切れになりました（データベースの起動待ちの可能性）。少し待ってから、もう一度お試しください";
   }
   return null;
 }
@@ -165,10 +186,17 @@ export async function pullFromCloud(userId: string): Promise<boolean> {
 /**
  * ローカル（IndexedDB）の変更データをクラウド（Azure SQL）に push
  * 変更前後の差分を検出して push
+ * @param allowEmpty true のとき、手元が空でもクラウドを空にすることを許可する。
+ *   既定（false）ではサーバー側が「手元が空 かつ クラウドに行あり」の削除を拒否し、
+ *   スキップしたテーブルを skippedEmptyTables で知らせる。
  * @returns userStatusStale: true の場合、クラウド側に自分より新しい userStatus が
  *   既にあり、今回の userStatus 書き込みはスキップされた（＝先に☁️同期が必要）。
+ *   skippedEmptyTables: 手元が空だったため消さずに残したテーブル。
  */
-export async function pushToCloud(userId: string): Promise<{ userStatusStale: boolean }> {
+export async function pushToCloud(
+  userId: string,
+  allowEmpty = false
+): Promise<{ userStatusStale: boolean; skippedEmptyTables: string[] }> {
   try {
     console.log(`[Sync] Pushing to cloud for userId: ${userId}`);
 
@@ -195,6 +223,7 @@ export async function pushToCloud(userId: string): Promise<{ userStatusStale: bo
       fishHistory,
       blankQuestions,
       blankQuestionStats,
+      allowEmpty,
     };
 
     // Azure SQL コールドスタート対策: 50秒タイムアウト
@@ -211,7 +240,10 @@ export async function pushToCloud(userId: string): Promise<{ userStatusStale: bo
 
     const result = await response.json().catch(() => ({}));
     console.log(`[Sync] Push completed for userId: ${userId}`);
-    return { userStatusStale: !!result.userStatusStale };
+    return {
+      userStatusStale: !!result.userStatusStale,
+      skippedEmptyTables: Array.isArray(result.skippedEmptyTables) ? result.skippedEmptyTables : [],
+    };
   } catch (error) {
     console.error("[Sync] Push failed:", error);
     throw error;
