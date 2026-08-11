@@ -3,13 +3,19 @@ import { NextRequest, NextResponse } from "next/server";
 // Azure Translator 辞書検索で英語→日本語の複数候補を取得
 // POST { text: string, wordType?: "単語" | "述語" | "会話文" } → { translations: string[] }
 export async function POST(req: NextRequest) {
-  const { text, wordType } = (await req.json()) as {
-    text: string;
-    wordType?: "単語" | "述語" | "会話文";
-  };
+  // 壊れたJSONが来たときに素の500にせず、理由の分かる400を返す
+  let body: { text?: string; wordType?: "単語" | "述語" | "会話文" };
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "invalid JSON body" }, { status: 400 });
+  }
+  const { text, wordType } = body;
   if (!text?.trim()) {
     return NextResponse.json({ error: "text is required" }, { status: 400 });
   }
+  // 下の translateSentence が閉じ込めて使うため、絞り込み済みの値を別の const にしておく
+  const trimmedText = text.trim();
 
   const key = process.env.AZURE_TRANSLATOR_KEY;
   const region = process.env.AZURE_TRANSLATOR_REGION;
@@ -29,7 +35,7 @@ export async function POST(req: NextRequest) {
         "Ocp-Apim-Subscription-Region": region!,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify([{ text: text.trim() }]),
+      body: JSON.stringify([{ text: trimmedText }]),
     });
   }
 
@@ -62,7 +68,7 @@ export async function POST(req: NextRequest) {
         "Ocp-Apim-Subscription-Region": region,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify([{ text: text.trim() }]),
+      body: JSON.stringify([{ text: trimmedText }]),
     });
 
     if (dictRes.ok) {

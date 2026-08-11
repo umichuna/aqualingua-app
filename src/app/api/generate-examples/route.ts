@@ -3,10 +3,14 @@ import { NextRequest, NextResponse } from "next/server";
 // Gemini API で例文生成（無料枠）
 // POST { spelling: string, meanings: string[] } → { examples: { sentence: string; translation: string }[] }
 export async function POST(req: NextRequest) {
-  const { spelling, meanings } = (await req.json()) as {
-    spelling: string;
-    meanings?: string[];
-  };
+  // 壊れたJSONが来たときに素の500にせず、理由の分かる400を返す
+  let body: { spelling?: string; meanings?: string[] };
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "invalid JSON body" }, { status: 400 });
+  }
+  const { spelling, meanings } = body;
 
   if (!spelling?.trim()) {
     return NextResponse.json({ error: "spelling is required" }, { status: 400 });

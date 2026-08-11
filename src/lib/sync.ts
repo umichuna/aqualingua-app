@@ -66,6 +66,7 @@ function mergeUserStatus(local: UserStatus, cloud: UserStatus): UserStatus {
     achievedTitles: unionArr(local.achievedTitles, cloud.achievedTitles),
     customGenres: unionArr(local.customGenres, cloud.customGenres),
     deletedWordIds: unionArr(local.deletedWordIds, cloud.deletedWordIds),
+    deletedFishIds: unionArr(local.deletedFishIds, cloud.deletedFishIds),
     lastUpdated: Date.now(),
   };
 }
@@ -143,7 +144,14 @@ export async function pullFromCloud(userId: string): Promise<boolean> {
       restored = true;
     }
     {
-      const cloudFish: Fish[] = Array.isArray(cloudData.fish) ? cloudData.fish : [];
+      // 逃げた魚・にがした魚が、別端末の push 経由で復活しないように墓標で除外する
+      const deletedFishIds = new Set<string>([
+        ...(localBeforeStatus?.deletedFishIds ?? []),
+        ...((cloudData.userStatus as UserStatus | undefined)?.deletedFishIds ?? []),
+      ]);
+      const cloudFish: Fish[] = (Array.isArray(cloudData.fish) ? cloudData.fish : []).filter(
+        (f: Fish) => !deletedFishIds.has(f.fishId)
+      );
       if (cloudFish.length > 0) {
         await db.clearFishList();
         await db.syncPutFishList(cloudFish);

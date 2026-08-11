@@ -67,6 +67,20 @@ export default function ShopView() {
       flash(false, "ゴールドが足りません");
       return;
     }
+    // 受け取り先が無いのに課金してしまわないよう、回す前に空きを確認する。
+    // （以前は支払い後の命名画面で満杯が判明し、Gだけ失って詰んでいた）
+    // ボックスに空きがあればどの魚が出ても必ず受け取れる。満杯なら、出た魚の水種の
+    // 水槽に空きがある場合だけ受け取れるので、どの水槽も満杯なら回させない。
+    const boxHasRoom = (user.boxFish ?? []).length < (user.boxCapacity ?? BOX_CAPACITY_INITIAL);
+    const anyTankHasRoom = (game.tanks ?? []).some(
+      (t) =>
+        fishList.filter((f) => resolveTankId(f, game.tanks, allFishMaster) === t.id).length <
+        user.tankCapacity
+    );
+    if (!boxHasRoom && !anyTankHasRoom) {
+      flash(false, "水槽もボックスも満杯！空きを作ってからガチャを回そう");
+      return;
+    }
     const fish = game.buyGachaFish(tier);
     if (!fish) return;
     sfx.gacha();
@@ -96,7 +110,10 @@ export default function ShopView() {
     ).length;
     if (targetTankFishCount >= user.tankCapacity) {
       if ((user.boxFish ?? []).length >= boxCap) {
+        // 回す前に空きは確認済みなので通常ここには来ない（保険）。
+        // 来てしまった場合も画面から出られるよう、リビール画面（にがす が押せる）に戻す。
         flash(false, "水槽もボックスも満杯！ボックス拡張キットを買おう");
+        setGacha((g) => (g ? { ...g, phase: "reveal" } : g));
         return;
       }
       game.addFishToBox(gacha.fish, name);
@@ -350,12 +367,21 @@ export default function ShopView() {
                   placeholder={gacha.fish.type}
                   autoFocus
                 />
-                <button
-                  onClick={confirmName}
-                  className="w-full py-2.5 font-bold bg-glow text-deep active:scale-95 transition-transform"
-                >
-                  きめた！
-                </button>
+                <div className="flex gap-2">
+                  {/* 命名画面に出口が無いと、満杯などで確定できないときに詰んでしまう */}
+                  <button
+                    onClick={() => setGacha((g) => (g ? { ...g, phase: "reveal" } : g))}
+                    className="px-4 py-2.5 font-bold bg-white/10 text-dim active:scale-95 transition-transform"
+                  >
+                    もどる
+                  </button>
+                  <button
+                    onClick={confirmName}
+                    className="flex-1 py-2.5 font-bold bg-glow text-deep active:scale-95 transition-transform"
+                  >
+                    きめた！
+                  </button>
+                </div>
               </div>
             )}
           </div>

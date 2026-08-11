@@ -152,6 +152,7 @@ export interface UserStatus {
   freeMemo?: string; // フリーしごと画面の永続メモ
   customFish?: CustomFishDef[]; // 管理者が追加したカスタム魚
   deletedWordIds?: string[]; // 削除した単語ID（同期でのゾンビ復活防止）
+  deletedFishIds?: string[]; // 削除した魚ID（逃走・にがす・カスタム魚削除。同上）
   hasFreshwaterTank?: boolean; // 後方互換（廃止予定）
   saltwaterTankCount?: number; // 後方互換（廃止予定）
   freshwaterTankCount?: number; // 後方互換（廃止予定）
