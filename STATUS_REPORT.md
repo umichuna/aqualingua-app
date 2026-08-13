@@ -6,6 +6,90 @@
 
 ---
 
+## 2026-08-12（追記11）: `DROP USER` がスキーマ所有権で失敗していた（3回目の診断）
+
+追記10 の手順（`DROP USER` → `CREATE USER ... WITH PASSWORD` → `ALTER ROLE`）を
+オーナーが実行したが、**`Login failed for user 'aqualingua_user'` が再発**。
+
+### 診断: 何が起きていたか
+
+原因切り分けのため、次のクエリを実行してもらった。
+
+```sql
+SELECT name, type_desc, authentication_type_desc
+FROM sys.database_principals
+WHERE name = 'aqualingua_user';
+```
+
+結果は **`authentication_type_desc = INSTANCE`**（包含データベースユーザーなら
+`DATABASE` になるはず）。つまり **`DROP USER` / `CREATE USER` が実際には効いておらず、
+まだ古いサーバーログインに紐づいたまま**だった。
+
+Microsoft Learn で裏を取ったところ、SQL Server / Azure SQL には
+**「オブジェクトやスキーマを所有しているデータベースプリンシパルは `DROP USER` できない」**
+という制約がある。`aqualingua_user` は長期間 `db_owner` としてアプリのテーブル運用を
+してきたため、`dbo` スキーマ（またはそれに準じるスキーマ）の所有者になっていた可能性が高い。
+この場合 `DROP USER` はエラーで失敗し、後続の `CREATE USER` も実行されない。
+クエリエディタで複数行をまとめて流すと、エラーが出た行だけ埋もれて
+「完了しました」のように見えることがあり、今回はそれで見落とされたとみられる。
+
+⚠️ **追記10 では「スキーマを所有しているケースは通常出ない」と脚注扱いにしていたが、
+実際に起きた。今回はこれを主因として扱う。**
+
+### ✅ 正しい手順（1文ずつ実行し、各行の結果を確認しながら進める）
+
+**① 何を所有しているか確認する**
+```sql
+SELECT s.name AS schema_name
+FROM sys.schemas s
+WHERE s.principal_id = USER_ID('aqualingua_user');
+```
+行が返れば、それが `DROP USER` を阻んでいるスキーマ（通常は `dbo` のみ）。
+
+**② 所有権を `dbo` に移してから作り直す**（①で `dbo` 以外の名前も出た場合は、
+その名前ぶんだけ同様に繰り返す）
+```sql
+ALTER AUTHORIZATION ON SCHEMA::dbo TO dbo;
+DROP USER [aqualingua_user];
+CREATE USER [aqualingua_user] WITH PASSWORD = '<新しい長いパスワード>';
+ALTER ROLE db_owner ADD MEMBER [aqualingua_user];
+```
+
+**③ 直ったか再確認**
+```sql
+SELECT name, authentication_type_desc FROM sys.database_principals
+WHERE name = 'aqualingua_user';
+```
+`authentication_type_desc` が `DATABASE` になっていれば成功。そのあと Vercel の
+`AZURE_SQL_PASSWORD` を②の新しい値に更新し、**再デプロイ**する（追記10 の②③と同じ）。
+
+### 🔀 フォールバック: `DROP USER` がさらに別のエラーで止まる場合
+
+`aqualingua_user`（LOGINベース）はそのまま残し、**別名の新しい包含ユーザー**を作って
+アプリの接続先を切り替える。`DROP` が不要なので所有権の問題を回避できる。
+
+```sql
+CREATE USER [aqualingua_app] WITH PASSWORD = '<新しい長いパスワード>';
+ALTER ROLE db_owner ADD MEMBER [aqualingua_app];
+```
+
+Vercel の `AZURE_SQL_USER` を新しいユーザー名に、`AZURE_SQL_PASSWORD` も対応する値に
+変更してから再デプロイする。
+
+### コード変更は無し
+今回のエラーは Azure Portal のクエリエディタ上で起きるものでアプリのAPIを経由しないため、
+`friendlySyncErrorMessage` 等に追加すべき分岐は無い（`Login failed for user` の文言は
+追記8 で案内済みの「①環境変数②再デプロイ③DB側が未変更」の③に含まれる）。
+
+### 検証
+- SQL 自体はこちらでは実行できない（Azure接続情報を持たない）。1文ずつ実行して
+  各行の結果を報告してもらい、最終的に `authentication_type_desc = DATABASE` になった
+  ことと、実機で ☁️復元 / 💾セーブ が通ることをオーナーに確認してもらう
+- ドキュメントのみの変更のため `npm run build` / `npx eslint` に影響は無いが、
+  習慣として実行し変わっていないことを確認した
+
+---
+
 ## 2026-08-11（追記10）: パスワード手順の再訂正 ＋ 🔴 管理者アカウントの漏洩が判明
 
 追記8 の手順をオーナーが実施したところ **SQL がエラーで実行できなかった**。
@@ -53,7 +137,8 @@ ALTER ROLE db_owner ADD MEMBER [aqualingua_user];
 - アプリ側は接続時に `database` を明示しているため、包含ユーザーでもそのまま繋がる
   （`src/lib/azure-sql.ts` が `AZURE_SQL_DATABASE` を渡している）
 - `DROP USER` が「スキーマを所有しているため削除できない」と出た場合のみ、
-  先に `ALTER AUTHORIZATION ON SCHEMA::dbo TO [dbo];` を実行する（通常は出ない）
+  先に `ALTER AUTHORIZATION ON SCHEMA::dbo TO [dbo];` を実行する
+  ⚠️ **ここでは「通常は出ない」と書いたが、実際には出た。詳しい手順は追記11 を参照**
 - master に残る古い `LOGIN [aqualingua_user]` は、対応するDBユーザーが無くなるので
   アプリDBには入れなくなる。将来 master に繋げる手段ができたら
   `DROP LOGIN [aqualingua_user];` で消すのが望ましい（任意・後回し可）
