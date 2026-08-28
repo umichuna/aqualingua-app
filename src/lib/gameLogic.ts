@@ -83,10 +83,16 @@ export function calculateOfflineEffects(
 
   const decayMult = 1 - (buffs.decay_reduction ?? 0);
   const diseaseResist = buffs.disease_resistance ?? 0;
-  const totalAffectionDrop = Math.floor(elapsedDays * AFFECTION_DROP_PER_DAY * decayMult);
   return fishList.map((orig) => {
+    // 放置期間の起点は「口座が最後にアクティブだった時刻」と「その魚が生まれた時刻」の遅い方。
+    // これがないと、獲得したばかりの魚にも獲得前の放置日数分の減衰がかかり、即病気になってしまう。
+    const baseline = Math.max(lastActiveTime, orig.lastUpdated);
+    const fishElapsedDays = Math.floor((now - baseline) / 86400000);
+    if (fishElapsedDays < 1) return orig;
+
+    const affectionDrop = Math.floor(fishElapsedDays * AFFECTION_DROP_PER_DAY * decayMult);
     const fish: Fish = { ...orig };
-    fish.affection = Math.max(0, fish.affection - totalAffectionDrop);
+    fish.affection = Math.max(0, fish.affection - affectionDrop);
     // 好感度が0になったら病気になる（病気耐性バフがあれば確率で防ぐ）
     if (fish.affection <= 0 && !fish.isSick) {
       if (Math.random() > diseaseResist) {
