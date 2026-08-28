@@ -76,17 +76,19 @@ export function QuizPlay({
     [queueIdx]
   );
 
-  if (!q) return null;
-  const isCorrect = picked === q.answer;
-  const correctCount = firstAttempted.current.size; // 初回正解済み問題数（進捗表示用）
-
   // 回答後に完成した英文を読み上げる
+  // React のフックは早期 return より前に置く必要がある（途中で return すると
+  // フックの呼び出し数が変わり「Rendered fewer hooks than expected」で落ちるため）
   useEffect(() => {
-    if (picked) {
+    if (picked && q) {
       speak(fillSentence(q.sentence, q.answer), "en-US");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [picked]);
+
+  if (!q) return null;
+  const isCorrect = picked === q.answer;
+  const correctCount = firstAttempted.current.size; // 初回正解済み問題数（進捗表示用）
 
   const next = () => {
     if (!picked) return;
