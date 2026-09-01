@@ -109,7 +109,15 @@ export interface CustomFishDef {
   linkedAchievementId?: string; // rewardOnly: true の場合、紐付く実績ID
 }
 
-export type FishDisplaySize = "tiny" | "xsmall" | "small" | "medium" | "large" | "xlarge";
+export type FishDisplaySize =
+  | "tiny"
+  | "xsmall"
+  | "small"
+  | "medium"
+  | "large"
+  | "xlarge"
+  | "xxlarge"
+  | "xxxlarge";
 
 export interface FishPalette {
   body: string;

@@ -2,9 +2,9 @@
 // レア度・基準価格は UIプロトタイプ v0.2 の RARITY 定義（仕様書§4.2と一致）を流用
 // imageId は public/fish/{imageId}.png を参照。日本語URLのスマホ非互換を避けるため fish_NNN 形式に統一。
 
-import type { CompanionBuff, Rarity, WaterType } from "@/lib/types";
+import type { CompanionBuff, FishDisplaySize, Rarity, WaterType } from "@/lib/types";
 
-export type FishDisplaySize = "tiny" | "xsmall" | "small" | "medium" | "large" | "xlarge";
+export type { FishDisplaySize };
 
 export interface RarityInfo {
   color: string;

@@ -19,6 +19,8 @@ const SIZE_PX: Record<FishDisplaySize, number> = {
   medium: 72,
   large: 96,
   xlarge: 128,
+  xxlarge: 160,
+  xxxlarge: 200,
 };
 
 interface Pos {
