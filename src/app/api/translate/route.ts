@@ -3,14 +3,18 @@ import { NextRequest, NextResponse } from "next/server";
 // Azure Translator 辞書検索で英語→日本語の複数候補を取得
 // POST { text: string, wordType?: "単語" | "述語" | "会話文" } → { translations: string[] }
 export async function POST(req: NextRequest) {
-  // 壊れたJSONが来たときに素の500にせず、理由の分かる400を返す
-  let body: { text?: string; wordType?: "単語" | "述語" | "会話文" };
+  // 壊れたJSONが来たときに素の500にせず、理由の分かる400を返す。
+  // 文字列 "null" はパースに成功して null になるため、オブジェクトかどうかも確かめる
+  let parsed: unknown;
   try {
-    body = await req.json();
+    parsed = await req.json();
   } catch {
     return NextResponse.json({ error: "invalid JSON body" }, { status: 400 });
   }
-  const { text, wordType } = body;
+  if (typeof parsed !== "object" || parsed === null) {
+    return NextResponse.json({ error: "invalid JSON body" }, { status: 400 });
+  }
+  const { text, wordType } = parsed as { text?: string; wordType?: "単語" | "述語" | "会話文" };
   if (!text?.trim()) {
     return NextResponse.json({ error: "text is required" }, { status: 400 });
   }

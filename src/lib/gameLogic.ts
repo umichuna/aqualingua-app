@@ -99,7 +99,18 @@ export const DAY_MS = 86400000;
 // now まで進めてしまうと端数が毎回捨てられ、24時間より短い間隔で開いている限り
 // ペナルティが永久に発生しなくなる。
 export function elapsedPenaltyDays(lastActiveTime: number, now: number): number {
-  return Math.max(0, Math.floor((now - lastActiveTime) / DAY_MS));
+  // 入力を先に検査する。型は number だが、実際にはクラウド/バックアップ由来の JSON が
+  // そのまま入るため null や undefined が来うる。
+  //  - undefined / NaN → 差が NaN。NaN は `< 1` も `> 0` も false なので呼び出し側の
+  //    早期 return をすり抜け、好感度や lastActiveTime 自体を NaN に汚染する
+  //  - null → 数値演算で 0 に化けるため「エポックからの経過＝約2万日」と解釈され、
+  //    全魚の好感度が 0 になって病気・逃走する（NaN は JSON 化で null になるので、
+  //    一度 NaN で汚染されると同期を経てこの経路に入る）
+  // どちらも「経過なし」として扱うのが安全。
+  if (typeof lastActiveTime !== "number" || !Number.isFinite(lastActiveTime)) return 0;
+  const days = Math.floor((now - lastActiveTime) / DAY_MS);
+  if (!Number.isFinite(days)) return 0;
+  return Math.max(0, days);
 }
 
 export function calculateOfflineEffects(

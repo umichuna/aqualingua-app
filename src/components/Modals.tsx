@@ -91,27 +91,26 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
     }
     setSavingCloud(true);
     try {
-      const skipped = await game.pushNow();
-      if (skipped.length > 0) {
-        // 手元が空だったため、サーバー側がクラウドの削除を見送ったテーブルがある。
-        // 「新しい端末で復元前に保存した」等でクラウドが消える事故を防ぐための確認。
+      const { userStatusStale, skippedEmptyTables } = await game.pushNow();
+      // 未同期の新端末が復元前に保存しようとしたケース。サーバーがクラウドの削除を
+      // 見送っている。まず ☁️復元 が必要なので、それを最優先で案内する
+      // （この状態では userStatusStale も同時に立つため、こちらを先に判定する）
+      if (skippedEmptyTables.length > 0) {
         const LABELS: Record<string, string> = {
           words: "単語",
           fish: "おさかな",
           blankQuestions: "穴抜け問題",
         };
-        const names = skipped.map((t) => LABELS[t] ?? t).join("・");
-        setIoMsg(`☁️ 保存しました（手元が空のため、クラウドの${names}は消さずに残しました）`);
-        const ok = window.confirm(
-          `手元の「${names}」が空でしたが、クラウドにはデータが残っています。\n\n` +
-            `安全のため今回は消さずに残しました。\n` +
-            `別の端末のデータを取り戻したい場合は、キャンセルして「☁️復元」を押してください。\n\n` +
-            `クラウド側の「${names}」も本当に空にしますか？（元に戻せません）`
+        const names = skippedEmptyTables.map((t) => LABELS[t] ?? t).join("・");
+        setIoMsg(
+          `⚠️ 手元の「${names}」が空です。クラウドのデータは消さずに残しました。先に「☁️復元」を押してください`
         );
-        if (ok) {
-          await game.pushNow(true);
-          setIoMsg(`☁️ クラウドの${names}も空にしました`);
-        }
+        return;
+      }
+      if (userStatusStale) {
+        setIoMsg(
+          "⚠️ クラウドに他端末からのより新しいデータがあります。先に「☁️復元」で最新化してから保存してください（単語・魚などは保存済みです）"
+        );
         return;
       }
       setIoMsg("☁️ クラウド保存OK");
@@ -119,8 +118,6 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
       const msg = err instanceof Error ? err.message : "";
       const errorMsg = msg === "not-logged-in"
         ? "⚠️ 未ログイン（クラウド保存にはログインが必要）"
-        : msg === "cloud-status-stale"
-        ? "⚠️ クラウドに他端末からのより新しいデータがあります。先に「☁️復元」で最新化してから保存してください（単語・魚などは保存済みです）"
         : `⚠️ ${friendlySyncErrorMessage(msg) ?? `クラウド保存失敗（${msg || "原因不明"}）`}`;
       setIoMsg(errorMsg);
       console.error("[Cloud Save] push failed:", err);

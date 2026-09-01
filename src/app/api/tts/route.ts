@@ -3,14 +3,19 @@ import { NextRequest, NextResponse } from "next/server";
 // Google Cloud Text-to-Speech で text を音声MP3に変換
 // POST { text: string; lang: "en" | "ja"; rate: number } → { audioContent: string (base64) }
 export async function POST(req: NextRequest) {
-  // 壊れたJSONが来たときに素の500にせず、理由の分かる400を返す
-  let body: { text?: string; lang?: "en" | "ja"; rate?: number };
+  // 壊れたJSONが来たときに素の500にせず、理由の分かる400を返す。
+  // 文字列 "null" はパースに成功して null になるため、オブジェクトかどうかも確かめる
+  // （そうしないと直後の分割代入が try の外で TypeError になり素の500に戻ってしまう）
+  let parsed: unknown;
   try {
-    body = await req.json();
+    parsed = await req.json();
   } catch {
     return NextResponse.json({ error: "invalid JSON body" }, { status: 400 });
   }
-  const { text, lang, rate } = body;
+  if (typeof parsed !== "object" || parsed === null) {
+    return NextResponse.json({ error: "invalid JSON body" }, { status: 400 });
+  }
+  const { text, lang, rate } = parsed as { text?: string; lang?: "en" | "ja"; rate?: number };
 
   if (!text?.trim()) {
     return NextResponse.json({ error: "text is required" }, { status: 400 });

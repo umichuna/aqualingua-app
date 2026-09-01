@@ -208,8 +208,9 @@ interface GameContextValue {
   // その他
   resetAllData: () => Promise<void>;
   syncNow: () => Promise<void>;
-  // 手元が空のためクラウド側を消さずに残したテーブル名を返す（空配列なら通常の保存）
-  pushNow: (allowEmpty?: boolean) => Promise<string[]>;
+  // userStatusStale: クラウドに自分より新しい userStatus がある（先に☁️復元が必要）
+  // skippedEmptyTables: 未同期の新端末が空を送ったため消さずに残したテーブル名
+  pushNow: () => Promise<{ userStatusStale: boolean; skippedEmptyTables: string[] }>;
 }
 
 const GameContext = createContext<GameContextValue | null>(null);
@@ -510,9 +511,19 @@ export function GameProvider({ children }: { children: ReactNode }) {
   // ---------- 放置ペナルティの適用 ----------
   const applyOfflineEffects = useCallback(
     (currentUser: UserStatus, currentFish: Fish[], now: number) => {
+      // lastActiveTime が壊れている（非有限）／未来を指している場合は now に直して終わる。
+      // master は毎回 now を書き戻していたので自然に自己修復していたが、「消化した日数ぶんだけ
+      // 進める」方式にした結果その性質が失われ、一度壊れると永久に直らなくなっていた。
+      const last = currentUser.lastActiveTime;
+      if (!Number.isFinite(last) || last > now) {
+        const repaired = { ...currentUser, lastActiveTime: now };
+        setUser(repaired);
+        void putUserStatus(repaired);
+        return;
+      }
       // この関数は visibilitychange のたびに走るので、1日未満なら何もせずに抜ける。
       // （魚の一括書き込みを避ける意味もある）
-      const consumedDays = elapsedPenaltyDays(currentUser.lastActiveTime, now);
+      const consumedDays = elapsedPenaltyDays(last, now);
       if (consumedDays < 1) return;
       const updated = calculateOfflineEffects(
         currentFish,
@@ -554,12 +565,20 @@ export function GameProvider({ children }: { children: ReactNode }) {
       // 逃げた魚の墓標も同じ書き込みに含める。
       // ここで rememberDeletedFish を別途呼ぶと、その直後に currentUser 由来の
       // withActive を書き戻して墓標を消してしまうため、1回の更新にまとめる。
-      // lastActiveTime だけの更新は lastUpdated を上書きしない（LWW の整合性を守るため）
+      //
+      // lastUpdated の扱い:
+      //  - lastActiveTime だけの更新なら据え置く（LWW の整合性を守るため）
+      //  - 逃走が発生した回は墓標という実データの変更が入るので lastUpdated も進める。
+      //    据え置くと push の LWW 判定で userStatus ごとスキップされ、墓標がクラウドに
+      //    届かず、別端末経由で逃げた魚が復活してしまう
       const withActive = {
         ...currentUser,
         lastActiveTime: nextActiveTime,
         ...(runaways.length > 0
-          ? { deletedFishIds: appendCappedIds(currentUser.deletedFishIds, runaways.map((f) => f.fishId)) }
+          ? {
+              deletedFishIds: appendCappedIds(currentUser.deletedFishIds, runaways.map((f) => f.fishId)),
+              lastUpdated: Date.now(),
+            }
           : {}),
       };
       setUser(withActive);
@@ -616,11 +635,16 @@ export function GameProvider({ children }: { children: ReactNode }) {
         void putUserStatus(finalUser);
       }
 
+      // 読み込んだデータの state 反映（ハイドレーション）は無条件に行う。
+      // 以前はこれを applyOfflineEffects の副作用に任せていたが、同関数が
+      // 「経過1日未満なら何もせず return」するようになったため、既存ユーザーが
+      // 24時間以内に開くと所持金・魚が初期値のまま表示され、その状態で操作すると
+      // 初期値が保存されてデータを失う事故が起きていた。責務を分離する。
+      setUser(finalUser);
+      setFishList(fish);
+      // 放置ペナルティの適用は既存ユーザーのみ（新規は lastActiveTime = now なので不要）
       if (u) {
         applyOfflineEffects(finalUser, fish, now);
-      } else {
-        setUser(finalUser);
-        setFishList(fish);
       }
 
       // ローカルDBの読み込みが終わったらすぐに表示
@@ -1648,7 +1672,15 @@ export function GameProvider({ children }: { children: ReactNode }) {
       const fish = (u.boxFish ?? []).find((f) => f.fishId === fishId);
       if (!fish) return;
       const now = Date.now();
-      persistUser({ ...u, boxFish: (u.boxFish ?? []).filter((f) => f.fishId !== fishId) });
+      // ボックスの魚は既に fish テーブルから消えているので、ここで逃がすと完全消滅する。
+      // 墓標を残さないと、その fishId をまだ持っている別端末が push した後に pull した際に
+      // 復活してしまう（逃走・削除・カスタム魚削除には墓標があるのにここだけ抜けていた）。
+      // boxFish の更新と同じ1回の書き込みにまとめる
+      persistUser({
+        ...u,
+        boxFish: (u.boxFish ?? []).filter((f) => f.fishId !== fishId),
+        deletedFishIds: appendCappedIds(u.deletedFishIds, [fishId]),
+      });
       const entry: FishHistoryEntry = {
         entryId: crypto.randomUUID(),
         fishId: fish.fishId,
@@ -1840,12 +1872,13 @@ export function GameProvider({ children }: { children: ReactNode }) {
   }, [session?.user?.email, pushNotice]);
 
   // 💾 セーブボタン: ローカル→クラウド（push のみ）。JSON ダウンロードは Modals 側で行う
-  const pushNow = useCallback(async (allowEmpty = false) => {
+  // 結果は throw ではなく戻り値で返す。以前は userStatusStale を throw していたため、
+  // 「未同期の新端末が復元前に保存」＝ stale と skipped が同時に立つ本命ケースで
+  // skippedEmptyTables が呼び出し元に届かず、案内が出せなかった。
+  const pushNow = useCallback(async () => {
     const email = session?.user?.email;
     if (!email) throw new Error("not-logged-in");
-    const { userStatusStale, skippedEmptyTables } = await pushToCloud(email, allowEmpty);
-    if (userStatusStale) throw new Error("cloud-status-stale");
-    return skippedEmptyTables;
+    return pushToCloud(email);
   }, [session?.user?.email]);
 
   return (

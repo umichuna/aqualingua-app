@@ -25,8 +25,23 @@ export function friendlySyncErrorMessage(
     return "ログインの有効期限が切れています。設定からログインし直してから、もう一度お試しください";
   }
   // 通信の打ち切り（DBの起動待ちで50秒を超えた等）。
-  // push はサーバー側の書き込みが続いて成功していることがあるため「失敗」と断定しない
-  if (/timeout|timed out|aborted|abort/i.test(rawMessage)) {
+  // push はサーバー側の書き込みが続いて成功していることがあるため「失敗」と断定しない。
+  //
+  // ⚠️ 素の `abort` / `aborted` にマッチさせてはいけない。mssql はトランザクション内の
+  // SQL が1つでも失敗すると `TransactionError: Transaction has been aborted.` を投げ、
+  // push 全体はトランザクションなので「SQLエラー全般」がこの文言になる。これを
+  // タイムアウト扱いすると「保存できているかもしれないので ☁️復元 で確認を」と案内して
+  // しまい、実際はロールバック済みなのでユーザーが未保存のローカルデータを古いクラウド
+  // データで上書きして失う（tarn の `Error('aborted')` も同様）。
+  // タイムアウトだけを積極的に特定する:
+  //  - `Timeout: Request failed to complete in 30000ms`（tedious のクエリタイムアウト）
+  //  - `Failed to connect to ... in 30000ms`（tedious の接続タイムアウト＝コールドスタート）
+  //  - AbortSignal.timeout() の `signal timed out` / `aborted due to timeout`
+  const isTimeout =
+    /timed out|aborted due to timeout/i.test(rawMessage) ||
+    /\btimeout\b/i.test(rawMessage) ||
+    /failed to connect to .+ in \d+\s*ms/i.test(rawMessage);
+  if (isTimeout) {
     return mode === "push"
       ? "時間切れになりました（データベースの起動待ちの可能性）。実際には保存できている場合があるので、少し待ってから ☁️復元 で保存内容を確かめてください"
       : "時間切れになりました（データベースの起動待ちの可能性）。少し待ってから、もう一度お試しください";
@@ -40,13 +55,23 @@ export function friendlySyncErrorMessage(
 // 単調増加・集合系のフィールドは「大きい方/和集合」を採用し、
 // それ以外は新しい方（ローカル）を優先して安全にマージする。
 function mergeUserStatus(local: UserStatus, cloud: UserStatus): UserStatus {
+  const unionArr = <T,>(a?: T[], b?: T[]): T[] => Array.from(new Set([...(a ?? []), ...(b ?? [])]));
+  // lastActiveTime は必ず新しい方を採る。巻き戻ると、既に消化した日数ぶんの
+  // 放置ペナルティ（好感度低下・病気・逃走）が二重に適用されてしまう
+  const newerActive = Math.max(local.lastActiveTime ?? 0, cloud.lastActiveTime ?? 0);
   if (cloud.lastUpdated >= local.lastUpdated) {
-    // クラウドの方が新しい通常ケース: そのまま採用
-    return cloud;
+    // クラウドの方が新しい通常ケース: ベースはクラウドを採用する。
+    // ただし墓標を素通しで捨てると、ローカルにしか無い「削除した」記録が失われ、
+    // 別端末が後から push した単語・魚が次回の pull で復活してしまう
+    return {
+      ...cloud,
+      lastActiveTime: newerActive,
+      deletedWordIds: unionArr(local.deletedWordIds, cloud.deletedWordIds),
+      deletedFishIds: unionArr(local.deletedFishIds, cloud.deletedFishIds),
+    };
   }
   // ローカルの方が新しい: クラウド上書きで消えると困る項目を救済しつつ
   // ベースはローカル（新しい方）を採用する
-  const unionArr = <T,>(a?: T[], b?: T[]): T[] => Array.from(new Set([...(a ?? []), ...(b ?? [])]));
   // 水槽（1槽3000G）は id 基準の和集合で救済する。
   // 単純にローカル優先にすると、別端末で買った水槽が消えてしまうため。
   // 同じ id が両方にある場合は、名前・背景画像の編集を尊重してローカル側を採用する。
@@ -59,6 +84,7 @@ function mergeUserStatus(local: UserStatus, cloud: UserStatus): UserStatus {
   };
   return {
     ...local,
+    lastActiveTime: newerActive,
     tanks: mergeTanks(local.tanks, cloud.tanks),
     tankCapacity: Math.max(local.tankCapacity ?? 0, cloud.tankCapacity ?? 0),
     boxCapacity: Math.max(local.boxCapacity ?? 0, cloud.boxCapacity ?? 0),
@@ -197,16 +223,13 @@ export async function pullFromCloud(userId: string): Promise<boolean> {
 /**
  * ローカル（IndexedDB）の変更データをクラウド（Azure SQL）に push
  * 変更前後の差分を検出して push
- * @param allowEmpty true のとき、手元が空でもクラウドを空にすることを許可する。
- *   既定（false）ではサーバー側が「手元が空 かつ クラウドに行あり」の削除を拒否し、
- *   スキップしたテーブルを skippedEmptyTables で知らせる。
  * @returns userStatusStale: true の場合、クラウド側に自分より新しい userStatus が
  *   既にあり、今回の userStatus 書き込みはスキップされた（＝先に☁️同期が必要）。
- *   skippedEmptyTables: 手元が空だったため消さずに残したテーブル。
+ *   skippedEmptyTables: 未同期の新端末が空を送ったため、サーバーが消さずに残したテーブル
+ *   （＝復元前に保存しようとした状態。先に ☁️復元 が必要）。
  */
 export async function pushToCloud(
-  userId: string,
-  allowEmpty = false
+  userId: string
 ): Promise<{ userStatusStale: boolean; skippedEmptyTables: string[] }> {
   try {
     console.log(`[Sync] Pushing to cloud for userId: ${userId}`);
@@ -234,7 +257,6 @@ export async function pushToCloud(
       fishHistory,
       blankQuestions,
       blankQuestionStats,
-      allowEmpty,
     };
 
     // Azure SQL コールドスタート対策: 50秒タイムアウト

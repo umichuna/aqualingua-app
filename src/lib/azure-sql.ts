@@ -22,19 +22,35 @@ const config: sql.config = {
 let pool: sql.ConnectionPool | null = null;
 
 /**
- * 接続プールを確実に破棄する。
- * mssql の close() は内部で globalConnection を null に戻すため、
- * 次の sql.connect() が新しいプールを作り直せるようになる。
+ * 接続プールを捨てる。
+ * mssql の close() は内部で globalConnection を同期的に null に戻すため、
+ * close の完了を待たなくても次の sql.connect() は新しいプールを作る。
+ *
+ * close を await しないのは意図的。tarn の destroy() は使用中の接続が返却されるまで
+ * 待つため、await すると別リクエストのトランザクション完了まで自分の応答が止まり、
+ * Vercel の maxDuration を超えかねない。
  */
-export async function resetPool(): Promise<void> {
+export function resetPool(): void {
   const old = pool;
   pool = null;
   if (!old) return;
-  try {
-    await old.close();
-  } catch {
+  void old.close().catch(() => {
     // 既に壊れているプールの close は失敗し得るが、捨てるのが目的なので無視する
-  }
+  });
+}
+
+/**
+ * 接続そのものが壊れている系のエラーか。
+ * SQL の内容エラー（値が長すぎる・PK重複など）やクエリタイムアウトでプールを捨てると、
+ * 温まったばかりの接続を毎回張り直すことになり、「DBを起こす回数を減らす」方針に反する。
+ * プールを作り直す価値があるのは、認証やソケットが壊れているときだけ。
+ */
+export function isConnectionError(err: unknown): boolean {
+  const code = (err as { code?: unknown } | null)?.code;
+  return (
+    typeof code === "string" &&
+    ["ELOGIN", "ESOCKET", "ECONNCLOSED", "ENOTOPEN", "ECONNRESET"].includes(code)
+  );
 }
 
 export async function getPool(): Promise<sql.ConnectionPool> {
@@ -46,7 +62,7 @@ export async function getPool(): Promise<sql.ConnectionPool> {
   //   使い続けてしまい、再デプロイするまで同期が復旧しない）
   if (pool && pool.connected && pool.healthy) return pool;
   // 壊れたプールが残っているなら捨ててから作り直す
-  await resetPool();
+  resetPool();
   try {
     pool = await sql.connect(config);
     return pool;
