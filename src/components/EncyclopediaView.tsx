@@ -10,6 +10,7 @@ import { useMemo, useState } from "react";
 import { ACHIEVEMENTS } from "@/data/achievements";
 import { FISH_MASTER, RARITY_INFO, RARITY_STARS, type FishDisplaySize } from "@/data/fishMaster";
 import { MAX_FISH_LEVEL, todayString } from "@/lib/gameLogic";
+import { compressFishImageToBase64 } from "@/lib/image";
 import type { CustomFishDef, FishHistoryEntry, FishOverride, Rarity, WaterType } from "@/lib/types";
 import { useGame } from "./GameProvider";
 import PixelFish from "./PixelFish";
@@ -85,26 +86,12 @@ function Chip({
   );
 }
 
+// 魚の画像は透過を保ったまま上限バイト数まで圧縮する。
+// 以前は 256px の PNG にするだけでサイズの上限が無く、写真を登録すると1匹で
+// 100KB を超えた。カスタム魚は何匹でも増やせるため、合計 2.4MB まで膨らんで
+// クラウド保存が「データが大きすぎる」で失敗する原因になっていた。
 function resizeToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        const MAX = 256;
-        const scale = Math.min(MAX / img.width, MAX / img.height, 1);
-        const canvas = document.createElement("canvas");
-        canvas.width = Math.round(img.width * scale);
-        canvas.height = Math.round(img.height * scale);
-        canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL("image/png"));
-      };
-      img.onerror = reject;
-      img.src = e.target!.result as string;
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
+  return compressFishImageToBase64(file);
 }
 
 function formatDate(dateStr: string): string {
