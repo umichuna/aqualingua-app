@@ -84,7 +84,13 @@ import {
 } from "@/lib/db";
 import { sfx } from "@/lib/sound";
 import { friendlySyncErrorMessage, pullFromCloud, pushToCloud } from "@/lib/sync";
-import { base64ByteLength, MAX_BACKGROUND_BASE64_BYTES, shrinkIfTooLarge } from "@/lib/image";
+import {
+  base64ByteLength,
+  MAX_BACKGROUND_BASE64_BYTES,
+  MAX_FISH_IMAGE_BASE64_BYTES,
+  shrinkFishImageIfTooLarge,
+  shrinkIfTooLarge,
+} from "@/lib/image";
 import { deleteSharedCustomFish, fetchSharedCustomFish, postSharedCustomFish } from "@/lib/customFish";
 import { deleteSharedFishOverride, fetchSharedFishOverrides, postSharedFishOverride } from "@/lib/fishOverrides";
 import type {
@@ -754,36 +760,53 @@ export function GameProvider({ children }: { children: ReactNode }) {
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, [ready, applyOfflineEffects]);
 
-  // ---------- 大きすぎる背景画像の自動圧縮 ----------
-  // 背景画像は base64 のまま userStatus に入り、クラウド保存では userStatus ごと
-  // 1リクエストで送られる。以前の縮小処理が横幅しか見ていなかったため、
-  // 縦長の画像が巨大なまま保存され（実例: 1枚 2.41MB）、送信データが Vercel の上限
-  // 4.5MB を超えて保存が 413 で失敗していた。既存の画像も起動時に一度だけ縮める。
-  const shrunkBackgroundsRef = useRef(false);
+  // ---------- 大きすぎる画像の自動圧縮 ----------
+  // 背景画像もカスタム魚の画像も base64 のまま userStatus に入り、クラウド保存では
+  // userStatus ごと1リクエストで送られる。Vercel のリクエスト上限は 4.5MB のため、
+  // 画像が増えると保存が 413（データが大きすぎる）で丸ごと失敗する。
+  // 実例: 背景画像1枚 2.41MB / 別アカウントではカスタム魚の合計 2.4MB。
+  // 既存の画像も起動時に一度だけ縮めて、開き直すだけで復旧できるようにする。
+  const shrunkImagesRef = useRef(false);
   useEffect(() => {
-    if (!ready || shrunkBackgroundsRef.current) return;
-    shrunkBackgroundsRef.current = true;
+    if (!ready || shrunkImagesRef.current) return;
+    shrunkImagesRef.current = true;
     void (async () => {
-      const tanks = userRef.current.tanks ?? [];
-      const oversized = tanks.filter(
-        (t) => base64ByteLength(t.backgroundImageBase64 ?? "") > MAX_BACKGROUND_BASE64_BYTES
-      );
-      if (oversized.length === 0) return;
-      const shrunk = new Map<string, string>();
-      for (const t of oversized) {
+      const u0 = userRef.current;
+
+      // 背景画像
+      const shrunkTanks = new Map<string, string>();
+      for (const t of u0.tanks ?? []) {
+        if (base64ByteLength(t.backgroundImageBase64 ?? "") <= MAX_BACKGROUND_BASE64_BYTES) continue;
         const next = await shrinkIfTooLarge(t.backgroundImageBase64);
-        if (next) shrunk.set(t.id, next);
+        if (next) shrunkTanks.set(t.id, next);
       }
-      if (shrunk.size === 0) return;
+
+      // カスタム魚の画像（透過を保ったまま圧縮する）
+      const shrunkFish = new Map<string, string>();
+      for (const f of u0.customFish ?? []) {
+        if (base64ByteLength(f.imageUrl ?? "") <= MAX_FISH_IMAGE_BASE64_BYTES) continue;
+        const next = await shrinkFishImageIfTooLarge(f.imageUrl);
+        if (next) shrunkFish.set(f.type, next);
+      }
+
+      if (shrunkTanks.size === 0 && shrunkFish.size === 0) return;
+
       // 圧縮結果を1回の更新でまとめて保存する
       const u = userRef.current;
       persistUser({
         ...u,
         tanks: (u.tanks ?? []).map((t) =>
-          shrunk.has(t.id) ? { ...t, backgroundImageBase64: shrunk.get(t.id)! } : t
+          shrunkTanks.has(t.id) ? { ...t, backgroundImageBase64: shrunkTanks.get(t.id)! } : t
+        ),
+        customFish: (u.customFish ?? []).map((f) =>
+          shrunkFish.has(f.type) ? { ...f, imageUrl: shrunkFish.get(f.type)! } : f
         ),
       });
-      pushNotice("🗜️", `水槽の背景画像${shrunk.size}枚を軽くしました（クラウド保存のため）`);
+
+      const parts: string[] = [];
+      if (shrunkTanks.size > 0) parts.push(`背景画像${shrunkTanks.size}枚`);
+      if (shrunkFish.size > 0) parts.push(`カスタム魚${shrunkFish.size}匹`);
+      pushNotice("🗜️", `${parts.join("と")}の画像を軽くしました（クラウド保存のため）`);
     })();
   }, [ready, persistUser, pushNotice]);
 
