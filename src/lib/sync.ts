@@ -119,9 +119,12 @@ async function readError(response: Response): Promise<string> {
  *   発生していた場合に、その変更が黙って消し飛ぶ事故を防ぐため。
  * 安全策: クラウドにデータがある種類だけ置き換える。
  *   → まだ一度もセーブしていない（クラウドが空の）状態で手元を全消ししないため。
- * @returns 何か1つでも復元したら true。クラウドが完全に空なら false。
+ * @returns restored: 何か1つでも復元したら true。クラウドが完全に空なら false。
+ *   brokenRows: 壊れていて復元できなかった行数（0でなければ利用者に知らせる）。
  */
-export async function pullFromCloud(userId: string): Promise<boolean> {
+export async function pullFromCloud(
+  userId: string
+): Promise<{ restored: boolean; brokenRows: number }> {
   try {
     console.log(`[Sync] Restoring from cloud for userId: ${userId}`);
 
@@ -212,8 +215,11 @@ export async function pullFromCloud(userId: string): Promise<boolean> {
       restored = true;
     }
 
-    console.log(`[Sync] Restore completed for userId: ${userId} (restored=${restored})`);
-    return restored;
+    const brokenRows = typeof cloudData.brokenRows === "number" ? cloudData.brokenRows : 0;
+    console.log(
+      `[Sync] Restore completed for userId: ${userId} (restored=${restored}, brokenRows=${brokenRows})`
+    );
+    return { restored, brokenRows };
   } catch (error) {
     console.error("[Sync] Restore failed:", error);
     throw error;
@@ -229,7 +235,8 @@ export async function pullFromCloud(userId: string): Promise<boolean> {
  *   （＝復元前に保存しようとした状態。先に ☁️復元 が必要）。
  */
 export async function pushToCloud(
-  userId: string
+  userId: string,
+  allowEmpty = false
 ): Promise<{ userStatusStale: boolean; skippedEmptyTables: string[] }> {
   try {
     console.log(`[Sync] Pushing to cloud for userId: ${userId}`);
@@ -257,6 +264,9 @@ export async function pushToCloud(
       fishHistory,
       blankQuestions,
       blankQuestionStats,
+      // 手元が空のテーブルでクラウドを上書きしてよいか。既定 false（サーバーが消さずに
+      // スキップして知らせる）。ユーザーが「意図的に空にした」と了承した再送でだけ true。
+      allowEmpty,
     };
 
     // Azure SQL コールドスタート対策: 50秒タイムアウト

@@ -22,6 +22,9 @@ type PushPayload = {
   fishHistory?: Row[];
   blankQuestions?: Row[];
   blankQuestionStats?: Row[];
+  // 「手元が空なのは意図的だ」とユーザーが確認したうえでの再送。
+  // これが無い限り、クラウドに行が残っているテーブルを空で上書きすることはしない。
+  allowEmpty?: boolean;
 };
 
 // 穴抜け問題のテーブルは後から追加したため、無ければ自動作成する
@@ -105,16 +108,23 @@ async function mergeTable(
 
 // DELETE → 一括 INSERT（削除済みが残らないようにする words / fish / blank_questions 用）
 //
-// 「未同期の新端末」からの空配列だけは、クラウドを消さずにスキップする。
+// 手元が空なのにクラウドには行が残っている場合、黙って消さずにスキップする。
 // 新しい端末でログインして復元前に 💾セーブ すると、DELETE だけが走ってクラウドの
 // データが丸ごと消えるため（userStatus は新旧比較で守られているのに、この3テーブルだけ
 // 無防備だった）。
 //
-// 判定に「配列が空かどうか」を使ってはいけない。以前その方式にしていたが、
+// 以前は「未同期の新端末（userStatus.lastUpdated === 0）」に限ってスキップしていたが、
+// 新端末でも設定変更やクイズを1回でも行うと lastUpdated が入って判定から外れるため、
+// 「新端末でログイン → 1回遊ぶ → 復元せずに保存」で警告なくクラウドが消えていた。
+//
+// かといって「空なら常にスキップ」も誤りで、以前その方式で
 //  - 魚を全部ボックスへ移すと fish が空になり、スキップの結果クラウドに古い行が残って
 //    復元時に同じ魚が水槽とボックスに二重化する
 //  - 端末Aで全部削除しても、スキップにより他端末へ削除が伝播しない
-// という別の不具合を生んでいた。同期済みの端末は「空」も正当な状態として扱う。
+// という別の不具合を生んでいた。
+//
+// そこで「意図的に空にしたのか」をユーザー本人に確認する。既定では消さずにスキップして
+// 呼び出し元に知らせ、了承を得た再送（allowEmpty）でのみ実際に空へ置き換える。
 // @returns true = 消さずにスキップした
 async function replaceTable(
   executor: sql.ConnectionPool | sql.Transaction,
@@ -122,14 +132,14 @@ async function replaceTable(
   table: string,
   keyCol: string,
   rows: Row[],
-  isUnsyncedDevice: boolean
+  allowEmpty: boolean
 ): Promise<boolean> {
-  if (!rows?.length && isUnsyncedDevice) {
+  if (!rows?.length && !allowEmpty) {
     // 存在確認だけなので COUNT(*) でパーティション全体を走査・ロックしない
     const existing = await makeRequest(executor)
       .input("userId", userId)
       .query(`SELECT TOP 1 1 AS c FROM ${table} WHERE userId = @userId`);
-    // クラウドに残っているのに未同期端末が空を送ってきた = 復元前の保存とみなして触らない
+    // クラウドに残っているのに手元が空 = 復元前の保存の可能性があるので触らない
     if (existing.recordset.length > 0) return true;
   }
   await makeRequest(executor).input("userId", userId).query(`DELETE FROM ${table} WHERE userId = @userId`);
@@ -169,18 +179,16 @@ export async function POST(req: NextRequest) {
     const skippedEmptyTables: string[] = [];
     try {
       // words / fish / blank_questions は clear+rewrite（削除した分がクラウドに残り続けるのを防ぐ）
-      // 未同期の新端末（userStatus.lastUpdated === 0）が空を送ってきたときだけ、
-      // 「復元前の保存」とみなしてクラウドを消さずスキップし、呼び出し元に知らせる。
-      // 一度でも同期・操作した端末は lastUpdated が入るので、通常どおり置き換える。
-      const isUnsyncedDevice =
-        !body.userStatus || (typeof body.userStatus.lastUpdated === "number" ? body.userStatus.lastUpdated : 0) === 0;
-      if (await replaceTable(transaction, userId, "words", "id", body.words ?? [], isUnsyncedDevice)) {
+      // 手元が空でクラウドに行が残っている場合は消さずスキップし、呼び出し元に知らせる。
+      // ユーザーが「意図的に空にした」と確認した再送（allowEmpty）でのみ実際に置き換える。
+      const allowEmpty = body.allowEmpty === true;
+      if (await replaceTable(transaction, userId, "words", "id", body.words ?? [], allowEmpty)) {
         skippedEmptyTables.push("words");
       }
-      if (await replaceTable(transaction, userId, "fish", "fishId", body.fish ?? [], isUnsyncedDevice)) {
+      if (await replaceTable(transaction, userId, "fish", "fishId", body.fish ?? [], allowEmpty)) {
         skippedEmptyTables.push("fish");
       }
-      if (await replaceTable(transaction, userId, "blank_questions", "id", body.blankQuestions ?? [], isUnsyncedDevice)) {
+      if (await replaceTable(transaction, userId, "blank_questions", "id", body.blankQuestions ?? [], allowEmpty)) {
         skippedEmptyTables.push("blankQuestions");
       }
 

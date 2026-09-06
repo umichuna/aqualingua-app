@@ -210,7 +210,7 @@ interface GameContextValue {
   syncNow: () => Promise<void>;
   // userStatusStale: クラウドに自分より新しい userStatus がある（先に☁️復元が必要）
   // skippedEmptyTables: 未同期の新端末が空を送ったため消さずに残したテーブル名
-  pushNow: () => Promise<{ userStatusStale: boolean; skippedEmptyTables: string[] }>;
+  pushNow: (allowEmpty?: boolean) => Promise<{ userStatusStale: boolean; skippedEmptyTables: string[] }>;
 }
 
 const GameContext = createContext<GameContextValue | null>(null);
@@ -1829,10 +1829,15 @@ export function GameProvider({ children }: { children: ReactNode }) {
     const email = session?.user?.email;
     if (!email) { pushNotice("⚠️", "ログインしていないため同期できません"); return; }
     try {
-      const restored = await pullFromCloud(email);
+      const { restored, brokenRows } = await pullFromCloud(email);
       if (!restored) {
         pushNotice("⚠️", "クラウドにデータがありません（先にセーブしてください）");
         return;
+      }
+      // 壊れていて復元できなかった行があれば黙って捨てずに知らせる
+      // （残りは復元済み。1件の破損で全部戻せなくなるのを避けるための仕様）
+      if (brokenRows > 0) {
+        pushNotice("⚠️", `${brokenRows}件のデータが壊れていて復元できませんでした（他は復元済み）`);
       }
       // pull 後に全 state を IndexedDB から再読み込み
       const [updatedFish, updatedUser, updatedWords, updatedStats, updatedEncy, updatedHistory, updatedSessions, updatedLedger, updatedBlanks, updatedBlankStats] = await Promise.all([
@@ -1875,10 +1880,12 @@ export function GameProvider({ children }: { children: ReactNode }) {
   // 結果は throw ではなく戻り値で返す。以前は userStatusStale を throw していたため、
   // 「未同期の新端末が復元前に保存」＝ stale と skipped が同時に立つ本命ケースで
   // skippedEmptyTables が呼び出し元に届かず、案内が出せなかった。
-  const pushNow = useCallback(async () => {
+  // allowEmpty: 手元が空のテーブルでクラウドを上書きしてよいか。既定 false。
+  // サーバーが消さずにスキップして知らせてくるので、ユーザーの了承を得てから true で再送する。
+  const pushNow = useCallback(async (allowEmpty = false) => {
     const email = session?.user?.email;
     if (!email) throw new Error("not-logged-in");
-    return pushToCloud(email);
+    return pushToCloud(email, allowEmpty);
   }, [session?.user?.email]);
 
   return (

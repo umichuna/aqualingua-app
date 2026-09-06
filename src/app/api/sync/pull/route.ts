@@ -71,17 +71,37 @@ export async function GET() {
   const recordsets = batched.recordsets as { data: string; lastUpdated: number }[][];
 
   const result: Record<string, unknown[] | unknown> = {};
-  const parseRows = (rows: { data: string; lastUpdated: number }[] = []) =>
-    rows.map((r) => ({ ...JSON.parse(r.data), lastUpdated: r.lastUpdated }));
+  // 壊れた行が1件でもあると JSON.parse が投げて復元そのものが失敗し、
+  // 「1件のせいで全部戻せない」状態になる。壊れた行だけ捨てて残りは必ず復元する。
+  let brokenRows = 0;
+  const parseRows = (tableName: string, rows: { data: string; lastUpdated: number }[] = []) =>
+    rows.flatMap((r) => {
+      try {
+        return [{ ...JSON.parse(r.data), lastUpdated: r.lastUpdated }];
+      } catch {
+        brokenRows++;
+        console.error(`[Sync] pull: ${tableName} の壊れた行を1件スキップしました`);
+        return [];
+      }
+    });
 
   tables.forEach((t, i) => {
-    result[t.resultKey] = parseRows(recordsets[i]);
+    result[t.resultKey] = parseRows(t.name, recordsets[i]);
   });
 
   const sr = recordsets[tables.length]?.[0];
-  result.userStatus = sr
-    ? { ...JSON.parse(sr.data), lastUpdated: sr.lastUpdated }
-    : null;
+  // userStatus が壊れている場合も、他のデータの復元は続行させる（null 扱い）
+  let userStatus: unknown = null;
+  if (sr) {
+    try {
+      userStatus = { ...JSON.parse(sr.data), lastUpdated: sr.lastUpdated };
+    } catch {
+      brokenRows++;
+      console.error("[Sync] pull: user_status が壊れているためスキップしました");
+    }
+  }
+  result.userStatus = userStatus;
+  result.brokenRows = brokenRows;
 
     return NextResponse.json(result);
   } catch (err) {
