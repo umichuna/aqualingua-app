@@ -19,6 +19,8 @@ const SIZE_PX: Record<FishDisplaySize, number> = {
   medium: 72,
   large: 96,
   xlarge: 128,
+  xxlarge: 160,
+  xxxlarge: 200,
 };
 
 interface Pos {
@@ -120,13 +122,23 @@ export default function AquariumView() {
     return { xMin: halfX, xMax: 100 - halfX, yPad: halfY };
   };
 
+  // 縦の移動範囲。底生魚は下限が定数（65%）なのに上限は魚のサイズで狭まるため、
+  // 大きい魚（特大・最大）× 背の低い水槽では yMin > yMax と反転してしまう。
+  // 反転すると下端が水槽の外へはみ出したまま固定されるので、yMin 側もクランプして
+  // 「収まる範囲の一番下」に寄せる。
+  const verticalRange = (f: Fish, isBottom: boolean, lo: number, hi: number) => {
+    const { yPad } = boundsFor(f);
+    const yMax = Math.min(hi, 100 - yPad);
+    const yMin = Math.min(Math.max(lo, yPad), yMax);
+    return { yMin, yMax };
+  };
+
   // 底生魚は y 65〜80%、その他は 15〜60% の範囲で泳ぐ
   const defaultPos = (f: Fish, i: number): Pos => {
     const master = allFishMaster.find((m) => m.type === f.type);
     const isBottom = master?.layer === "bottom";
-    const { xMin, xMax, yPad } = boundsFor(f);
-    const yMin = Math.max(isBottom ? 65 : 15, yPad);
-    const yMax = Math.min(isBottom ? 80 : 60, 100 - yPad);
+    const { xMin, xMax } = boundsFor(f);
+    const { yMin, yMax } = verticalRange(f, isBottom, isBottom ? 65 : 15, isBottom ? 80 : 60);
     return {
       x: Math.max(xMin, Math.min(xMax, 15 + ((i * 25) % 65))),
       y: yMin + ((i % 3) * Math.max(0, yMax - yMin)) / 2,
@@ -143,9 +155,8 @@ export default function AquariumView() {
           const master = allFishMaster.find((m) => m.type === f.type);
           const isBottom = master?.layer === "bottom";
           // 魚のサイズぶん内側に寄せた移動範囲（端で見切れないように）
-          const { xMin, xMax, yPad } = boundsFor(f);
-          const yMin = Math.max(isBottom ? 65 : 8, yPad);
-          const yMax = Math.min(isBottom ? 82 : 62, 100 - yPad);
+          const { xMin, xMax } = boundsFor(f);
+          const { yMin, yMax } = verticalRange(f, isBottom, isBottom ? 65 : 8, isBottom ? 82 : 62);
           const pos = next[f.fishId] ?? defaultPos(f, i);
           if (eatingIds.has(f.fishId) && baitRef.current) {
             const tx = baitRef.current.x;

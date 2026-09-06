@@ -27,7 +27,9 @@ import {
   BOX_CAPACITY_INITIAL,
   boxExpansionPrice,
   calculateOfflineEffects,
+  DAY_MS,
   DEFAULT_WEAK_CLEAR_STREAK,
+  elapsedPenaltyDays,
   type GachaTier,
   GACHA_TIERS,
   jobLevelFor,
@@ -160,7 +162,8 @@ interface GameContextValue {
   removeFish: (fishId: string) => void;
   buyGachaFish: (tier: GachaTier) => FishMaster | null;
   addFishToTank: (master: FishMaster, name: string) => void;
-  addFishToBox: (master: FishMaster, name: string) => void;
+  // false = ボックスが満杯で入れられなかった
+  addFishToBox: (master: FishMaster, name: string) => boolean;
   moveBoxFishToTank: (fishId: string, targetTankId: string) => boolean;
   releaseBoxFish: (fishId: string) => void;
 
@@ -205,10 +208,23 @@ interface GameContextValue {
   // その他
   resetAllData: () => Promise<void>;
   syncNow: () => Promise<void>;
-  pushNow: () => Promise<void>;
+  // userStatusStale: クラウドに自分より新しい userStatus がある（先に☁️復元が必要）
+  // skippedEmptyTables: 未同期の新端末が空を送ったため消さずに残したテーブル名
+  pushNow: () => Promise<{ userStatusStale: boolean; skippedEmptyTables: string[] }>;
 }
 
 const GameContext = createContext<GameContextValue | null>(null);
+
+// 削除済み単語ID・魚IDの墓標の保持上限。
+// userStatus は1件のJSONとしてクラウドへ送るため、無制限に増やすと同期が重くなる。
+// 古いものから捨てて上限までに収める（古い削除は他端末にも既に伝わっている想定）。
+const MAX_DELETED_IDS = 1000;
+
+// 墓標リストへの追記（古いものから捨てて上限に収める）
+function appendCappedIds(existing: string[] | undefined, ids: string[]): string[] {
+  const merged = [...(existing ?? []), ...ids];
+  return merged.length > MAX_DELETED_IDS ? merged.slice(merged.length - MAX_DELETED_IDS) : merged;
+}
 
 export function useGame(): GameContextValue {
   const ctx = useContext(GameContext);
@@ -411,7 +427,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // 自動同期は無効。手動同期のみ（syncNow ボタンで実行）
-  // eslint-disable-next-line @typescript-eslint/no-empty-function
   const schedulePush = useCallback(() => {}, []);
 
   // ---------- 永続化ヘルパー ----------
@@ -427,6 +442,19 @@ export function GameProvider({ children }: { children: ReactNode }) {
     void putFishList(next);
     schedulePush();
   }, [schedulePush]);
+
+  // 魚の墓標。単語と同じく、別端末がまだ持っている魚を push した後にこちらが pull すると、
+  // 逃げた魚・にがした魚が復活してしまうため、削除IDを覚えておいて pull 時に除外する。
+  // 魚IDは crypto.randomUUID で毎回新規発行され再利用されないので、単語と違い「忘れる」処理は不要。
+  // ボックスへの移動は userStatus.boxFish に移るだけで削除ではないため対象外。
+  const rememberDeletedFish = useCallback(
+    (fishIds: string[]) => {
+      if (fishIds.length === 0) return;
+      const u = userRef.current;
+      persistUser({ ...u, deletedFishIds: appendCappedIds(u.deletedFishIds, fishIds) });
+    },
+    [persistUser]
+  );
 
   // ---------- 通帳への記帳 ----------
   const recordLedger = useCallback(
@@ -483,6 +511,20 @@ export function GameProvider({ children }: { children: ReactNode }) {
   // ---------- 放置ペナルティの適用 ----------
   const applyOfflineEffects = useCallback(
     (currentUser: UserStatus, currentFish: Fish[], now: number) => {
+      // lastActiveTime が壊れている（非有限）／未来を指している場合は now に直して終わる。
+      // master は毎回 now を書き戻していたので自然に自己修復していたが、「消化した日数ぶんだけ
+      // 進める」方式にした結果その性質が失われ、一度壊れると永久に直らなくなっていた。
+      const last = currentUser.lastActiveTime;
+      if (!Number.isFinite(last) || last > now) {
+        const repaired = { ...currentUser, lastActiveTime: now };
+        setUser(repaired);
+        void putUserStatus(repaired);
+        return;
+      }
+      // この関数は visibilitychange のたびに走るので、1日未満なら何もせずに抜ける。
+      // （魚の一括書き込みを避ける意味もある）
+      const consumedDays = elapsedPenaltyDays(last, now);
+      if (consumedDays < 1) return;
       const updated = calculateOfflineEffects(
         currentFish,
         currentUser.lastActiveTime,
@@ -517,8 +559,28 @@ export function GameProvider({ children }: { children: ReactNode }) {
         pushNotice("🤒", `${f.name} が病気になってしまった！おくすりをあげよう`);
       }
       persistFishList(stayed);
-      // lastActiveTime だけの更新は lastUpdated を上書きしない（LWW の整合性を守るため）
-      const withActive = { ...currentUser, lastActiveTime: now };
+      // lastActiveTime は「消化した日数ぶん」だけ進める。now まで進めると1日未満の端数が
+      // 毎回捨てられ、24時間より短い間隔で開いている限りペナルティが永久に発生しなくなる。
+      const nextActiveTime = currentUser.lastActiveTime + consumedDays * DAY_MS;
+      // 逃げた魚の墓標も同じ書き込みに含める。
+      // ここで rememberDeletedFish を別途呼ぶと、その直後に currentUser 由来の
+      // withActive を書き戻して墓標を消してしまうため、1回の更新にまとめる。
+      //
+      // lastUpdated の扱い:
+      //  - lastActiveTime だけの更新なら据え置く（LWW の整合性を守るため）
+      //  - 逃走が発生した回は墓標という実データの変更が入るので lastUpdated も進める。
+      //    据え置くと push の LWW 判定で userStatus ごとスキップされ、墓標がクラウドに
+      //    届かず、別端末経由で逃げた魚が復活してしまう
+      const withActive = {
+        ...currentUser,
+        lastActiveTime: nextActiveTime,
+        ...(runaways.length > 0
+          ? {
+              deletedFishIds: appendCappedIds(currentUser.deletedFishIds, runaways.map((f) => f.fishId)),
+              lastUpdated: Date.now(),
+            }
+          : {}),
+      };
       setUser(withActive);
       void putUserStatus(withActive);
     },
@@ -573,11 +635,16 @@ export function GameProvider({ children }: { children: ReactNode }) {
         void putUserStatus(finalUser);
       }
 
+      // 読み込んだデータの state 反映（ハイドレーション）は無条件に行う。
+      // 以前はこれを applyOfflineEffects の副作用に任せていたが、同関数が
+      // 「経過1日未満なら何もせず return」するようになったため、既存ユーザーが
+      // 24時間以内に開くと所持金・魚が初期値のまま表示され、その状態で操作すると
+      // 初期値が保存されてデータを失う事故が起きていた。責務を分離する。
+      setUser(finalUser);
+      setFishList(fish);
+      // 放置ペナルティの適用は既存ユーザーのみ（新規は lastActiveTime = now なので不要）
       if (u) {
         applyOfflineEffects(finalUser, fish, now);
-      } else {
-        setUser(finalUser);
-        setFishList(fish);
       }
 
       // ローカルDBの読み込みが終わったらすぐに表示
@@ -672,7 +739,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user?.email, sharedFishTick]);
 
   // ---------- フォーカス復帰時にも放置チェック ----------
@@ -849,7 +915,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const removeFish = useCallback((fishId: string) => {
     setFishList((list) => list.filter((f) => f.fishId !== fishId));
     void dbDeleteFish(fishId);
-  }, []);
+    rememberDeletedFish([fishId]);
+  }, [rememberDeletedFish]);
 
   const moveTankFishToBox = useCallback(
     (fishId: string) => {
@@ -903,8 +970,14 @@ export function GameProvider({ children }: { children: ReactNode }) {
     [schedulePush]
   );
 
+  // ボックスの上限はここで一元的に守る。
+  // 以前は呼び出し側（ShopView のガチャ）だけが上限を見ていたため、実績報酬は上限を
+  // 無視して入り、ガチャだけ弾かれるという非対称になっていた。
+  // @returns false = ボックスが満杯で入れられなかった
   const addFishToBox = useCallback(
-    (master: FishMaster, name: string) => {
+    (master: FishMaster, name: string): boolean => {
+      const u = userRef.current;
+      if ((u.boxFish ?? []).length >= (u.boxCapacity ?? BOX_CAPACITY_INITIAL)) return false;
       const now = Date.now();
       const fish: Fish = {
         fishId: crypto.randomUUID(),
@@ -937,6 +1010,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
           : [...enc, { fishType: master.type, discoveredAt: now, lastUpdated: now }]
       );
       pushNotice("📦", `${name} はボックスに入った！水槽に空きができたら移せるよ`);
+      return true;
     },
     [pushNotice]
   );
@@ -1039,17 +1113,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
   );
 
   // ---------- 単語 ----------
-  // 削除済み単語の墓標。同期時に「別端末がまだ持っている単語の復活」を防ぐために使う。
-  // userStatus は1件のJSONとしてクラウドへ送るため、無制限に増やすと同期が重くなる。
-  // 古いものから捨てて上限までに収める（古い削除は他端末にも既に伝わっている想定）。
-  const MAX_DELETED_WORD_IDS = 1000;
   const appendDeletedWordIds = useCallback(
-    (u: UserStatus, ids: string[]): string[] => {
-      const merged = [...(u.deletedWordIds ?? []), ...ids];
-      return merged.length > MAX_DELETED_WORD_IDS
-        ? merged.slice(merged.length - MAX_DELETED_WORD_IDS)
-        : merged;
-    },
+    (u: UserStatus, ids: string[]): string[] => appendCappedIds(u.deletedWordIds, ids),
     []
   );
 
@@ -1259,7 +1324,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
       allFishMaster.filter((f) => !f.rewardOnly).length
     );
     const alreadyUnlocked = user.unlockedAchievements ?? [];
-    const claimed = user.claimedAchievementRewards ?? [];
     // 新たに条件を満たした実績（ロック→解除）
     const newAchievements = checkNewAchievements(stats, alreadyUnlocked);
 
@@ -1330,8 +1394,12 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
       if (tankCount < userRef.current.tankCapacity) {
         addFishToTank(rewardFish, name);
-      } else {
-        addFishToBox(rewardFish, name);
+      } else if (!addFishToBox(rewardFish, name)) {
+        // 水槽もボックスも満杯。ここで受取済みにすると報酬を永久に失うので、
+        // 実行中フラグを戻して「まだ受け取っていない」状態のままにする
+        claimingAchievementsRef.current.delete(achievementId);
+        pushNotice("📦", "水槽もボックスも満杯です。空きを作ってからもう一度GETしてね");
+        return;
       }
 
       setUser((u) => {
@@ -1400,9 +1468,16 @@ export function GameProvider({ children }: { children: ReactNode }) {
       // 全員共有から削除
       setSharedCustomFish((prev) => prev.filter((f) => f.type !== fishType));
       const u = userRef.current;
-      persistUser({ ...u, customFish: (u.customFish ?? []).filter((f) => f.type !== fishType) });
       // 水槽内にいる同 type の魚も削除
       const toRemove = fishRef.current.filter((f) => f.type === fishType);
+      // customFish の更新と魚の墓標は1回の書き込みにまとめる（片方が上書きされないように）
+      persistUser({
+        ...u,
+        customFish: (u.customFish ?? []).filter((f) => f.type !== fishType),
+        ...(toRemove.length > 0
+          ? { deletedFishIds: appendCappedIds(u.deletedFishIds, toRemove.map((f) => f.fishId)) }
+          : {}),
+      });
       for (const f of toRemove) void dbDeleteFish(f.fishId);
       if (toRemove.length > 0) setFishList((list) => list.filter((f) => f.type !== fishType));
       // 共有テーブルからも削除（全ユーザーから消える）
@@ -1498,7 +1573,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
       }
     })();
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user?.email, sharedFishTick]);
 
   // 穴抜け問題を DB から読み込み
@@ -1598,7 +1672,15 @@ export function GameProvider({ children }: { children: ReactNode }) {
       const fish = (u.boxFish ?? []).find((f) => f.fishId === fishId);
       if (!fish) return;
       const now = Date.now();
-      persistUser({ ...u, boxFish: (u.boxFish ?? []).filter((f) => f.fishId !== fishId) });
+      // ボックスの魚は既に fish テーブルから消えているので、ここで逃がすと完全消滅する。
+      // 墓標を残さないと、その fishId をまだ持っている別端末が push した後に pull した際に
+      // 復活してしまう（逃走・削除・カスタム魚削除には墓標があるのにここだけ抜けていた）。
+      // boxFish の更新と同じ1回の書き込みにまとめる
+      persistUser({
+        ...u,
+        boxFish: (u.boxFish ?? []).filter((f) => f.fishId !== fishId),
+        deletedFishIds: appendCappedIds(u.deletedFishIds, [fishId]),
+      });
       const entry: FishHistoryEntry = {
         entryId: crypto.randomUUID(),
         fishId: fish.fishId,
@@ -1784,19 +1866,19 @@ export function GameProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       console.error("[Sync] pull failed:", err);
       const msg = err instanceof Error ? err.message : "";
-      const friendly = friendlySyncErrorMessage(msg);
+      const friendly = friendlySyncErrorMessage(msg, "pull");
       pushNotice("⚠️", friendly ?? `同期に失敗しました${msg ? `（${msg}）` : ""}`);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user?.email, pushNotice]);
 
   // 💾 セーブボタン: ローカル→クラウド（push のみ）。JSON ダウンロードは Modals 側で行う
+  // 結果は throw ではなく戻り値で返す。以前は userStatusStale を throw していたため、
+  // 「未同期の新端末が復元前に保存」＝ stale と skipped が同時に立つ本命ケースで
+  // skippedEmptyTables が呼び出し元に届かず、案内が出せなかった。
   const pushNow = useCallback(async () => {
     const email = session?.user?.email;
     if (!email) throw new Error("not-logged-in");
-    const { userStatusStale } = await pushToCloud(email);
-    if (userStatusStale) throw new Error("cloud-status-stale");
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    return pushToCloud(email);
   }, [session?.user?.email]);
 
   return (

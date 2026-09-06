@@ -1,11 +1,50 @@
 import * as db from "./db";
 import type { Fish, Tank, UserStatus } from "./types";
 
-// Azure SQL 無料枠（月10万vCore秒、毎月1日リセット）を使い切ったときのエラーを検知して、
-// 非エンジニアにも分かる日本語メッセージに変換する。該当しなければ null。
-export function friendlySyncErrorMessage(rawMessage: string): string | null {
+// 同期の失敗理由を、非エンジニアにも分かる日本語メッセージに変換する。該当しなければ null。
+// mode は文言の出し分けに使う（"push" = 💾セーブ / "pull" = ☁️復元）。
+export function friendlySyncErrorMessage(
+  rawMessage: string,
+  mode: "push" | "pull" = "push"
+): string | null {
+  // Azure SQL 無料枠（月10万vCore秒、毎月1日リセット）の使い切り
   if (/free\s*(offer|limit|amount)|monthly\s*(usage\s*)?limit|reached\s+its\s+.*limit/i.test(rawMessage)) {
     return "今月のデータベース無料枠を使い切りました。毎月1日に自動リセットされるまでクラウド同期は使えません（データは端末内に保存されています）";
+  }
+  // DBのユーザー名とパスワードが一致しない。
+  // 注意点が2つあり、どちらも実際に踏んだのでメッセージに含める:
+  //  1. Vercel の環境変数は「変更しただけ」では動いている本番に反映されない（再デプロイが必要）
+  //  2. アプリの接続ユーザーは master のサーバーログインとして作られていたため、
+  //     アプリDB側で ALTER USER ... WITH PASSWORD しても変更できない
+  //     （包含データベースユーザーに作り替えるのが Portal だけで完結して楽。手順は STATUS_REPORT）
+  if (/login failed for user/i.test(rawMessage)) {
+    return "データベースのパスワードが一致しません。①Vercel の環境変数 AZURE_SQL_PASSWORD を確認 ②変更したら必ず再デプロイ（再デプロイしないと反映されません）③それでも直らない場合はDB側のパスワードが変わっていない可能性があります（手順は STATUS_REPORT.md を参照）";
+  }
+  // ログインの有効期限切れ（サーバー側が 401 を返した）
+  if (/unauthorized/i.test(rawMessage)) {
+    return "ログインの有効期限が切れています。設定からログインし直してから、もう一度お試しください";
+  }
+  // 通信の打ち切り（DBの起動待ちで50秒を超えた等）。
+  // push はサーバー側の書き込みが続いて成功していることがあるため「失敗」と断定しない。
+  //
+  // ⚠️ 素の `abort` / `aborted` にマッチさせてはいけない。mssql はトランザクション内の
+  // SQL が1つでも失敗すると `TransactionError: Transaction has been aborted.` を投げ、
+  // push 全体はトランザクションなので「SQLエラー全般」がこの文言になる。これを
+  // タイムアウト扱いすると「保存できているかもしれないので ☁️復元 で確認を」と案内して
+  // しまい、実際はロールバック済みなのでユーザーが未保存のローカルデータを古いクラウド
+  // データで上書きして失う（tarn の `Error('aborted')` も同様）。
+  // タイムアウトだけを積極的に特定する:
+  //  - `Timeout: Request failed to complete in 30000ms`（tedious のクエリタイムアウト）
+  //  - `Failed to connect to ... in 30000ms`（tedious の接続タイムアウト＝コールドスタート）
+  //  - AbortSignal.timeout() の `signal timed out` / `aborted due to timeout`
+  const isTimeout =
+    /timed out|aborted due to timeout/i.test(rawMessage) ||
+    /\btimeout\b/i.test(rawMessage) ||
+    /failed to connect to .+ in \d+\s*ms/i.test(rawMessage);
+  if (isTimeout) {
+    return mode === "push"
+      ? "時間切れになりました（データベースの起動待ちの可能性）。実際には保存できている場合があるので、少し待ってから ☁️復元 で保存内容を確かめてください"
+      : "時間切れになりました（データベースの起動待ちの可能性）。少し待ってから、もう一度お試しください";
   }
   return null;
 }
@@ -16,13 +55,23 @@ export function friendlySyncErrorMessage(rawMessage: string): string | null {
 // 単調増加・集合系のフィールドは「大きい方/和集合」を採用し、
 // それ以外は新しい方（ローカル）を優先して安全にマージする。
 function mergeUserStatus(local: UserStatus, cloud: UserStatus): UserStatus {
+  const unionArr = <T,>(a?: T[], b?: T[]): T[] => Array.from(new Set([...(a ?? []), ...(b ?? [])]));
+  // lastActiveTime は必ず新しい方を採る。巻き戻ると、既に消化した日数ぶんの
+  // 放置ペナルティ（好感度低下・病気・逃走）が二重に適用されてしまう
+  const newerActive = Math.max(local.lastActiveTime ?? 0, cloud.lastActiveTime ?? 0);
   if (cloud.lastUpdated >= local.lastUpdated) {
-    // クラウドの方が新しい通常ケース: そのまま採用
-    return cloud;
+    // クラウドの方が新しい通常ケース: ベースはクラウドを採用する。
+    // ただし墓標を素通しで捨てると、ローカルにしか無い「削除した」記録が失われ、
+    // 別端末が後から push した単語・魚が次回の pull で復活してしまう
+    return {
+      ...cloud,
+      lastActiveTime: newerActive,
+      deletedWordIds: unionArr(local.deletedWordIds, cloud.deletedWordIds),
+      deletedFishIds: unionArr(local.deletedFishIds, cloud.deletedFishIds),
+    };
   }
   // ローカルの方が新しい: クラウド上書きで消えると困る項目を救済しつつ
   // ベースはローカル（新しい方）を採用する
-  const unionArr = <T,>(a?: T[], b?: T[]): T[] => Array.from(new Set([...(a ?? []), ...(b ?? [])]));
   // 水槽（1槽3000G）は id 基準の和集合で救済する。
   // 単純にローカル優先にすると、別端末で買った水槽が消えてしまうため。
   // 同じ id が両方にある場合は、名前・背景画像の編集を尊重してローカル側を採用する。
@@ -35,6 +84,7 @@ function mergeUserStatus(local: UserStatus, cloud: UserStatus): UserStatus {
   };
   return {
     ...local,
+    lastActiveTime: newerActive,
     tanks: mergeTanks(local.tanks, cloud.tanks),
     tankCapacity: Math.max(local.tankCapacity ?? 0, cloud.tankCapacity ?? 0),
     boxCapacity: Math.max(local.boxCapacity ?? 0, cloud.boxCapacity ?? 0),
@@ -45,6 +95,7 @@ function mergeUserStatus(local: UserStatus, cloud: UserStatus): UserStatus {
     achievedTitles: unionArr(local.achievedTitles, cloud.achievedTitles),
     customGenres: unionArr(local.customGenres, cloud.customGenres),
     deletedWordIds: unionArr(local.deletedWordIds, cloud.deletedWordIds),
+    deletedFishIds: unionArr(local.deletedFishIds, cloud.deletedFishIds),
     lastUpdated: Date.now(),
   };
 }
@@ -122,7 +173,14 @@ export async function pullFromCloud(userId: string): Promise<boolean> {
       restored = true;
     }
     {
-      const cloudFish: Fish[] = Array.isArray(cloudData.fish) ? cloudData.fish : [];
+      // 逃げた魚・にがした魚が、別端末の push 経由で復活しないように墓標で除外する
+      const deletedFishIds = new Set<string>([
+        ...(localBeforeStatus?.deletedFishIds ?? []),
+        ...((cloudData.userStatus as UserStatus | undefined)?.deletedFishIds ?? []),
+      ]);
+      const cloudFish: Fish[] = (Array.isArray(cloudData.fish) ? cloudData.fish : []).filter(
+        (f: Fish) => !deletedFishIds.has(f.fishId)
+      );
       if (cloudFish.length > 0) {
         await db.clearFishList();
         await db.syncPutFishList(cloudFish);
@@ -167,8 +225,12 @@ export async function pullFromCloud(userId: string): Promise<boolean> {
  * 変更前後の差分を検出して push
  * @returns userStatusStale: true の場合、クラウド側に自分より新しい userStatus が
  *   既にあり、今回の userStatus 書き込みはスキップされた（＝先に☁️同期が必要）。
+ *   skippedEmptyTables: 未同期の新端末が空を送ったため、サーバーが消さずに残したテーブル
+ *   （＝復元前に保存しようとした状態。先に ☁️復元 が必要）。
  */
-export async function pushToCloud(userId: string): Promise<{ userStatusStale: boolean }> {
+export async function pushToCloud(
+  userId: string
+): Promise<{ userStatusStale: boolean; skippedEmptyTables: string[] }> {
   try {
     console.log(`[Sync] Pushing to cloud for userId: ${userId}`);
 
@@ -211,7 +273,10 @@ export async function pushToCloud(userId: string): Promise<{ userStatusStale: bo
 
     const result = await response.json().catch(() => ({}));
     console.log(`[Sync] Push completed for userId: ${userId}`);
-    return { userStatusStale: !!result.userStatusStale };
+    return {
+      userStatusStale: !!result.userStatusStale,
+      skippedEmptyTables: Array.isArray(result.skippedEmptyTables) ? result.skippedEmptyTables : [],
+    };
   } catch (error) {
     console.error("[Sync] Push failed:", error);
     throw error;

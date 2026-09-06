@@ -22,6 +22,8 @@ const DISPLAY_SIZES: { value: FishDisplaySize; label: string }[] = [
   { value: "medium", label: "中（72px）" },
   { value: "large", label: "大（96px）" },
   { value: "xlarge", label: "超大（128px）" },
+  { value: "xxlarge", label: "特大（160px）" },
+  { value: "xxxlarge", label: "最大（200px）" },
 ];
 
 const PALETTE_PRESETS: { label: string; palette: CustomFishDef["palette"] }[] = [

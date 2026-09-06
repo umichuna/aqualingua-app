@@ -3,11 +3,19 @@ import { NextRequest, NextResponse } from "next/server";
 // Google Cloud Text-to-Speech で text を音声MP3に変換
 // POST { text: string; lang: "en" | "ja"; rate: number } → { audioContent: string (base64) }
 export async function POST(req: NextRequest) {
-  const { text, lang, rate } = (await req.json()) as {
-    text: string;
-    lang: "en" | "ja";
-    rate: number;
-  };
+  // 壊れたJSONが来たときに素の500にせず、理由の分かる400を返す。
+  // 文字列 "null" はパースに成功して null になるため、オブジェクトかどうかも確かめる
+  // （そうしないと直後の分割代入が try の外で TypeError になり素の500に戻ってしまう）
+  let parsed: unknown;
+  try {
+    parsed = await req.json();
+  } catch {
+    return NextResponse.json({ error: "invalid JSON body" }, { status: 400 });
+  }
+  if (typeof parsed !== "object" || parsed === null) {
+    return NextResponse.json({ error: "invalid JSON body" }, { status: 400 });
+  }
+  const { text, lang, rate } = parsed as { text?: string; lang?: "en" | "ja"; rate?: number };
 
   if (!text?.trim()) {
     return NextResponse.json({ error: "text is required" }, { status: 400 });
@@ -17,8 +25,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "lang must be 'en' or 'ja'" }, { status: 400 });
   }
 
-  if (typeof rate !== "number") {
-    return NextResponse.json({ error: "rate must be a number" }, { status: 400 });
+  // NaN / Infinity は typeof が "number" なので素通りしてしまい、
+  // clamp してもそのまま残って Google へ null として送られてしまう
+  if (typeof rate !== "number" || !Number.isFinite(rate)) {
+    return NextResponse.json({ error: "rate must be a finite number" }, { status: 400 });
   }
 
   const apiKey = process.env.GOOGLE_TTS_API_KEY;

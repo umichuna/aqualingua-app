@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { getPool } from "@/lib/azure-sql";
+import { getPool, isConnectionError, resetPool } from "@/lib/azure-sql";
 import type sql from "mssql";
 
 // Vercel のサーバー実行時間上限を延長（許可プランで有効。非対応でも無害）
@@ -87,6 +87,10 @@ export async function GET() {
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[Sync] pull failed:", err);
+    // 接続が壊れている系のエラーのときだけプールを捨てる。
+    // 全エラーで捨てると、コールドスタート由来のクエリタイムアウトのたびに
+    // 温まったばかりの接続を張り直すことになり、DBを起こす回数が増えてしまう。
+    if (isConnectionError(err)) resetPool();
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

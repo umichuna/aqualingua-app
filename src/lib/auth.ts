@@ -22,6 +22,11 @@ export const authOptions: NextAuthOptions = {
               INSERT INTO users (id, email) VALUES (@id, @email)
           `);
       } catch (e) {
+        // ここで false を返すと、DB障害時にログイン自体ができなくなる。
+        // このアプリはローカル（IndexedDB）が正でオフラインでも学習できる設計なので、
+        // users テーブルへの登録失敗は致命的ではなく、意図的に握りつぶして続行する。
+        // ただしこの結果「ログインは通るのに同期だけ失敗する」状態になり原因が見えにくいため、
+        // 同期側は friendlySyncErrorMessage で理由を日本語表示する（sync.ts 参照）。
         console.error("signIn DB error", e);
       }
       return true;

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { getPool } from "@/lib/azure-sql";
+import { getPool, isConnectionError, resetPool } from "@/lib/azure-sql";
 import sql from "mssql";
 
 // Vercel のサーバー実行時間上限を延長（許可プランで有効。非対応でも無害）
@@ -104,15 +104,36 @@ async function mergeTable(
 }
 
 // DELETE → 一括 INSERT（削除済みが残らないようにする words / fish / blank_questions 用）
+//
+// 「未同期の新端末」からの空配列だけは、クラウドを消さずにスキップする。
+// 新しい端末でログインして復元前に 💾セーブ すると、DELETE だけが走ってクラウドの
+// データが丸ごと消えるため（userStatus は新旧比較で守られているのに、この3テーブルだけ
+// 無防備だった）。
+//
+// 判定に「配列が空かどうか」を使ってはいけない。以前その方式にしていたが、
+//  - 魚を全部ボックスへ移すと fish が空になり、スキップの結果クラウドに古い行が残って
+//    復元時に同じ魚が水槽とボックスに二重化する
+//  - 端末Aで全部削除しても、スキップにより他端末へ削除が伝播しない
+// という別の不具合を生んでいた。同期済みの端末は「空」も正当な状態として扱う。
+// @returns true = 消さずにスキップした
 async function replaceTable(
   executor: sql.ConnectionPool | sql.Transaction,
   userId: string,
   table: string,
   keyCol: string,
-  rows: Row[]
-) {
+  rows: Row[],
+  isUnsyncedDevice: boolean
+): Promise<boolean> {
+  if (!rows?.length && isUnsyncedDevice) {
+    // 存在確認だけなので COUNT(*) でパーティション全体を走査・ロックしない
+    const existing = await makeRequest(executor)
+      .input("userId", userId)
+      .query(`SELECT TOP 1 1 AS c FROM ${table} WHERE userId = @userId`);
+    // クラウドに残っているのに未同期端末が空を送ってきた = 復元前の保存とみなして触らない
+    if (existing.recordset.length > 0) return true;
+  }
   await makeRequest(executor).input("userId", userId).query(`DELETE FROM ${table} WHERE userId = @userId`);
-  if (!rows?.length) return;
+  if (!rows?.length) return false;
   await makeRequest(executor)
     .input("userId", userId)
     .input("rows", buildRowsJson(rows, keyCol))
@@ -125,6 +146,7 @@ async function replaceTable(
         lastUpdated BIGINT        '$.lastUpdated'
       ) j;
     `);
+  return false;
 }
 
 export async function POST(req: NextRequest) {
@@ -144,11 +166,23 @@ export async function POST(req: NextRequest) {
     const transaction = new sql.Transaction(pool);
     await transaction.begin();
     let userStatusStale = false;
+    const skippedEmptyTables: string[] = [];
     try {
       // words / fish / blank_questions は clear+rewrite（削除した分がクラウドに残り続けるのを防ぐ）
-      await replaceTable(transaction, userId, "words", "id", body.words ?? []);
-      await replaceTable(transaction, userId, "fish", "fishId", body.fish ?? []);
-      await replaceTable(transaction, userId, "blank_questions", "id", body.blankQuestions ?? []);
+      // 未同期の新端末（userStatus.lastUpdated === 0）が空を送ってきたときだけ、
+      // 「復元前の保存」とみなしてクラウドを消さずスキップし、呼び出し元に知らせる。
+      // 一度でも同期・操作した端末は lastUpdated が入るので、通常どおり置き換える。
+      const isUnsyncedDevice =
+        !body.userStatus || (typeof body.userStatus.lastUpdated === "number" ? body.userStatus.lastUpdated : 0) === 0;
+      if (await replaceTable(transaction, userId, "words", "id", body.words ?? [], isUnsyncedDevice)) {
+        skippedEmptyTables.push("words");
+      }
+      if (await replaceTable(transaction, userId, "fish", "fishId", body.fish ?? [], isUnsyncedDevice)) {
+        skippedEmptyTables.push("fish");
+      }
+      if (await replaceTable(transaction, userId, "blank_questions", "id", body.blankQuestions ?? [], isUnsyncedDevice)) {
+        skippedEmptyTables.push("blankQuestions");
+      }
 
       // 他テーブルは LWW 条件付き MERGE
       await mergeTable(transaction, userId, "word_stats", "wordId", body.wordStats ?? []);
@@ -181,14 +215,24 @@ export async function POST(req: NextRequest) {
 
       await transaction.commit();
     } catch (err) {
-      await transaction.rollback();
+      // rollback 自体が失敗しても元のエラーを握りつぶさない
+      // （プールが壊れているときは rollback も失敗し、原因が追えなくなる）
+      try {
+        await transaction.rollback();
+      } catch (rollbackErr) {
+        console.error("[Sync] rollback failed:", rollbackErr);
+      }
       throw err;
     }
 
-    return NextResponse.json({ ok: true, userStatusStale });
+    return NextResponse.json({ ok: true, userStatusStale, skippedEmptyTables });
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[Sync] push failed:", err);
+    // 接続が壊れている系のエラーのときだけプールを捨てる。
+    // 全エラーで捨てると、コールドスタート由来のクエリタイムアウトのたびに
+    // 温まったばかりの接続を張り直すことになり、DBを起こす回数が増えてしまう。
+    if (isConnectionError(err)) resetPool();
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

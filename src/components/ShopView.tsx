@@ -17,6 +17,7 @@ import {
   tankExpansionPrice,
   type GachaTier,
 } from "@/lib/gameLogic";
+import type { WaterType } from "@/lib/types";
 import { sfx } from "@/lib/sound";
 import { useGame } from "./GameProvider";
 import PixelFish from "./PixelFish";
@@ -44,10 +45,6 @@ function rarityRateText(weights: Record<string, number>): string {
 export default function ShopView() {
   const game = useGame();
   const { user, fishList, allFishMaster, currentTankId } = game;
-  // ガチャ・水槽満杯判定は「今見ている水槽」の匹数だけを対象にする（口座全体ではない）
-  const currentTankFishCount = fishList.filter(
-    (f) => resolveTankId(f, game.tanks, allFishMaster) === currentTankId
-  ).length;
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [gacha, setGacha] = useState<{
     phase: GachaPhase;
@@ -61,10 +58,43 @@ export default function ShopView() {
     setTimeout(() => setMsg(null), 1800);
   };
 
+  // 魚が実際に入る水槽のID。受け取り処理と事前チェックで必ず同じ判定を使うため関数に切り出す。
+  // （以前は事前チェックが「どれか1つでも空きのある水槽」を見ていたのに対し、受け取りは
+  //   「その魚の水種の水槽1つ」しか宛先にしなかったため、回せるのに受け取れずGだけ失う
+  //   ケースがあった。海水槽が満杯で淡水槽に空きがあるときの海水ガチャなど）
+  const targetTankIdFor = (waterType: WaterType): string => {
+    const currentTank = game.tanks?.find((t) => t.id === currentTankId);
+    return currentTank && currentTank.type === waterType
+      ? currentTankId
+      : (game.tanks?.find((t) => t.type === waterType)?.id ?? currentTankId);
+  };
+
+  const boxHasRoom = () =>
+    (user.boxFish ?? []).length < (user.boxCapacity ?? BOX_CAPACITY_INITIAL);
+
+  // その水種の魚を受け取れるか（宛先の水槽に空きがある、またはボックスに空きがある）
+  const canAcceptFishOf = (waterType: WaterType): boolean => {
+    const targetTankId = targetTankIdFor(waterType);
+    const count = fishList.filter(
+      (f) => resolveTankId(f, game.tanks, allFishMaster) === targetTankId
+    ).length;
+    return count < user.tankCapacity || boxHasRoom();
+  };
+
   const rollGachaFlow = (tier: GachaTier) => {
     const info = GACHA_TIERS[tier];
     if (user.gold < info.price) {
       flash(false, "ゴールドが足りません");
+      return;
+    }
+    // 受け取り先が無いのに課金してしまわないよう、回す前に空きを確認する。
+    // 水種が固定のティア（海水/淡水ガチャ）はその水種だけ見ればよい。
+    // 混在ティアはどの水種が出るか事前に分からないので、両方受け取れるときだけ回させる。
+    const canAccept = info.waterType
+      ? canAcceptFishOf(info.waterType)
+      : canAcceptFishOf("saltwater") && canAcceptFishOf("freshwater");
+    if (!canAccept) {
+      flash(false, "水槽もボックスも満杯！空きを作ってからガチャを回そう");
       return;
     }
     const fish = game.buyGachaFish(tier);
@@ -79,33 +109,42 @@ export default function ShopView() {
     }, 1800);
   };
 
+  // 命名画面から抜けるときは必ず入力欄をクリアする。
+  // （クリアが確定パスにしか無かったため「名前を入力 → もどる → にがす」で次のガチャに
+  //   前の名前が残っていた）
+  const closeGacha = () => {
+    setGacha(null);
+    setNameInput("");
+  };
+  const backToReveal = () => {
+    setGacha((g) => (g ? { ...g, phase: "reveal" } : g));
+    setNameInput("");
+  };
+
   const confirmName = () => {
     if (!gacha) return;
     const name = nameInput.trim() || gacha.fish.type;
-    const boxCap = user.boxCapacity ?? BOX_CAPACITY_INITIAL;
-    // 獲得した魚の水の種類が今見ている水槽と違う場合、実際に入るのは別の水槽
-    // （同じ水の種類の水槽）なので、満杯判定もその水槽の匹数で行う
+    // 宛先は事前チェックと同じ関数で決める（判定の食い違いを防ぐ）
     const fishWaterType = gacha.fish.waterType ?? "saltwater";
-    const currentTank = game.tanks?.find((t) => t.id === currentTankId);
-    const targetTankId =
-      currentTank && currentTank.type === fishWaterType
-        ? currentTankId
-        : (game.tanks?.find((t) => t.type === fishWaterType)?.id ?? currentTankId);
+    const targetTankId = targetTankIdFor(fishWaterType);
     const targetTankFishCount = fishList.filter(
       (f) => resolveTankId(f, game.tanks, allFishMaster) === targetTankId
     ).length;
     if (targetTankFishCount >= user.tankCapacity) {
-      if ((user.boxFish ?? []).length >= boxCap) {
+      // addFishToBox は上限超過で false を返す。戻り値を無視すると、支払い済みの魚が
+      // 何の通知もなく消えるため必ず確認する
+      if (!game.addFishToBox(gacha.fish, name)) {
+        // 回す前に空きは確認済みなので通常ここには来ない（保険）。
+        // 来てしまった場合も画面から出られるよう、リビール画面（にがす が押せる）に戻す。
         flash(false, "水槽もボックスも満杯！ボックス拡張キットを買おう");
+        backToReveal();
         return;
       }
-      game.addFishToBox(gacha.fish, name);
     } else {
       game.addFishToTank(gacha.fish, name);
       game.pushNotice("🐠", `${name} が水槽になかまいりした！`);
     }
-    setGacha(null);
-    setNameInput("");
+    closeGacha();
   };
 
   const buy = (item: (typeof SHOP_ITEMS)[number]) => {
@@ -316,7 +355,7 @@ export default function ShopView() {
                     onClick={() => {
                       if (!gacha) return;
                       game.pushNotice("🌊", `${gacha.fish.type} を海へ帰した`);
-                      setGacha(null);
+                      closeGacha();
                     }}
                     className="flex-1 py-2.5 font-bold bg-white/10 text-dim active:scale-95 transition-transform"
                   >
@@ -326,7 +365,17 @@ export default function ShopView() {
                     onClick={() => setGacha((g) => (g ? { ...g, phase: "naming" } : g))}
                     className="flex-1 py-2.5 font-bold bg-sand text-deep active:scale-95 transition-transform"
                   >
-                    {currentTankFishCount >= user.tankCapacity ? "📦 ボックスへ" : "なかまにする！"}
+                    {/* ラベルは実際の宛先で出し分ける（表示中の水槽ではなく、
+                        その魚の水種の水槽を見る。淡水槽を表示中に海水魚が出た場合など、
+                        ラベルと実際の行き先が食い違わないように） */}
+                    {(() => {
+                      const wt = gacha.fish.waterType ?? "saltwater";
+                      const tid = targetTankIdFor(wt);
+                      const cnt = fishList.filter(
+                        (f) => resolveTankId(f, game.tanks, allFishMaster) === tid
+                      ).length;
+                      return cnt >= user.tankCapacity ? "📦 ボックスへ" : "なかまにする！";
+                    })()}
                   </button>
                 </div>
               </div>
@@ -350,12 +399,21 @@ export default function ShopView() {
                   placeholder={gacha.fish.type}
                   autoFocus
                 />
-                <button
-                  onClick={confirmName}
-                  className="w-full py-2.5 font-bold bg-glow text-deep active:scale-95 transition-transform"
-                >
-                  きめた！
-                </button>
+                <div className="flex gap-2">
+                  {/* 命名画面に出口が無いと、満杯などで確定できないときに詰んでしまう */}
+                  <button
+                    onClick={backToReveal}
+                    className="px-4 py-2.5 font-bold bg-white/10 text-dim active:scale-95 transition-transform"
+                  >
+                    もどる
+                  </button>
+                  <button
+                    onClick={confirmName}
+                    className="flex-1 py-2.5 font-bold bg-glow text-deep active:scale-95 transition-transform"
+                  >
+                    きめた！
+                  </button>
+                </div>
               </div>
             )}
           </div>

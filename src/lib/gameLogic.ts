@@ -92,14 +92,34 @@ export function titlesFor(totalStudyCount: number): string[] {
 // status が 'running_away' になった魚は呼び出し側で逃走演出→DELETEする。
 export const AFFECTION_DROP_PER_DAY = 3;
 
+export const DAY_MS = 86400000;
+
+// 放置ペナルティを何日ぶん適用するか。端数（1日未満）は切り捨てる。
+// 呼び出し側は「消化した日数ぶんだけ lastActiveTime を進める」こと。
+// now まで進めてしまうと端数が毎回捨てられ、24時間より短い間隔で開いている限り
+// ペナルティが永久に発生しなくなる。
+export function elapsedPenaltyDays(lastActiveTime: number, now: number): number {
+  // 入力を先に検査する。型は number だが、実際にはクラウド/バックアップ由来の JSON が
+  // そのまま入るため null や undefined が来うる。
+  //  - undefined / NaN → 差が NaN。NaN は `< 1` も `> 0` も false なので呼び出し側の
+  //    早期 return をすり抜け、好感度や lastActiveTime 自体を NaN に汚染する
+  //  - null → 数値演算で 0 に化けるため「エポックからの経過＝約2万日」と解釈され、
+  //    全魚の好感度が 0 になって病気・逃走する（NaN は JSON 化で null になるので、
+  //    一度 NaN で汚染されると同期を経てこの経路に入る）
+  // どちらも「経過なし」として扱うのが安全。
+  if (typeof lastActiveTime !== "number" || !Number.isFinite(lastActiveTime)) return 0;
+  const days = Math.floor((now - lastActiveTime) / DAY_MS);
+  if (!Number.isFinite(days)) return 0;
+  return Math.max(0, days);
+}
+
 export function calculateOfflineEffects(
   fishList: Fish[],
   lastActiveTime: number,
   now: number,
   buffs: { decay_reduction?: number; disease_resistance?: number } = {}
 ): Fish[] {
-  const elapsedSeconds = (now - lastActiveTime) / 1000;
-  const elapsedDays = Math.floor(elapsedSeconds / 86400);
+  const elapsedDays = elapsedPenaltyDays(lastActiveTime, now);
 
   if (elapsedDays < 1) return fishList;
 
@@ -113,12 +133,14 @@ export function calculateOfflineEffects(
     if (fish.affection <= 0 && !fish.isSick) {
       if (Math.random() > diseaseResist) {
         fish.isSick = true;
-        fish.sickStartTime = fish.sickStartTime || now;
+        // 0 は falsy なので || だと epoch(0) の記録を now で潰してしまう
+        fish.sickStartTime = fish.sickStartTime ?? now;
       }
     }
 
     // 野生復帰チェック（72時間 = 3日 上限）
-    if (fish.isSick && fish.sickStartTime) {
+    // sickStartTime が 0 のとき falsy 判定だと逃走チェックごと飛ばしてしまうため null 比較にする
+    if (fish.isSick && fish.sickStartTime != null) {
       const sickDurationDays = (now - fish.sickStartTime) / 86400000;
       if (sickDurationDays >= 3) {
         fish.status = "running_away";
