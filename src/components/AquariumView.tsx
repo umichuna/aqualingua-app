@@ -8,6 +8,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { RARITY_INFO, RARITY_STARS, type FishDisplaySize } from "@/data/fishMaster";
 import { BOX_CAPACITY_INITIAL, MAX_AFFECTION, resolveTankId } from "@/lib/gameLogic";
 import { sfx, playBgmForTankType } from "@/lib/sound";
+import { compressImageToBase64 } from "@/lib/image";
 import type { Fish } from "@/lib/types";
 import { useGame, type BaitKind } from "./GameProvider";
 import PixelFish from "./PixelFish";
@@ -57,34 +58,19 @@ export default function AquariumView() {
   const [editingTankId, setEditingTankId] = useState<string | null>(null);
   const [editingTankName, setEditingTankName] = useState("");
 
-  // 水槽背景画像は横長（1200px幅上限・JPEG圧縮）にリサイズしてから保存する
-  const resizeBackgroundToBase64 = (file: File): Promise<string> =>
-    new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const img = new Image();
-        img.onload = () => {
-          const MAX_WIDTH = 1200;
-          const scale = Math.min(MAX_WIDTH / img.width, 1);
-          const canvas = document.createElement("canvas");
-          canvas.width = Math.round(img.width * scale);
-          canvas.height = Math.round(img.height * scale);
-          canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
-          resolve(canvas.toDataURL("image/jpeg", 0.8));
-        };
-        img.onerror = reject;
-        img.src = e.target!.result as string;
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-
+  // 水槽背景画像は縦横とも上限内に縮小し、さらに目標バイト数まで圧縮してから保存する。
+  // 以前は横幅しか見ていなかったため、縦に長い画像が巨大なまま保存され
+  // （実例: 1枚で 2.41MB）、クラウド保存が 413 で失敗する原因になっていた。
   const handleBackgroundImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    void resizeBackgroundToBase64(file).then((base64) => {
-      game.setBackgroundImage(currentTankId, base64);
-    });
+    void compressImageToBase64(file)
+      .then((base64) => {
+        game.setBackgroundImage(currentTankId, base64);
+      })
+      .catch((err) => {
+        console.error("[Background] 画像の変換に失敗:", err);
+      });
   };
 
   // 魚の表示サイズ（px）。幼魚は 0.7 倍（表示側と同じ計算）

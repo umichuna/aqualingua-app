@@ -84,6 +84,7 @@ import {
 } from "@/lib/db";
 import { sfx } from "@/lib/sound";
 import { friendlySyncErrorMessage, pullFromCloud, pushToCloud } from "@/lib/sync";
+import { base64ByteLength, MAX_BACKGROUND_BASE64_BYTES, shrinkIfTooLarge } from "@/lib/image";
 import { deleteSharedCustomFish, fetchSharedCustomFish, postSharedCustomFish } from "@/lib/customFish";
 import { deleteSharedFishOverride, fetchSharedFishOverrides, postSharedFishOverride } from "@/lib/fishOverrides";
 import type {
@@ -752,6 +753,39 @@ export function GameProvider({ children }: { children: ReactNode }) {
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, [ready, applyOfflineEffects]);
+
+  // ---------- 大きすぎる背景画像の自動圧縮 ----------
+  // 背景画像は base64 のまま userStatus に入り、クラウド保存では userStatus ごと
+  // 1リクエストで送られる。以前の縮小処理が横幅しか見ていなかったため、
+  // 縦長の画像が巨大なまま保存され（実例: 1枚 2.41MB）、送信データが Vercel の上限
+  // 4.5MB を超えて保存が 413 で失敗していた。既存の画像も起動時に一度だけ縮める。
+  const shrunkBackgroundsRef = useRef(false);
+  useEffect(() => {
+    if (!ready || shrunkBackgroundsRef.current) return;
+    shrunkBackgroundsRef.current = true;
+    void (async () => {
+      const tanks = userRef.current.tanks ?? [];
+      const oversized = tanks.filter(
+        (t) => base64ByteLength(t.backgroundImageBase64 ?? "") > MAX_BACKGROUND_BASE64_BYTES
+      );
+      if (oversized.length === 0) return;
+      const shrunk = new Map<string, string>();
+      for (const t of oversized) {
+        const next = await shrinkIfTooLarge(t.backgroundImageBase64);
+        if (next) shrunk.set(t.id, next);
+      }
+      if (shrunk.size === 0) return;
+      // 圧縮結果を1回の更新でまとめて保存する
+      const u = userRef.current;
+      persistUser({
+        ...u,
+        tanks: (u.tanks ?? []).map((t) =>
+          shrunk.has(t.id) ? { ...t, backgroundImageBase64: shrunk.get(t.id)! } : t
+        ),
+      });
+      pushNotice("🗜️", `水槽の背景画像${shrunk.size}枚を軽くしました（クラウド保存のため）`);
+    })();
+  }, [ready, persistUser, pushNotice]);
 
   // ---------- ユーザー・経済 ----------
   const updateUser = useCallback(

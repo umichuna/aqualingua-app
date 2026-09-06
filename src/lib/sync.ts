@@ -24,6 +24,18 @@ export function friendlySyncErrorMessage(
   if (/unauthorized/i.test(rawMessage)) {
     return "ログインの有効期限が切れています。設定からログインし直してから、もう一度お試しください";
   }
+  // 送信データが大きすぎる（サーバー側の上限 4.5MB を超えた）。
+  // 実例: 水槽の背景画像1枚が 2.41MB になっており、保存が丸ごと失敗していた。
+  // 画像は base64 のまま userStatus に入って1リクエストで送られるため、
+  // 大きい画像を設定するとこの経路で詰まる。
+  // 送信前チェックで自前に組み立てた日本語メッセージは、そのまま表示する
+  // （原因の内訳まで含んでいるため、汎用文言で上書きしない）
+  if (rawMessage.includes("保存するデータが大きすぎます")) {
+    return rawMessage;
+  }
+  if (/payload too large|content too large|request entity too large|\b413\b/i.test(rawMessage)) {
+    return "データが大きすぎて保存できませんでした。水槽の背景画像やカスタム魚の画像が大きい可能性があります。アプリを開き直すと背景画像は自動で軽くされます（それでも直らない場合は、大きい背景画像を設定し直してください）";
+  }
   // 通信の打ち切り（DBの起動待ちで50秒を超えた等）。
   // push はサーバー側の書き込みが続いて成功していることがあるため「失敗」と断定しない。
   //
@@ -98,6 +110,32 @@ function mergeUserStatus(local: UserStatus, cloud: UserStatus): UserStatus {
     deletedFishIds: unionArr(local.deletedFishIds, cloud.deletedFishIds),
     lastUpdated: Date.now(),
   };
+}
+
+// Vercel のリクエスト本文の上限は 4.5MB。余裕を見て手前で止める。
+const PUSH_BODY_LIMIT_BYTES = 4_000_000;
+
+// 送信データが上限を超えたとき、「何が大きいのか」まで含めた日本語メッセージを作る。
+// 画像は base64 のまま userStatus に入るため、実際に詰まるのはほぼ画像である。
+function describeOversizedPayload(
+  payload: { userStatus?: UserStatus | null },
+  totalBytes: number
+): string {
+  const mb = (n: number) => (n / 1048576).toFixed(1);
+  const u = payload.userStatus;
+  const tanksBytes = JSON.stringify(u?.tanks ?? []).length;
+  const customFishBytes = JSON.stringify((u as { customFish?: unknown })?.customFish ?? []).length;
+
+  const culprits: string[] = [];
+  if (tanksBytes > 500_000) culprits.push(`水槽の背景画像（約${mb(tanksBytes)}MB）`);
+  if (customFishBytes > 500_000) culprits.push(`カスタム魚の画像（約${mb(customFishBytes)}MB）`);
+
+  const what = culprits.length > 0 ? `原因は${culprits.join("と")}です。` : "";
+  return (
+    `保存するデータが大きすぎます（約${mb(totalBytes)}MB / 上限4.5MB）。${what}` +
+    `アプリを開き直すと背景画像は自動で軽くなります。それでも直らない場合は、` +
+    `大きい背景画像を設定し直すか、使っていないカスタム魚を減らしてください`
+  );
 }
 
 // サーバーが返した実エラー文言（{ error } JSON）を読み取る。無ければ statusText。
@@ -269,11 +307,19 @@ export async function pushToCloud(
       allowEmpty,
     };
 
+    // 送信前に大きさを確認する。サーバー（Vercel）のリクエスト上限は 4.5MB で、
+    // 超えると本文がサーバーに届かないまま 413 になり「原因不明の失敗」に見える。
+    // 事前に判定して、何が大きいのかまで含めて日本語で伝える。
+    const body = JSON.stringify(payload);
+    if (body.length > PUSH_BODY_LIMIT_BYTES) {
+      throw new Error(describeOversizedPayload(payload, body.length));
+    }
+
     // Azure SQL コールドスタート対策: 50秒タイムアウト
     const response = await fetch("/api/sync/push", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body,
       signal: AbortSignal.timeout(50_000),
     });
 
