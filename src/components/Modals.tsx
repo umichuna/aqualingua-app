@@ -91,10 +91,10 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
     }
     setSavingCloud(true);
     try {
-      const { userStatusStale, skippedEmptyTables } = await game.pushNow();
-      // 未同期の新端末が復元前に保存しようとしたケース。サーバーがクラウドの削除を
-      // 見送っている。まず ☁️復元 が必要なので、それを最優先で案内する
-      // （この状態では userStatusStale も同時に立つため、こちらを先に判定する）
+      let { userStatusStale, skippedEmptyTables } = await game.pushNow();
+      // 手元が空なのにクラウドには残っているテーブルがあった。サーバーは消さずに
+      // スキップしている（復元前の保存でクラウドを失う事故を防ぐため）。
+      // 「意図的に空にした」場合もあるので、本人に確認してから消す。
       if (skippedEmptyTables.length > 0) {
         const LABELS: Record<string, string> = {
           words: "単語",
@@ -102,10 +102,21 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
           blankQuestions: "穴抜け問題",
         };
         const names = skippedEmptyTables.map((t) => LABELS[t] ?? t).join("・");
-        setIoMsg(
-          `⚠️ 手元の「${names}」が空です。クラウドのデータは消さずに残しました。先に「☁️復元」を押してください`
+        const deleteAnyway = window.confirm(
+          `手元の「${names}」が0件ですが、クラウドにはデータが残っています。\n\n` +
+            `念のため、クラウドのデータは消さずに残しました。\n\n` +
+            `・別の端末で使い始めた／前のデータを取り戻したい場合\n` +
+            `　→「キャンセル」を押して、先に「☁️復元」をしてください\n\n` +
+            `・自分で全部消したので、クラウドからも消したい場合\n` +
+            `　→「OK」を押すとクラウドの「${names}」も削除します\n\n` +
+            `クラウドの「${names}」を削除しますか？`
         );
-        return;
+        if (!deleteAnyway) {
+          setIoMsg(`⚠️ クラウドのデータは残したままにしました。先に「☁️復元」を押してください`);
+          return;
+        }
+        // 了承を得たので、空での上書きを許可して再送する
+        ({ userStatusStale, skippedEmptyTables } = await game.pushNow(true));
       }
       if (userStatusStale) {
         setIoMsg(
