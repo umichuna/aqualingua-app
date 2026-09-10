@@ -66,7 +66,7 @@ export function friendlySyncErrorMessage(
 // スマホ側のローカルデータ（未セーブ）が新しくても巻き戻ってしまう。
 // 単調増加・集合系のフィールドは「大きい方/和集合」を採用し、
 // それ以外は新しい方（ローカル）を優先して安全にマージする。
-function mergeUserStatus(local: UserStatus, cloud: UserStatus): UserStatus {
+export function mergeUserStatus(local: UserStatus, cloud: UserStatus): UserStatus {
   const unionArr = <T,>(a?: T[], b?: T[]): T[] => Array.from(new Set([...(a ?? []), ...(b ?? [])]));
   // lastActiveTime は必ず新しい方を採る。巻き戻ると、既に消化した日数ぶんの
   // 放置ペナルティ（好感度低下・病気・逃走）が二重に適用されてしまう

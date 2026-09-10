@@ -6,6 +6,45 @@
 
 ---
 
+## 2026-09-08（追記15）: CI新設（lint/typecheck/test/build自動化）＋同期ロジックの最小限のテスト追加
+
+オーナーの依頼で、自作システム全体に自動メンテナンス体制を広げる一環として対応
+（他リポジトリでは既に「失敗を必ずDiscord通知する」「外部I/Oはリトライする」仕組みが
+入っており、このリポジトリにも自動化できる部分を入れる）。このリポジトリ自身がこれまで
+繰り返し「未対応事項」に挙げていた2点（CIが無い・自動テストが無い、追記13参照）に対応した。
+
+### やったこと
+1. **`.github/workflows/ci.yml`新設**: push/PR to main で、これまで全体メンテナンスのたびに
+   手動実行していた `npm run lint` / `npx tsc --noEmit` / `npm test` / `npm run build` /
+   `npm audit --audit-level=high` を自動実行する。失敗時は独立した`notify-failure`ジョブが
+   `DISCORD_WEBHOOK_URL` secret（**未登録。通知を有効にするにはオーナーがリポジトリの
+   Settings → Secrets and variables → Actions で登録する必要がある**。未登録でも
+   CI自体は失敗せず、通知だけスキップされる）へ通知する。
+2. **`.github/dependabot.yml`新設**: npm依存とGitHub Actionsを週次でチェック。パッチ/マイナーは
+   グルーピングしてPR数を抑制。**Next.jsのメジャー更新だけは自動グルーピング対象から除外**
+   （このリポジトリは独自フォークで`AGENTS.md`が破壊的変更に注意するよう明記しているため、
+   人が`node_modules/next/dist/docs/`を読んでから個別に判断する運用を維持する）。
+3. **最小限のユニットテストを新規追加**（`tests/sync.test.ts`・`tests/gameLogic.test.ts`、
+   計17件）。テストランナーは追加の重いフレームワーク（vitest/jest）を避け、Node標準の
+   `node:test`＋`tsx`（型除去のみの軽量ランナー、devDependency追加）で構成。追記12で発見・
+   修正した4件の致命的回帰のうち、純粋関数のロジックに起因する2件
+   （`elapsedPenaltyDays`のNaN/null汚染、`friendlySyncErrorMessage`のトランザクション
+   エラー誤タイムアウト判定）を退行検知できるテストケース化した。あわせて`mergeUserStatus`
+   （従来非export）を`export`し、水槽の和集合救済・`lastActiveTime`の巻き戻り防止も
+   テスト対象にした（export追加のみで挙動は変更していない）。
+4. **検証**: `npm run lint` / `npx tsc --noEmit` / `npm test`（17件全合格） /
+   `npm run build` / `npm audit --audit-level=high`（0件）を全てローカルで実行し、
+   CIが緑になることを確認してからpush。
+
+### 未対応事項（次回以降）
+- **`DISCORD_WEBHOOK_URL` secretの登録（オーナー作業）**: 登録するまでCI失敗通知は
+  実際には届かない（CIの成否表示自体はGitHubの画面で確認可能）。
+- Playwrightは既存のdevDependencyのまま未使用（e2eテストは今回のスコープ外）。
+- `generate_icons.py`・`おさかな図鑑一覧.csv`（リポジトリ直下の一回限りの資産）の削除可否は
+  オーナー確認が必要なため未対応（追記13から持ち越し）。
+
+---
+
 ## 2026-09-06（追記14）: クラウド保存が 413 で失敗するバグを修正（背景画像の肥大化）
 
 ### 症状（オーナー報告）

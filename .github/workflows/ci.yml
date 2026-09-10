@@ -1,0 +1,63 @@
+name: CI (lint / typecheck / test / build)
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint (eslint)
+        run: npm run lint
+
+      - name: Typecheck (tsc)
+        run: npx tsc --noEmit
+
+      - name: Unit tests (node:test)
+        run: npm test
+
+      - name: Build (next build)
+        run: npm run build
+
+      # STATUS_REPORT.mdの全体メンテナンス時に手動実行していたチェックをCIで自動化する。
+      # high以上の脆弱性が出たら失敗させる(既存の依存はaudit 0件を維持している前提)。
+      - name: Security audit (npm audit)
+        run: npm audit --audit-level=high
+
+  # このリポジトリにはこれまでCIも失敗通知も無く、壊れたPRがmainへ入っても
+  # 気づく手段が無かった。DISCORD_WEBHOOK_URL secretが未設定でも失敗はしない
+  # (通知をスキップするだけ)。
+  notify-failure:
+    needs: build
+    if: always() && needs.build.result != 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Discord へ通知
+        env:
+          RESULT: ${{ needs.build.result }}
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          if [ -z "$WEBHOOK" ]; then
+            echo "⚠️ DISCORD_WEBHOOK_URL が未設定のため通知をスキップします"; exit 0
+          fi
+          MSG="🚨 [AquaLingua] CIが「${RESULT}」で終了しました。lint/typecheck/test/build/auditのいずれかが失敗している可能性があります。 ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          curl -sS -X POST "$WEBHOOK" \
+            -H "Content-Type: application/json" \
+            -d "$(printf '{"content": %s}' "$(printf '%s' "$MSG" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')")"

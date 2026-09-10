@@ -1,0 +1,24 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    groups:
+      # パッチ/マイナー更新はまとめてPR数を抑える。
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      # このNext.jsは独自フォーク(破壊的変更あり、AGENTS.md参照)のため、
+      # メジャー更新はグルーピングせず個別PRのまま残し、node_modules/next/dist/docs/を
+      # 読んでから人が判断する(自動マージはしない)。
+      - dependency-name: "next"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
